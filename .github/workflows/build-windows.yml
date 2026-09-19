@@ -14,9 +14,6 @@ jobs:
       - name: Clone original vela repo into subfolder
         run: git clone https://github.com/heider-x/vela.git vela-src
 
-      - name: Switch working directory
-        working-directory: ./vela-src
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
