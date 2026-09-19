@@ -2,24 +2,6 @@ name: Build Windows Vela
 on:
   push:
     branches: [ master ]
-  workflow_dispatch: # 网页手动触发打包
-
-jobs:
-  build:
-    runs-on: windows-2022
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-name: Build Windows Vela
-on:
-  push:
-    branches: [ master ]
   workflow_dispatch:
 
 jobs:
@@ -33,30 +15,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
+          # 删除 cache: 'pnpm' ！！！这就是本次报错根源
 
       - name: Install pnpm via npm
         run: npm install -g pnpm
 
-      # 新增：安装C++编译工具，解决node-gyp sqlite编译报错
       - name: Install Visual Studio Build Tools
         run: npm install -g windows-build-tools
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build Windows
-        run: pnpm build
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Vela-Windows-Build
-          path: dist/*.exe
-
-      # 改用 npm 全局安装 pnpm，规避 action-setup 的路径问题
-      - name: Install pnpm via npm
-        run: npm install -g pnpm
 
       - name: Install dependencies
         run: pnpm install
