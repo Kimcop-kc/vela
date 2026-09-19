@@ -57,7 +57,7 @@ jobs:
           path: vela-src/release/**/*.exe
           retention-days: 30
         env:
-          GH_TOKEN: ${{ secrets.kk }}  # 使用你设置的令牌名称 kk
+          GH_TOKEN: ${{ secrets.KK }}  # 使用你设置的令牌名称 KK (大写)
 
       - name: 显示构建结果
         working-directory: ./vela-src
