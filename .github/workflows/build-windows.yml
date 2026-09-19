@@ -7,6 +7,9 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    # 如果你使用 GitHub 自带的 secrets.GITHUB_TOKEN，需要赋予写入权限
+    permissions:
+      contents: write 
     steps:
       - name: Checkout empty workspace
         uses: actions/checkout@v4
@@ -25,18 +28,10 @@ jobs:
       - name: 清理可能存在的锁文件
         working-directory: ./vela-src
         run: |
-          if (Test-Path "pnpm-lock.yaml") {
-            Remove-Item -Path "pnpm-lock.yaml" -Force
-          }
-          if (Test-Path "package-lock.json") {
-            Remove-Item -Path "package-lock.json" -Force
-          }
-          if (Test-Path "yarn.lock") {
-            Remove-Item -Path "yarn.lock" -Force
-          }
-          if (Test-Path "node_modules") {
-            Remove-Item -Path "node_modules" -Recurse -Force
-          }
+          if (Test-Path "pnpm-lock.yaml") { Remove-Item -Path "pnpm-lock.yaml" -Force }
+          if (Test-Path "package-lock.json") { Remove-Item -Path "package-lock.json" -Force }
+          if (Test-Path "yarn.lock") { Remove-Item -Path "yarn.lock" -Force }
+          if (Test-Path "node_modules") { Remove-Item -Path "node_modules" -Recurse -Force }
 
       - name: 使用 npm 安装依赖
         working-directory: ./vela-src
@@ -46,9 +41,12 @@ jobs:
             npm install --force --legacy-peer-deps
           }
 
+      # 【核心修改点】：将 GH_TOKEN 移到这里！
       - name: 构建 Windows 版本
         working-directory: ./vela-src
         run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.KK }}  # 对应你设置的 Secret 名字 KK
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
@@ -56,8 +54,7 @@ jobs:
           name: Vela-Windows-Exe-Final
           path: vela-src/release/**/*.exe
           retention-days: 30
-        env:
-          GH_TOKEN: ${{ secrets.KK }}  # 使用你设置的令牌名称 KK (大写)
+        # 这里不再需要 GH_TOKEN 了，因为上面已经完成了发布
 
       - name: 显示构建结果
         working-directory: ./vela-src
