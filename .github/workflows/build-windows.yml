@@ -8,8 +8,14 @@ jobs:
   build:
     runs-on: windows-2022
     steps:
-      - name: Clone original vela repo
-        run: git clone https://github.com/heider-x/vela.git .
+      - name: Checkout empty workspace
+        uses: actions/checkout@v4
+
+      - name: Clone original vela repo into subfolder
+        run: git clone https://github.com/heider-x/vela.git vela-src
+
+      - name: Switch working directory
+        working-directory: ./vela-src
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,13 +28,15 @@ jobs:
           version: 9
 
       - name: Install dependencies
+        working-directory: ./vela-src
         run: pnpm install
 
       - name: Build Windows exe
+        working-directory: ./vela-src
         run: pnpm build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Vela-Windows-Exe
-          path: dist/*.exe
+          path: vela-src/dist/*.exe
