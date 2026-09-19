@@ -1,8 +1,8 @@
 name: Build Windows Vela
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: # 支持网页手动触发打包
+    branches: [ master ]
+  workflow_dispatch: # 网页手动触发打包
 
 jobs:
   build:
@@ -14,13 +14,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      # 改用 npm 全局安装 pnpm，规避 action-setup 的路径问题
+      - name: Install pnpm via npm
+        run: npm install -g pnpm
 
       - name: Install dependencies
         run: pnpm install
