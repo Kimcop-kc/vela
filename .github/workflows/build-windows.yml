@@ -1,39 +1,16 @@
-name: Build Windows Vela
-on:
-  push:
-    branches: [ master ]
-  workflow_dispatch:
+- name: Setup Node.js
+  uses: actions/setup-node@v4
+  with:
+    node-version: 18  # 从22改为18
 
-jobs:
-  build:
-    runs-on: windows-2022
-    steps:
-      - name: Checkout empty workspace
-        uses: actions/checkout@v4
+- name: Setup pnpm
+  uses: pnpm/action-setup@v4
+  with:
+    version: 8  # 从9改为8
 
-      - name: Clone original vela repo into subfolder
-        run: git clone https://github.com/heider-x/vela.git vela-src
+- name: 配置npm镜像
+  run: npm config set registry https://registry.npmmirror.com
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install dependencies
-        working-directory: ./vela-src
-        run: pnpm install
-
-      - name: Build Windows exe
-        working-directory: ./vela-src
-        run: pnpm build
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Vela-Windows-Exe
-          path: vela-src/dist/*.exe
+- name: Install dependencies
+  working-directory: ./vela-src
+  run: pnpm install --no-frozen-lockfile
