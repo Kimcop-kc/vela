@@ -1,4 +1,4 @@
-name: Build Windows Vela
+name: Build Windows Vela (npm版本)
 on:
   push:
     branches: [ master ]
@@ -19,41 +19,34 @@ jobs:
         with:
           node-version: 18
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8
-
       - name: 配置 npm 镜像源
         run: npm config set registry https://registry.npmmirror.com
 
-      - name: 配置 pnpm 环境
-        run: |
-          # 设置 pnpm 缓存目录为用户目录
-          pnpm config set store-dir "~/.pnpm-store"
-          # 创建缓存目录
-          mkdir -p "$HOME/.pnpm-store/v3/files"
-
-      - name: 安装依赖
+      - name: 清理可能存在的锁文件
         working-directory: ./vela-src
         run: |
-          # 清理 pnpm 缓存
-          pnpm store prune
-          
-          # 安装依赖
-          pnpm install --no-frozen-lockfile
+          if (Test-Path "pnpm-lock.yaml") {
+            Remove-Item -Path "pnpm-lock.yaml" -Force
+          }
+          if (Test-Path "node_modules") {
+            Remove-Item -Path "node_modules" -Recurse -Force
+          }
+
+      - name: 使用 npm 安装依赖
+        working-directory: ./vela-src
+        run: |
+          npm install --legacy-peer-deps
           if ($LASTEXITCODE -ne 0) {
-            # 如果失败，尝试强制安装
-            pnpm install --force
+            npm install --force --legacy-peer-deps
           }
 
       - name: 构建 Windows 版本
         working-directory: ./vela-src
-        run: pnpm build
+        run: npm run build
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
         with:
-          name: Vela-Windows-Exe
+          name: Vela-Windows-Exe-npm
           path: vela-src/dist/*.exe
           retention-days: 30
