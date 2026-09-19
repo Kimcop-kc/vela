@@ -1,4 +1,4 @@
-name: Build Windows Vela (Node.js 22)
+name: Build Windows Vela (npm终极版)
 on:
   push:
     branches: [ master ]
@@ -17,37 +17,42 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22  # 使用 Node.js 22.x
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8
+          node-version: 20  # 使用 Node.js 20.x
 
       - name: 配置 npm 镜像源
         run: npm config set registry https://registry.npmmirror.com
 
-      - name: 配置 pnpm 环境
-        run: |
-          pnpm config set store-dir "~/.pnpm-store"
-          mkdir -p "$HOME/.pnpm-store/v3/files"
-
-      - name: 安装依赖
+      - name: 清理可能存在的锁文件
         working-directory: ./vela-src
         run: |
-          pnpm store prune
-          pnpm install --no-frozen-lockfile
+          if (Test-Path "pnpm-lock.yaml") {
+            Remove-Item -Path "pnpm-lock.yaml" -Force
+          }
+          if (Test-Path "package-lock.json") {
+            Remove-Item -Path "package-lock.json" -Force
+          }
+          if (Test-Path "yarn.lock") {
+            Remove-Item -Path "yarn.lock" -Force
+          }
+          if (Test-Path "node_modules") {
+            Remove-Item -Path "node_modules" -Recurse -Force
+          }
+
+      - name: 使用 npm 安装依赖
+        working-directory: ./vela-src
+        run: |
+          npm install --legacy-peer-deps
           if ($LASTEXITCODE -ne 0) {
-            pnpm install --force
+            npm install --force --legacy-peer-deps
           }
 
       - name: 构建 Windows 版本
         working-directory: ./vela-src
-        run: pnpm build
+        run: npm run build
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
         with:
-          name: Vela-Windows-Exe-Node22
+          name: Vela-Windows-Exe-npm-Ultimate
           path: vela-src/dist/*.exe
           retention-days: 30
