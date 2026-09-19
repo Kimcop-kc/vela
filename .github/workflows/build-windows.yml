@@ -56,9 +56,10 @@ jobs:
           retention-days: 30
         # 这里不再需要 GH_TOKEN 了，因为上面已经完成了发布
 
-      - name: 显示构建结果
-        working-directory: ./vela-src
-        run: |
+      -  name: 显示构建结果
+         working-directory: ./vela-src
+         run: |
           echo "构建成功！"
           echo "构建产物位置："
-          ls -la release/0.1.0/*.exe
+          # 改成 Windows PowerShell 支持的写法
+           Get-ChildItem -Path release/0.1.0/*.exe
