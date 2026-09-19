@@ -1,4 +1,4 @@
-name: Build Windows Vela (npm终极版)
+name: Build Windows Vela (最终版)
 on:
   push:
     branches: [ master ]
@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20  # 使用 Node.js 20.x
+          node-version: 20
 
       - name: 配置 npm 镜像源
         run: npm config set registry https://registry.npmmirror.com
@@ -53,14 +53,15 @@ jobs:
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
         with:
-          name: Vela-Windows-Exe-npm-Ultimate
-          path: vela-src/dist/*.exe
-          retention-days: 30
-      - name: 上传构建结果
-        uses: actions/upload-artifact@v4
-        with:
-          name: Vela-Windows-Exe-npm-Ultimate
-          path: vela-src/dist/*.exe
+          name: Vela-Windows-Exe-Final
+          path: vela-src/release/**/*.exe
           retention-days: 30
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 添加这行
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}  # 添加这行
+
+      - name: 显示构建结果
+        working-directory: ./vela-src
+        run: |
+          echo "构建成功！"
+          echo "构建产物位置："
+          ls -la release/0.1.0/*.exe
