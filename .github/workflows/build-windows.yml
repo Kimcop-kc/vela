@@ -7,6 +7,10 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    env:
+      # node-gyp环境变量，指定编译器版本
+      GYP_MSVS_VERSION: 2022
+      PYTHON: python3
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,12 +22,6 @@ jobs:
 
       - name: Install pnpm via npm
         run: npm install -g pnpm
-
-      # 配置node-gyp使用系统自带的VS编译工具，不需要安装windows-build-tools
-      - name: Configure node-gyp
-        run: |
-          npm config set msvs_version 2022
-          npm config set python python3
 
       - name: Install dependencies
         run: pnpm install
