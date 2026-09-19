@@ -56,3 +56,11 @@ jobs:
           name: Vela-Windows-Exe-npm-Ultimate
           path: vela-src/dist/*.exe
           retention-days: 30
+      - name: 上传构建结果
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vela-Windows-Exe-npm-Ultimate
+          path: vela-src/dist/*.exe
+          retention-days: 30
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 添加这行
