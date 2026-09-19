@@ -7,12 +7,8 @@ on:
 jobs:
   build:
     runs-on: windows-2022
-    env:
-      # node-gyp环境变量，指定编译器版本
-      GYP_MSVS_VERSION: 2022
-      PYTHON: python3
     steps:
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -20,17 +16,19 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install pnpm via npm
-        run: npm install -g pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9 # 满足 >=8 的要求
 
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build Windows
+      - name: Build Windows exe
         run: pnpm build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Vela-Windows-Build
+          name: Vela-Windows-Exe
           path: dist/*.exe
