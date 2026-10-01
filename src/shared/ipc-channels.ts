@@ -156,6 +156,18 @@ export interface LLMChannels {
     args: [purpose: LLMPurposeCategory, modelId: string | null]
     return: { success: boolean; error?: string }
   }
+  'llm:autoconfig-plan': {
+    args: [input: AutoConfigInput]
+    return: AutoConfigPlanResult
+  }
+  'llm:autoconfig-apply': {
+    args: [input: AutoConfigInput]
+    return: AutoConfigApplyResult
+  }
+  'llm:provider-models': {
+    args: [baseUrl: string, apiKey: string, protocol: string]
+    return: { success: boolean; models: string[]; error?: string }
+  }
   'llm:test-connection': {
     args: [model: ModelProfile]
     return: { success: boolean; error?: string }
@@ -240,7 +252,12 @@ export interface LLMCompletionMeta {
 export interface ModelProfile {
   id: string
   name: string
-  provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'custom'
+  /**
+   * 服务商标识。内置值见 src/shared/provider-catalog.ts（openai / deepseek / bigmodel /
+   * gemini / ollama / moonshot / qwen / …），也允许用户自定义任意字符串。
+   * 只有 openai-provider 会特判 ollama 与 deepseek 的思考参数，其余一律按 OpenAI 兼容处理。
+   */
+  provider: string
   protocol: 'openai' | 'gemini'
   modelName: string
   apiKey: string
@@ -251,6 +268,39 @@ export interface ModelProfile {
   purposes: LLMPurposeCategory[]
   /** 是否启用；停用后不参与用途路由（缺省视为启用，兼容旧配置） */
   enabled?: boolean
+}
+
+// ===== 自动配置（一键配置模型）=====
+
+/** 自动配置的输入与计划类型定义在 src/shared/auto-config.ts，主进程与渲染进程共用 */
+import type { AutoConfigInput, AutoConfigPlan } from './auto-config'
+export type { AutoConfigInput, AutoConfigPlan } from './auto-config'
+
+/** 「解析并预演」结果：只读，不写盘 */
+export interface AutoConfigPlanResult {
+  success: boolean
+  plan?: AutoConfigPlan
+  /** 拿到 Key 后自动问服务商要到的候选模型；拉取失败为空数组 */
+  availableModels: string[]
+  /** 候选模型是否来自服务商（false 表示用了本地目录兜底） */
+  modelsFromProvider: boolean
+  error?: string
+}
+
+/** 「真正写入配置」的结果 */
+export interface AutoConfigApplyResult {
+  success: boolean
+  plan?: AutoConfigPlan
+  /** 生成模型 id */
+  modelId?: string
+  /** 顺带创建的向量模型 id */
+  embeddingModelId?: string
+  /** 保存前是否跑了连通性测试 */
+  tested: boolean
+  testError?: string
+  /** true 表示命中已有配置做了覆盖，而不是新建 */
+  reused?: boolean
+  error?: string
 }
 
 // ===== 引入 DB 类型 =====

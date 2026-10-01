@@ -187,5 +187,13 @@
       "writingRequirements": "Global Writing Requirements",
       "subGenre": "Sub-genre"
     }
+  },
+  "setup": {
+    "title": "Set up a model first — Vela needs one to work",
+    "description": "Vela ships without an API key and uses your own provider quota. You only do this once.",
+    "whyKey": "Why an API key? Vela does not provide models itself — writing, review and book analysis all call endpoints you open at OpenAI, DeepSeek, BigModel and similar providers. The key stays in ~/.vela/models.json on this machine.",
+    "later": "Later",
+    "settingsHint": "You can also configure it under Settings → AI Models",
+    "saved": "Saved, closing…"
   }
 }

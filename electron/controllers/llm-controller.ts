@@ -5,6 +5,16 @@ import { PURPOSE_CATEGORIES, categorizePurpose, pickModelIdForCategory } from '.
 import { LLMFactory } from '../llm/llm-factory'
 import { listOllamaModels } from '../llm/ollama-models'
 import { joinMessages, recordLLMCall } from '../llm/call-log'
+import { randomUUID } from 'node:crypto'
+import {
+  buildAutoConfigPlan,
+  planToModelProfile,
+  pickDefaultModelFromList,
+  isEmbeddingOnlyPlan,
+  type AutoConfigInput,
+} from '../../src/shared/auto-config'
+import { CATALOG_BY_PROVIDER } from '../../src/shared/provider-catalog'
+import { listProviderModels } from '../llm/provider-models'
 
 const activeStreams = new Map<string, AbortController>()
 
@@ -40,6 +50,29 @@ function resolveModelForRequest(modelId: string | undefined, purpose?: string): 
     defaultEmbeddingModelId: config.defaultEmbeddingModelId ?? null,
   })
   return resolvedId ? getModelConfig(resolvedId) : null
+}
+
+/**
+ * 探一次连通性：生成模型发一句最短的话，向量模型跑一次最小嵌入。
+ * 「测试连接」按钮和「一键配置」保存前都用它，避免两条路径判断不一致。
+ */
+async function probeModel(model: ModelProfile): Promise<{ success: boolean; error?: string }> {
+  try {
+    applyProxyConfig()
+    if (model.purposes?.includes('embedding')) {
+      const { generateEmbeddings } = await import('../embedding')
+      await generateEmbeddings(['hello'], model.protocol, model)
+      return { success: true, error: undefined }
+    }
+    const provider = LLMFactory.getProvider(model)
+    const res = await provider.generate(model, [{ role: 'user', content: 'Say "hello" and nothing else.' }], {
+      temperature: 0.7,
+      maxTokens: 10,
+    })
+    return { success: res.success !== false, error: res.error }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
 }
 
 function applyProxyConfig() {
@@ -272,28 +305,148 @@ export function registerLLMController() {
     }
   })
 
-  ipcMain.handle('llm:test-connection', async (_event, model: ModelProfile) => {
+  ipcMain.handle('llm:test-connection', async (_event, model: ModelProfile) => probeModel(model))
+
+  /**
+   * 一键配置 · 预演
+   *
+   * 解析粘贴文本 → 推断服务商 →（有 Key 时）问服务商要一份真实模型列表。
+   * 全程只读，不写任何配置文件：用户先看清识别结果，再决定要不要应用。
+   */
+  ipcMain.handle('llm:autoconfig-plan', async (_event, input: AutoConfigInput) => {
     try {
       applyProxyConfig()
-      
-      const messages = [{ role: 'user', content: 'Say "hello" and nothing else.' }]
-      const provider = LLMFactory.getProvider(model)
-      
-      let result = { success: true, error: undefined as undefined | string }
-      if (model.purposes?.includes('embedding')) {
-        const { generateEmbeddings } = await import('../embedding')
-        await generateEmbeddings(['hello'], model.protocol, model)
-      } else {
-        const res = await provider.generate(model, messages, {
-          temperature: 0.7,
-          maxTokens: 10,
-        })
-        result = { success: res.success, error: res.error }
+      const plan = buildAutoConfigPlan(input ?? {})
+      let availableModels: string[] = []
+      let modelsFromProvider = false
+
+      if (plan.baseUrl && (plan.apiKey || plan.provider === 'ollama')) {
+        try {
+          availableModels = await listProviderModels(plan.baseUrl, plan.apiKey, plan.protocol)
+          modelsFromProvider = availableModels.length > 0
+        } catch { /* 拉不到就退回本地目录，不打断流程 */ }
       }
-      
-      return { success: result.success, error: result.error }
+      if (availableModels.length === 0) {
+        const entry = CATALOG_BY_PROVIDER.get(plan.provider)
+        availableModels = [
+          ...(entry?.models ?? []).map((model) => model.name),
+          ...(entry?.embeddingModels ?? []),
+        ]
+      }
+
+      return { success: true, plan, availableModels, modelsFromProvider }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, availableModels: [], modelsFromProvider: false, error: String(error) }
+    }
+  })
+
+  /**
+   * 一键配置 · 落盘
+   *
+   * 写三样东西：模型池条目、默认模型、用途绑定；服务商有向量模型时顺带把知识库也配好。
+   * 连通性测试失败不阻断保存（代理/网络抖动很常见），但结果会回给界面显著提示。
+   */
+  ipcMain.handle('llm:autoconfig-apply', async (_event, input: AutoConfigInput) => {
+    try {
+      applyProxyConfig()
+      const request = input ?? {}
+      let probe = buildAutoConfigPlan(request)
+
+      // 没给模型名：现问服务商要一份候选，挑一个最像「聊天主力」的
+      if (probe.needsModelPick && probe.baseUrl && (probe.apiKey || probe.provider === 'ollama')) {
+        try {
+          const candidates = await listProviderModels(probe.baseUrl, probe.apiKey, probe.protocol)
+          const picked = pickDefaultModelFromList(candidates, CATALOG_BY_PROVIDER.get(probe.provider))
+          if (picked) {
+            probe = buildAutoConfigPlan({
+              ...request,
+              text: undefined,
+              apiKey: probe.apiKey,
+              baseUrl: probe.baseUrl,
+              modelName: picked,
+              provider: probe.provider === 'custom' ? undefined : probe.provider,
+            })
+          }
+        } catch { /* 下一段用本地目录兜底 */ }
+      }
+      if (probe.needsModelPick) {
+        const entry = CATALOG_BY_PROVIDER.get(probe.provider)
+        const fallback = pickDefaultModelFromList((entry?.models ?? []).map((model) => model.name), entry)
+        if (fallback) {
+          probe = buildAutoConfigPlan({
+            ...request,
+            text: undefined,
+            apiKey: probe.apiKey,
+            baseUrl: probe.baseUrl,
+            modelName: fallback,
+            provider: probe.provider === 'custom' ? undefined : probe.provider,
+          })
+        }
+      }
+
+      const plan = probe
+      if (!plan.ok) return { success: false, plan, tested: false, error: plan.errorCode }
+
+      const models = loadModelConfigs()
+      // 同一个「服务商 + 地址 + 模型」视为同一条配置，覆盖而不是堆重复项
+      const existingIndex = models.findIndex((model) =>
+        model.provider === plan.provider && model.baseUrl === plan.baseUrl && model.modelName === plan.modelName)
+      const reused = existingIndex >= 0
+      const modelId = reused ? models[existingIndex].id : randomUUID()
+      const profile = planToModelProfile(plan, modelId)
+
+      const check = await probeModel(profile)
+      if (reused) models[existingIndex] = profile
+      else models.push(profile)
+
+      // 顺带把向量模型也建好：知识库、章节记忆、拆书都依赖它，用户通常不知道该配
+      let embeddingModelId: string | undefined
+      if ((request.includeEmbedding ?? true) && plan.embeddingSuggestion && !isEmbeddingOnlyPlan(plan)) {
+        const embeddingName = plan.embeddingSuggestion
+        const embeddingId = models.find((model) =>
+          model.provider === plan.provider && model.baseUrl === plan.baseUrl && model.modelName === embeddingName)?.id ?? randomUUID()
+        const embeddingProfile: ModelProfile = {
+          ...profile,
+          id: embeddingId,
+          name: `${plan.displayName} · ${embeddingName}`,
+          modelName: embeddingName,
+          purposes: ['embedding'],
+        }
+        const embeddingIndex = models.findIndex((model) => model.id === embeddingId)
+        if (embeddingIndex >= 0) models[embeddingIndex] = embeddingProfile
+        else models.push(embeddingProfile)
+        embeddingModelId = embeddingId
+      }
+      saveModelConfigs(models)
+
+      const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+      if (request.bindPurposes !== false) {
+        const purposeModels: PurposeModelBindings = { ...(config.purposeModels ?? {}) }
+        const embeddingOnly = isEmbeddingOnlyPlan(plan)
+        if (!embeddingOnly) for (const purpose of plan.purposes) purposeModels[purpose] = modelId
+        if (embeddingModelId) purposeModels.embedding = embeddingModelId
+        if (embeddingOnly) purposeModels.embedding = modelId
+        config.purposeModels = purposeModels
+      }
+
+      if (request.setAsDefault !== false) {
+        if (isEmbeddingOnlyPlan(plan)) config.defaultEmbeddingModelId = modelId
+        else config.defaultModelId = modelId
+      }
+      if (embeddingModelId && !config.defaultEmbeddingModelId) config.defaultEmbeddingModelId = embeddingModelId
+      writeJsonFile(GLOBAL_CONFIG_PATH, config)
+
+      return {
+        success: true,
+        plan,
+        modelId,
+        embeddingModelId,
+        tested: true,
+        testError: check.success ? undefined : (check.error ?? 'TEST_FAILED'),
+        reused,
+      }
+    } catch (error) {
+      return { success: false, tested: false, error: String(error) }
     }
   })
 }

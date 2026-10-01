@@ -187,5 +187,13 @@
       "writingRequirements": "全局写作要求",
       "subGenre": "细分类型"
     }
+  },
+  "setup": {
+    "title": "先配一个模型，Vela 才能开始工作",
+    "description": "Vela 不内置 API Key，用的是你自己账号的额度。这一步只做一次。",
+    "whyKey": "为什么需要 API Key？Vela 本身不提供模型服务，写作、审稿、拆书都要调用你在 OpenAI、DeepSeek、智谱等服务商开通的接口。Key 只存在本机 ~/.vela/models.json，不会上传。",
+    "later": "以后再说",
+    "settingsHint": "也可以随时在「设置 → AI 模型」里配置",
+    "saved": "已保存，即将关闭…"
   }
 }

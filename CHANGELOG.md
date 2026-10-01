@@ -12,6 +12,24 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 ---
 
+## [0.2.2] — 2026-10-01
+
+新用户第一次打开 Vela，即使完全不懂模型配置，也能一步把模型接上。
+
+### 新增
+
+- **一键配置模型**：在「设置 → AI 模型」粘贴 API Key（模型名、接口地址可以一起粘），Vela 自动识别服务商、拉取模型列表，并一次性写好模型池、默认模型、用途绑定与向量模型。
+- **首次启动引导**：检测到还没配置任何模型时自动弹出配置向导，引导完成第一次配置；也可以点「以后再说」，之后在设置里随时补。
+- **内置 Agent 自动配置**：Agent 新增 `configure_model` 工具，可直接用自然语言让它帮你配模型（例如「用这个 Key 帮我把 DeepSeek 配好」），以后换 Key、加模型同样适用。
+- **模型列表自动拉取**：配置时向服务商请求真实可用模型列表；网络不通或服务商不支持时自动回落到内置候选列表，不阻塞配置。
+
+### 说明
+
+- 内置 28 家常见服务商的识别规则（OpenAI、DeepSeek、通义千问、智谱 GLM、Moonshot / Kimi、硅基流动、OpenRouter、Ollama 等），依据 Key 前缀、接口域名与模型名前缀判断。
+- API Key 只写入本机 `~/.vela/models.json`，不会上传到任何服务器。
+
+---
+
 ## [0.2.1] — 2026-10-01
 
 界面中与作者身份相关的信息全部改为本项目维护者，并加入打赏支持入口。
@@ -81,7 +99,8 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 ---
 
-[Unreleased]: https://github.com/Kimcop-kc/vela/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Kimcop-kc/vela/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Kimcop-kc/vela/releases
 [0.1.0]: https://github.com/Kimcop-kc/vela/tags

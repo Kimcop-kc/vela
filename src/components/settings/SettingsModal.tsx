@@ -23,6 +23,7 @@ import { ipc } from '../../services/ipc-client'
 import { Switch } from '../ui/Switch'
 import OllamaModelPicker from './OllamaModelPicker'
 import PurposeBindingPanel from './PurposeBindingPanel'
+import AutoConfigPanel from './AutoConfigPanel'
 
 // 打赏 / 联系方式 图片资源（通过 import 让 Vite 处理路径，确保打包后可正常加载）
 import rewardImg from '/buyme/reward.png?url'
@@ -292,6 +293,20 @@ function LLMSection({
   return (
     <div className="space-y-4">
       {saveError && <p role="alert" className="text-sm text-[var(--color-error)]">{saveError}</p>}
+
+      {/* 一键配置：非技术用户不必理解「服务商/协议/接口地址/模型标识」，把 Key 粘进来即可 */}
+      {!editingModel && !isEmbeddingSection && (
+        <div className="rounded-xl p-4" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+          <h3 className="text-sm font-semibold mb-0.5" style={{ color: 'var(--color-text)' }}>
+            {t('autoConfig.title')}
+          </h3>
+          <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
+            {t('autoConfig.subtitle')}
+          </p>
+          <AutoConfigPanel />
+        </div>
+      )}
+
       {/* 模型编辑表单 */}
       {editingModel && (
         <ModelForm
@@ -580,12 +595,15 @@ function ModelForm({
             value={model.provider}
             onChange={(e) => handleProviderChange(e.target.value as ModelProfile['provider'])}
           >
-            <option value="openai">OpenAI</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="ollama">{t('modelsProviders.ollama')}</option>
-            <option value="bigmodel">{t('modelsProviders.bigmodel')}</option>
-            <option value="custom">{t('modelsProviders.custom')}</option>
+            {presets.map((preset) => (
+              <option key={preset.provider} value={preset.provider}>
+                {preset.displayName ?? preset.provider}
+              </option>
+            ))}
+            {/* 旧配置里可能存着已从预设中移除的服务商，保留一项以免静默改成别的 */}
+            {!presets.some((preset) => preset.provider === model.provider) && (
+              <option value={model.provider}>{model.provider}</option>
+            )}
           </NativeSelect>
         </div>
         <div>

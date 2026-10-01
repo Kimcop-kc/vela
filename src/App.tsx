@@ -26,6 +26,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { actionToast } from './components/ui/ActionToast'
 import { globalEventBus } from './shared/event-bus'
 import FeatureTour from './components/onboarding/FeatureTour'
+import SetupWizard from './components/onboarding/SetupWizard'
 
 /**
  * Vela 主应用组件
@@ -241,6 +242,7 @@ export default function App() {
         onClose={closeSettings}
       />
       <FeatureTour />
+      <SetupWizard />
 
     </div>
   )

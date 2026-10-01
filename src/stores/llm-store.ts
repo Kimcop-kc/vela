@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
-import type { ModelProfile, LLMResponse, TokenUsage, LLMCompletionMeta, PurposeModelBindings } from '../shared/ipc-channels'
+import type {
+  ModelProfile,
+  LLMResponse,
+  TokenUsage,
+  LLMCompletionMeta,
+  PurposeModelBindings,
+  AutoConfigInput,
+  AutoConfigPlanResult,
+  AutoConfigApplyResult,
+} from '../shared/ipc-channels'
 import { categorizePurpose, pickModelIdForCategory, type PurposeCategory } from '../shared/purpose-routing'
 import i18n from '../i18n'
 
@@ -72,6 +81,16 @@ interface LLMState {
   cancelGeneration: (requestId: string) => Promise<void>
   /** 测试模型连接 */
   testConnection: (model: ModelProfile) => Promise<{ success: boolean; error?: string }>
+  /**
+   * 一键配置 · 预演（只读）
+   * 解析粘贴的 Key / 模型名 / 接口地址，有 Key 时顺带问服务商要一份真实模型列表。
+   */
+  previewAutoConfig: (input: AutoConfigInput) => Promise<AutoConfigPlanResult>
+  /**
+   * 一键配置 · 应用
+   * 一次写完模型池、默认模型、用途绑定；服务商有向量模型时会顺带把知识库也配好。
+   */
+  autoConfigure: (input: AutoConfigInput) => Promise<AutoConfigApplyResult>
 }
 
 export const useLLMStore = create<LLMState>()((set, get) => ({
@@ -268,5 +287,36 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   testConnection: async (model) => {
     return ipc.invoke('llm:test-connection', model)
+  },
+
+  previewAutoConfig: async (input) => {
+    if (!ipc.isElectron) {
+      return { success: false, availableModels: [], modelsFromProvider: false, error: 'NOT_ELECTRON' }
+    }
+    try {
+      return await ipc.invoke('llm:autoconfig-plan', input)
+    } catch (error) {
+      return { success: false, availableModels: [], modelsFromProvider: false, error: String(error) }
+    }
+  },
+
+  autoConfigure: async (input) => {
+    if (!ipc.isElectron) return { success: false, tested: false, error: 'NOT_ELECTRON' }
+    try {
+      const result = await ipc.invoke('llm:autoconfig-apply', input)
+      if (result.success) {
+        // 主进程刚写完配置，这里重新拉一遍，保证界面上的默认模型/用途绑定与落盘一致
+        await get().loadModels()
+        const [defaultModelId, defaultEmbeddingModelId, purposeModels] = await Promise.all([
+          ipc.invoke('llm:get-default-model').catch(() => null),
+          ipc.invoke('llm:get-default-embedding-model').catch(() => null),
+          ipc.invoke('llm:get-purpose-models').catch(() => ({} as PurposeModelBindings)),
+        ])
+        set({ defaultModelId, defaultEmbeddingModelId, purposeModels })
+      }
+      return result
+    } catch (error) {
+      return { success: false, tested: false, error: String(error) }
+    }
   },
 }))

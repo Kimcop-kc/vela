@@ -24,8 +24,11 @@ export default function FeatureTour() {
   const modalOpen = useLayoutStore(s => s.settingsOpen || s.newProjectOpen || s.importNovelOpen || s.exportOpen || s.chapterCreationOpen)
   const generating = useAgentStore(s => s.generating)
   const workflowBusy = useWorkflowStore(s => s.activeRuns.length > 0)
+  const setupOpen = useOnboardingStore(s => s.setupOpen)
   const offered = useRef(false)
   useEffect(() => {
+    // 配置向导开着时直接让路：既不该叠在它上面，也不该把「巡览机会」消耗掉
+    if (setupOpen) return
     if (open || dismissed || modalOpen || generating || workflowBusy || offered.current || hasSeenFeatureTour()) return
     const timer = setTimeout(() => {
       if (document.querySelector('[role="dialog"]')) return
@@ -33,7 +36,7 @@ export default function FeatureTour() {
       useOnboardingStore.getState().start()
     }, 1100)
     return () => clearTimeout(timer)
-  }, [open, dismissed, modalOpen, generating, workflowBusy])
+  }, [open, dismissed, modalOpen, generating, workflowBusy, setupOpen])
   return open ? <TourBubbles /> : null
 }
 

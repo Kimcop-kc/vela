@@ -378,6 +378,19 @@
         "chapterInfo": "（第 {{chapter}} 章）",
         "switched": "🚀 已切换到 AI 输出面板。请在面板中启动「{{name}}{{chapterInfo}}」工作流。"
       },
+      "configureModel": {
+        "desc": "配置或更换 AI 模型。用户说「配置模型」「换 Key」「换个模型」时调用。把用户原话里的 API Key、模型名、接口地址原样传进来即可，程序会自动识别服务商并完成设置。",
+        "credentialsDesc": "用户原话（至少包含 API Key，可含模型名与接口地址）",
+        "modelNameDesc": "模型标识，如 deepseek-chat；不确定就留空，程序会自动向服务商索取可用模型列表",
+        "baseUrlDesc": "接口地址，如 https://api.deepseek.com；不确定就留空",
+        "providerDesc": "服务商标识，如 deepseek / openai / bigmodel / moonshot",
+        "setDefaultDesc": "是否设为默认模型，默认是",
+        "missingCredentials": "没有拿到 API Key。请让用户把 Key 原样发给你，不要自己编造。",
+        "configured": "✅ 已配置模型：{{model}}（服务商：{{provider}}）",
+        "configuredEmbedding": "同时配好了向量模型：{{name}}",
+        "testFailed": "⚠️ 配置已保存，但连接测试未通过：{{error}}",
+        "failed": "❌ 配置失败：{{error}}"
+      },
       "updateConfig": {
         "desc": "更新小说项目的配置信息，如类型、目标读者、大纲、写作风格等。这会修改项目核心设定，需要用户确认。",
         "fieldDesc": "要更新的字段名",

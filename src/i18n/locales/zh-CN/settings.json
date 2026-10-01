@@ -344,5 +344,48 @@
     "ollama": "Ollama（本地）",
     "bigmodel": "BigModel（智谱）",
     "custom": "自定义"
+  },
+  "autoConfig": {
+    "title": "一键配置模型",
+    "subtitle": "把 API Key 粘进来就行，模型名和接口地址会自动认出来。",
+    "textareaLabel": "粘贴 API Key（可连同模型名、接口地址一起粘）",
+    "placeholder": "直接粘贴即可，例如：\nsk-xxxxxxxxxxxxxxxx\n\n整段粘贴也行：\ndeepseek\n模型：deepseek-chat\nhttps://api.deepseek.com",
+    "hint": "只在本机解析，不会把 Key 发给除该服务商之外的任何地方。",
+    "detect": "识别并自动配置",
+    "detecting": "识别中…",
+    "applying": "保存中…",
+    "save": "保存配置",
+    "retry": "重新识别",
+    "detected": "识别结果",
+    "provider": "服务商",
+    "modelName": "模型标识",
+    "baseUrl": "接口地址",
+    "apiKey": "API Key",
+    "purposes": "用途",
+    "advanced": "高级（可手动修改）",
+    "modelsFromProvider": "已从服务商读取到 {{count}} 个可用模型",
+    "modelsFromCatalog": "没能连上服务商，先列出内置候选 {{count}} 个",
+    "evidenceExplicit": "文本里写明了服务商 {{value}}",
+    "evidenceHost": "接口域名 {{value}} 属于该服务商",
+    "evidenceKeyPrefix": "Key 前缀 {{value}} 属于该服务商",
+    "evidenceModelName": "模型名以 {{value}} 开头",
+    "evidenceFallback": "按粘贴的接口地址 {{value}} 处理",
+    "missing": {
+      "apiKey": "缺少 API Key",
+      "baseUrl": "缺少接口地址",
+      "modelName": "缺少模型标识"
+    },
+    "error": {
+      "NO_INPUT": "没有识别到任何内容，请把 API Key 粘进来。",
+      "NO_API_KEY": "没有识别到 API Key，请在「高级」里手动填写。",
+      "NO_BASE_URL": "没有识别到接口地址，请在「高级」里手动填写。",
+      "NO_MODEL": "没有识别到模型标识。先点「识别并自动配置」，程序会去服务商那里取一份可用模型列表。",
+      "UNKNOWN": "配置失败，请检查网络或代理后重试。"
+    },
+    "success": "配置完成",
+    "successReused": "（覆盖了已有配置）",
+    "successDetail": "已设为默认模型，并绑定用途：{{purposes}}",
+    "successEmbedding": "同时配好了向量模型：{{name}}",
+    "testFailed": "配置已保存，但连接测试没通过：{{error}}。请检查 Key、接口地址和网络/代理。"
   }
 }

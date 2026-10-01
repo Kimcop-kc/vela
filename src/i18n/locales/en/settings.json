@@ -344,5 +344,48 @@
     "ollama": "Ollama (Local)",
     "bigmodel": "BigModel (Zhipu)",
     "custom": "Custom"
+  },
+  "autoConfig": {
+    "title": "One-Click Model Setup",
+    "subtitle": "Paste your API key — the model and endpoint are detected for you.",
+    "textareaLabel": "Paste API key (model name and endpoint optional)",
+    "placeholder": "Just paste it, e.g.:\nsk-xxxxxxxxxxxxxxxx\n\nA whole block works too:\ndeepseek\nmodel: deepseek-chat\nhttps://api.deepseek.com",
+    "hint": "Parsed locally only. The key is never sent anywhere except that provider.",
+    "detect": "Detect and configure",
+    "detecting": "Detecting…",
+    "applying": "Saving…",
+    "save": "Save configuration",
+    "retry": "Detect again",
+    "detected": "Detected configuration",
+    "provider": "Provider",
+    "modelName": "Model ID",
+    "baseUrl": "Endpoint",
+    "apiKey": "API key",
+    "purposes": "Purposes",
+    "advanced": "Advanced (edit manually)",
+    "modelsFromProvider": "Read {{count}} models from the provider",
+    "modelsFromCatalog": "Provider unreachable — showing {{count}} built-in candidates",
+    "evidenceExplicit": "The text names the provider {{value}}",
+    "evidenceHost": "Endpoint host {{value}} belongs to this provider",
+    "evidenceKeyPrefix": "Key prefix {{value}} belongs to this provider",
+    "evidenceModelName": "Model name starts with {{value}}",
+    "evidenceFallback": "Using the pasted endpoint {{value}}",
+    "missing": {
+      "apiKey": "API key is missing",
+      "baseUrl": "Endpoint is missing",
+      "modelName": "Model ID is missing"
+    },
+    "error": {
+      "NO_INPUT": "Nothing was detected. Paste your API key first.",
+      "NO_API_KEY": "No API key found. Enter it manually under Advanced.",
+      "NO_BASE_URL": "No endpoint found. Enter it manually under Advanced.",
+      "NO_MODEL": "No model ID found. Press Detect and Vela will fetch the model list from the provider.",
+      "UNKNOWN": "Setup failed. Check your network or proxy and try again."
+    },
+    "success": "Configured",
+    "successReused": "(updated the existing entry)",
+    "successDetail": "Set as the default model and bound to: {{purposes}}",
+    "successEmbedding": "Embedding model configured too: {{name}}",
+    "testFailed": "Saved, but the connection test failed: {{error}}. Check the key, endpoint, network and proxy."
   }
 }

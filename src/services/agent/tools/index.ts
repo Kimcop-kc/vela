@@ -17,6 +17,7 @@ import { listChaptersTool } from './list-chapters.tool'
 import { writeFileTool } from './write-file.tool'
 import { openEditorTool } from './open-editor.tool'
 import { updateConfigTool } from './update-config.tool'
+import { configureModelTool } from './configure-model.tool'
 import { storyIndexTool, storyReadTool, storyReviseTool, storyHistoryTool, storyUndoTool, storyRewriteDraftTool } from './story-content.tool'
 
 /** 所有内置 Tool（供外部引用） */
@@ -35,6 +36,7 @@ export const builtinTools = [
   writeFileTool,
   openEditorTool,
   updateConfigTool,
+  configureModelTool,
 ]
 
 /**

@@ -378,6 +378,19 @@
         "chapterInfo": " (Chapter {{chapter}})",
         "switched": "🚀 Switched to AI Output panel. Please start the \"{{name}}{{chapterInfo}}\" workflow in the panel."
       },
+      "configureModel": {
+        "desc": "Configure or switch the AI model. Call this when the user says \"set up a model\", \"change my key\" or \"use another model\". Pass their API key, model name and endpoint through verbatim — provider detection is automatic.",
+        "credentialsDesc": "The user's own words (at least an API key; model name and endpoint optional)",
+        "modelNameDesc": "Model ID such as deepseek-chat. Leave empty to let Vela fetch the provider's model list.",
+        "baseUrlDesc": "Endpoint such as https://api.deepseek.com. Leave empty if unknown.",
+        "providerDesc": "Provider id such as deepseek / openai / bigmodel / moonshot",
+        "setDefaultDesc": "Also set it as the default model (default true)",
+        "missingCredentials": "No API key was provided. Ask the user to send it verbatim — never invent one.",
+        "configured": "✅ Model configured: {{model}} (provider: {{provider}})",
+        "configuredEmbedding": "Embedding model configured too: {{name}}",
+        "testFailed": "⚠️ Saved, but the connection test failed: {{error}}",
+        "failed": "❌ Setup failed: {{error}}"
+      },
       "updateConfig": {
         "desc": "Update the novel project's configuration information, such as genre, target audience, outline, writing style, etc. This modifies core project settings and requires user confirmation.",
         "fieldDesc": "Field name to update",
