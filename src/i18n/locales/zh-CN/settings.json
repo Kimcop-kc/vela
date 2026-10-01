@@ -319,6 +319,10 @@
     }
   },
   "fonts": {
+    "segoe": {
+      "label": "Segoe UI",
+      "desc": "Windows 11 系统字体，界面原生手感，Win11 风格首选"
+    },
     "inter": {
       "label": "Inter",
       "desc": "精心设计的现代 UI 字体，英文排版优秀，界面首选"

@@ -27,14 +27,14 @@ export function IconBtn({ children, title, onClick, disabled, active, badge, siz
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className="group relative flex items-center justify-center rounded transition-colors"
+      className="group relative flex items-center justify-center rounded transition-all duration-150"
       style={{
         width: `${size}px`,
         height: `${size}px`,
         color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
         opacity: disabled ? 0.4 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
-        backgroundColor: active ? 'var(--color-hover)' : 'transparent',
+        backgroundColor: active ? 'var(--color-accent-soft)' : 'transparent',
       }}
       onMouseEnter={e => {
         if (!disabled && !active) {

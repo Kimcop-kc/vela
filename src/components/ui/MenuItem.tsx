@@ -19,8 +19,9 @@ export function MenuItem({ label, onClick, icon, shortcut, disabled, danger }: M
     <button
       onClick={!disabled ? onClick : undefined}
       disabled={disabled}
-      className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors"
+      className="w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors mx-1 rounded-[var(--radius-sm)]"
       style={{
+        width: 'calc(100% - 8px)',
         color: danger
           ? 'var(--color-error)'
           : disabled

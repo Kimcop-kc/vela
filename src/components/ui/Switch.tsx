@@ -1,12 +1,7 @@
 /**
- * Vela Switch 开关组件
+ * Vela Switch 开关组件 — Fluent 2 精致版
  *
- * 从 SettingsModal 中提取的通用开关组件，
- * 自动适配双主题、支持 disabled 态。
- *
- * 用法：
- *   import { Switch } from '@/components/ui/Switch'
- *   <Switch checked={enabled} onCheckedChange={setEnabled} />
+ * 40×20px 规格，渐变滑轨 + 投影滑钮，焦点环 + 弹簧过渡。
  */
 
 import * as React from 'react'
@@ -25,10 +20,6 @@ interface SwitchProps {
   'aria-label'?: string
 }
 
-/**
- * 开关组件 — 40×20px 规格，圆形滑块
- * 使用 CSS 变量适配主题，动画使用 --transition-fast
- */
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
   ({ checked, onCheckedChange, disabled, className, ...props }, ref) => {
     return (
@@ -40,23 +31,33 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         onClick={() => !disabled && onCheckedChange(!checked)}
         className={cn(
           'relative inline-flex items-center flex-shrink-0 cursor-pointer',
-          'w-10 h-5 rounded-full',
-          'transition-colors',
+          'w-10 h-5 rounded-full outline-none',
+          'focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg)] focus-visible:ring-[var(--color-accent)]',
           disabled && 'opacity-50 cursor-not-allowed',
           className
         )}
         style={{
-          backgroundColor: checked ? 'var(--color-accent)' : 'var(--color-border)',
-          transitionDuration: 'var(--transition-fast)',
+          backgroundColor: checked
+            ? 'var(--color-accent)'
+            : 'rgba(var(--color-text-muted-rgb), 0.18)',
+          backgroundImage: checked
+            ? 'linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0))'
+            : 'none',
+          boxShadow: checked
+            ? '0 0 0 1px rgba(var(--color-accent-rgb), 0.4), inset 0 1px 1px rgba(255,255,255,0.18)'
+            : 'inset 0 1px 1px rgba(0,0,0,0.12)',
+          transition: 'background-color var(--transition-normal), box-shadow var(--transition-normal)',
         }}
         {...props}
       >
-        {/* 滑块圆点 */}
+        {/* 滑钮圆点 */}
         <span
-          className="inline-block w-4 h-4 rounded-full bg-white shadow-sm"
+          className="inline-block w-4 h-4 rounded-full"
           style={{
             transform: checked ? 'translateX(22px)' : 'translateX(2px)',
-            transition: `transform var(--transition-fast)`,
+            transition: 'transform var(--transition-spring)',
+            background: 'var(--color-surface-raised)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.24), 0 0 0 0.5px rgba(0,0,0,0.06)',
           }}
         />
       </button>

@@ -8,7 +8,7 @@ export type Theme = 'light' | 'galaxy' | 'paper' | 'dark' | 'ocean'
 // ─── 共享字体库 ─────────────────────────────────────────────────────────────
 
 /** 内置字体 ID（界面字体和写作字体共享同一张清单） */
-export type FontId = 'inter' | 'noto-sans-sc' | 'lxgw-wenkai' | 'noto-serif-sc' | 'system'
+export type FontId = 'segoe' | 'inter' | 'noto-sans-sc' | 'lxgw-wenkai' | 'noto-serif-sc' | 'system'
 
 export interface FontOption {
   id: FontId
@@ -25,6 +25,14 @@ const tFont = (key: string) => i18n.t(key, { ns: 'settings' })
 
 /** 所有内置字体（界面 + 写作共用） */
 export const FONT_OPTIONS: FontOption[] = [
+  {
+    id: 'segoe',
+    label: 'Segoe UI',
+    labelEn: 'Segoe UI Variable',
+    desc: tFont('fonts.segoe.desc'),
+    family: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
+    preview: 'Aa Bb 文字 123',
+  },
   {
     id: 'inter',
     label: 'Inter',
@@ -121,7 +129,7 @@ export const useThemeStore = create<ThemeState>()(
       resolvedTheme: 'ocean',
       zoom: 1.0,
       writingFont: 'lxgw-wenkai',
-      uiFont: 'inter',
+      uiFont: 'segoe',
 
       setTheme: (theme: Theme) => {
         const resolved = resolveTheme(theme)

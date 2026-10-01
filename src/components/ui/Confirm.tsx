@@ -90,12 +90,12 @@ function ConfirmDialog({
       <div
         role="dialog"
         aria-modal="true"
+        className="acrylic"
         style={{
-          backgroundColor: 'var(--color-sidebar)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-xl)',
           boxShadow: 'var(--shadow-popover)',
-          padding: '20px 24px',
+          padding: '18px 22px',
           minWidth: 'min(380px, calc(100vw - 2rem))',
           maxWidth: 'min(460px, calc(100vw - 2rem))',
           /* CSS 动画，使用 both 从而提前应用 0% 关键帧，彻底杜绝闪烁现象 */

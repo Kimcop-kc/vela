@@ -113,7 +113,7 @@ function ToastItemView({ item, onRemove }: { item: ToastItem; onRemove: (id: num
     <div
       className={`
         pointer-events-auto flex items-start gap-3 px-4 py-3
-        rounded-xl border backdrop-blur-xl
+        rounded-[var(--radius-lg)] border backdrop-blur-xl
         ${isExiting ? 'animate-toast-exit' : 'animate-toast-enter'}
       `}
       style={{

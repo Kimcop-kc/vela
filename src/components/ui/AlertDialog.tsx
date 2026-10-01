@@ -89,9 +89,9 @@ function AlertDialog({
         aria-modal="true"
         aria-labelledby="alert-title"
         aria-describedby="alert-message"
+        className="acrylic"
         style={{
           /* 基础样式 */
-          backgroundColor: 'var(--color-bg)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-xl)',
           boxShadow: 'var(--shadow-popover)',

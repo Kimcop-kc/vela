@@ -32,7 +32,10 @@ function createWindow() {
     // macOS 使用自定义标题栏
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 10 },
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#141B24',
+    // Win11 Fluent 材质：Windows 11 使用 Mica，macOS 使用 under-window 毛玻璃
+    ...(process.platform === 'win32' ? { backgroundMaterial: 'mica' as const } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       // 安全性设置

@@ -72,14 +72,13 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] py-1 select-none"
+      className="fixed z-[9999] py-1 select-none acrylic"
       style={{
         left,
         top,
         minWidth: MENU_W,
-        backgroundColor: 'var(--color-sidebar)',
         border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-xl)',
+        borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-popover)',
       }}
       onContextMenu={e => e.preventDefault()}
@@ -99,7 +98,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
           )
         }
 
-        /* 菜单项 */
+        /* 菜单项 — Fluent：4px 圆角内边距 */
         const item = entry as ContextMenuItem
         return (
           <button
@@ -110,8 +109,9 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
               onClose()
               item.onClick?.()
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors"
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-left transition-colors mx-1 rounded-[var(--radius-sm)]"
             style={{
+              width: 'calc(100% - 8px)',
               color: item.disabled
                 ? 'var(--color-text-muted)'
                 : item.danger

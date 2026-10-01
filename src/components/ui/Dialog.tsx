@@ -9,7 +9,7 @@ const DialogTrigger = DialogPrimitive.Trigger
 const DialogPortal = DialogPrimitive.Portal
 const DialogClose = DialogPrimitive.Close
 
-/** 遮罩层 - 增强的模糊效果 */
+/** 遮罩层 - Fluent 2 克制的背景模糊 */
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -17,20 +17,20 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/30 backdrop-blur-sm',
+      'fixed inset-0 z-50 bg-black/25',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
     )}
     style={{
-      backdropFilter: 'blur(12px)',
+      backdropFilter: 'blur(6px)',
     }}
     {...props}
   />
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-/** 对话框主体 - 增强的阴影和动画 */
+/** 对话框主体 - Fluent 2：8px 浮层圆角 + Acrylic 毛玻璃 + 分层阴影 */
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
@@ -43,24 +43,22 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         'fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%]',
-        'rounded-2xl outline-none',
-        'bg-[var(--color-bg)] border border-[var(--color-border)]',
-        'shadow-2xl shadow-black/20',
-        'duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out',
+        'rounded-[var(--radius-xl)] outline-none',
+        'border border-[var(--color-border)]',
+        'shadow-[var(--shadow-popover)]',
+        'duration-200 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[50%]',
         'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[50%]',
+        'glass',
         className
       )}
-      style={{
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-      }}
       {...props}
     >
       {children}
       <DialogPrimitive.Close
-        className="absolute right-4 top-4 rounded-md opacity-60 hover:opacity-100 transition-all duration-200 hover:bg-[var(--color-hover)] p-1"
+        className="absolute right-4 top-4 rounded-md opacity-60 hover:opacity-100 transition-all duration-150 hover:bg-[var(--color-hover)] p-1"
         style={{
           background: 'transparent',
           border: 'none',

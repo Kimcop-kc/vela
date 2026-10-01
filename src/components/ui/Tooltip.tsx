@@ -44,11 +44,11 @@ const TooltipContent = React.forwardRef<
       sideOffset={sideOffset}
       className={cn(
         'z-[9999] overflow-hidden px-3 py-2 text-xs font-medium leading-relaxed',
-        'rounded-xl border border-[var(--color-border)]',
+        'rounded-[var(--radius-lg)] border border-[var(--color-border)]',
         'bg-[var(--color-tooltip-bg)] text-[var(--color-tooltip-text)]',
-        'shadow-xl shadow-black/15',
+        'shadow-[var(--shadow-tooltip)]',
         /* 进出场动画 - 缩放 + 渐显 */
-        'animate-in fade-in-0 zoom-in-95 duration-150',
+        'animate-in fade-in-0 zoom-in-95 duration-120',
         'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-100',
         /* 根据方向微调偏移 */
         'data-[side=bottom]:slide-in-from-top-2',

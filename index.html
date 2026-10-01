@@ -9,13 +9,13 @@
     <!-- 同步读取主题，避免加载页与主界面背景色闪跳 -->
     <script>
       (function() {
-        var bgMap = { light: '#F2F5FB', galaxy: '#0A1628', paper: '#F5F0E8', dark: '#1E1E1E' };
-        var theme = 'dark';
+        var bgMap = { light: '#F3F5F9', galaxy: '#171D26', paper: '#F4F0E7', dark: '#1C1C1C', ocean: '#141B24' };
+        var theme = 'ocean';
         try {
           var raw = localStorage.getItem('vela-theme');
           if (raw) {
             var state = JSON.parse(raw).state;
-            theme = state.resolvedTheme || state.theme || 'dark';
+            theme = state.resolvedTheme || state.theme || 'ocean';
             if (theme === 'night') theme = 'dark'; // 兼容旧版
           }
         } catch(e) {}
@@ -23,7 +23,7 @@
         var bg = bgMap[theme] || bgMap.galaxy;
         
         // 提前给 html 注入主题 class，确保所有全局 CSS 变量立即生效
-        document.documentElement.classList.remove('light', 'dark', 'galaxy', 'paper');
+        document.documentElement.classList.remove('light', 'dark', 'galaxy', 'paper', 'ocean');
         document.documentElement.classList.add(theme);
         
         document.body.style.backgroundColor = bg;
@@ -41,7 +41,7 @@
           height: 100vh;
           width: 100vw;
           background-color: var(--loader-bg, #0A1628);
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           user-select: none;
         }
         

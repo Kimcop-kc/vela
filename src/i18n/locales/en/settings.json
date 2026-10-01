@@ -319,6 +319,10 @@
     }
   },
   "fonts": {
+    "segoe": {
+      "label": "Segoe UI",
+      "desc": "Windows 11 system font, native UI feel, ideal for a Win11 look"
+    },
     "inter": {
       "label": "Inter",
       "desc": "Carefully designed modern UI font, excellent for English typesetting, ideal for interfaces"
