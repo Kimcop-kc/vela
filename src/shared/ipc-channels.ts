@@ -1,0 +1,675 @@
+/**
+ * Vela IPC 频道定义 — 渲染进程与主进程的类型安全通信契约
+ * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
+ */
+
+// ===== 全局配置 =====
+export interface ConfigChannels {
+  'config:get': {
+    args: []
+    return: GlobalConfig
+  }
+  'config:set': {
+    args: [config: Partial<GlobalConfig>]
+    return: { success: boolean; error?: string }
+  }
+  'config:get-vela-home': {
+    args: []
+    return: string
+  }
+}
+
+/** 可以单独绑定模型的用途类别（多模型管理） */
+export type LLMPurposeCategory = 'generation' | 'refinement' | 'summary' | 'embedding'
+
+/** 用途类别 → 模型 id 的绑定表 */
+export type PurposeModelBindings = Partial<Record<LLMPurposeCategory, string | null>>
+
+export interface GlobalConfig {
+  theme: string
+  defaultModelId: string | null
+  defaultEmbeddingModelId?: string | null
+  /**
+   * 用途 → 模型 id 的绑定表（多模型管理）。
+   * 未绑定的用途回落到 defaultModelId / defaultEmbeddingModelId。
+   */
+  purposeModels?: PurposeModelBindings
+  editorFontSize: number
+  editorFontFamily: string
+  autoSaveInterval: number
+  proxy?: {
+    enabled: boolean
+    type: 'http' | 'socks5'
+    host: string
+    port: number
+  }
+}
+
+// ===== 项目管理 =====
+export interface ProjectChannels {
+  'project:create': {
+    args: [config: { name: string; path: string; genre: string; targetAudience: string }]
+    return: { success: boolean; projectId: string; projectPath?: string; error?: string }
+  }
+  'project:open': {
+    args: [projectPath: string]
+    return: { success: boolean; project: ProjectData | null; error?: string }
+  }
+  'project:save': {
+    args: [projectId: string, data: Partial<ProjectData>]
+    return: { success: boolean; error?: string }
+  }
+  'project:update-config': {
+    args: [projectId: string, data: Partial<ProjectData>]
+    return: { success: boolean; error?: string }
+  }
+  'project:recent-list': {
+    args: []
+    return: Array<{ name: string; path: string; updatedAt: string }>
+  }
+  'dialog:select-folder': {
+    args: []
+    return: string | null
+  }
+}
+
+// ===== 文件系统 =====
+export interface FileChannels {
+  'fs:read-file': {
+    args: [filePath: string]
+    return: { success: boolean; content: string; error?: string }
+  }
+  'fs:write-file': {
+    args: [filePath: string, content: string]
+    return: { success: boolean; error?: string }
+  }
+  'fs:list-dir': {
+    args: [dirPath: string]
+    return: FileNode[]
+  }
+  'fs:mkdir': {
+    args: [dirPath: string]
+    return: { success: boolean; error?: string }
+  }
+  'fs:check-exists': {
+    args: [filePath: string]
+    return: boolean
+  }
+  'fs:read-json': {
+    args: [filePath: string]
+    return: { success: boolean; data: unknown; error?: string }
+  }
+  'fs:write-json': {
+    args: [filePath: string, data: unknown]
+    return: { success: boolean; error?: string }
+  }
+}
+
+// ===== LLM 调用 =====
+export interface LLMChannels {
+  'llm:generate': {
+    args: [request: LLMRequest]
+    return: LLMResponse
+  }
+  'llm:generate-stream': {
+    args: [requestId: string, request: LLMRequest]
+    return: { requestId: string; started: boolean }
+  }
+  'llm:cancel': {
+    args: [requestId: string]
+    return: { success: boolean }
+  }
+  'llm:list-models': {
+    args: []
+    return: ModelProfile[]
+  }
+  'llm:ollama-models': { args: [baseUrl: string, apiKey?: string]; return: { success: boolean; models: string[]; error?: string } }
+  'llm:save-model': {
+    args: [model: ModelProfile]
+    return: { success: boolean }
+  }
+  'llm:delete-model': {
+    args: [modelId: string]
+    return: { success: boolean }
+  }
+  'llm:set-default-model': {
+    args: [modelId: string | null]
+    return: { success: boolean; error?: string }
+  }
+  'llm:get-default-model': {
+    args: []
+    return: string | null
+  }
+  'llm:set-default-embedding-model': {
+    args: [modelId: string | null]
+    return: { success: boolean; error?: string }
+  }
+  'llm:get-default-embedding-model': {
+    args: []
+    return: string | null
+  }
+  'llm:get-purpose-models': {
+    args: []
+    return: PurposeModelBindings
+  }
+  'llm:set-purpose-model': {
+    args: [purpose: LLMPurposeCategory, modelId: string | null]
+    return: { success: boolean; error?: string }
+  }
+  'llm:test-connection': {
+    args: [model: ModelProfile]
+    return: { success: boolean; error?: string }
+  }
+}
+
+export interface LLMStreamEvents {
+  'llm:stream-chunk': { requestId: string; chunk: string }
+  'llm:stream-done': { requestId: string; fullText: string; usage?: TokenUsage; meta?: LLMCompletionMeta }
+  'llm:stream-truncated': { requestId: string; partialText: string; usage?: TokenUsage; meta?: LLMCompletionMeta }
+  'llm:stream-error': { requestId: string; error: string }
+}
+
+// ===== 公共数据类型 =====
+export interface ProjectData {
+  id: string
+  name: string
+  path: string
+  novelConfig: NovelConfig
+  characterStates: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NovelConfig {
+  genre: string
+  subGenre: string
+  targetAudience: string
+  totalChapters: number
+  wordsPerChapter: number
+  plotStructure: 'three_act' | 'heros_journey' | 'save_the_cat' | 'kishotenketsu' | 'multi_thread' | 'freeform'
+  narrativePOV: 'third_limited' | 'first_person' | 'third_omniscient' | 'multi_pov'
+  coreOutline: string
+  worldSetting: string
+  goldenFinger: string
+  protagonistProfile: string
+  globalGuidance: string
+  writingStyle?: string
+  referenceWorks?: string
+}
+
+export interface FileNode {
+  name: string
+  path: string
+  isDir: boolean
+  children?: FileNode[]
+}
+
+export interface LLMRequest {
+  modelId: string
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+  temperature?: number
+  maxTokens?: number
+  stream?: boolean
+  responseFormat?: { type: 'json_object' | 'text' }
+  thinking?: boolean
+  /** 调用用途：写入统计表，用于区分「token 花在哪个环节」 */
+  purpose?: string
+}
+
+export interface LLMResponse {
+  success: boolean
+  content: string
+  usage?: TokenUsage
+  error?: string
+}
+
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+/** 调用结束时的补充信息：用于判断输出是否被长度上限截断 */
+export interface LLMCompletionMeta {
+  /** 供应商因输出上限截断（finish_reason=length / MAX_TOKENS），内容不完整 */
+  truncated?: boolean
+  /** 供应商返回的原始结束原因 */
+  finishReason?: string
+}
+
+export interface ModelProfile {
+  id: string
+  name: string
+  provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'custom'
+  protocol: 'openai' | 'gemini'
+  modelName: string
+  apiKey: string
+  baseUrl: string
+  temperature: number
+  maxTokens: number
+  /** 该模型能胜任的用途（决定它出现在哪些用途下拉框里） */
+  purposes: LLMPurposeCategory[]
+  /** 是否启用；停用后不参与用途路由（缺省视为启用，兼容旧配置） */
+  enabled?: boolean
+}
+
+// ===== 引入 DB 类型 =====
+import type { ProjectCoreData } from '../../electron/repositories/project-core-repository'
+import type { BlueprintData } from '../../electron/repositories/blueprint-repository'
+import type { CharacterData, CharacterStateData } from '../../electron/repositories/character-repository'
+import type { DraftMeta, DraftFull } from '../../electron/repositories/draft-repository'
+import type { RevisionMeta, RevisionFull } from '../../electron/repositories/revision-repository'
+import type { ReviewMeta, ReviewFull } from '../../electron/repositories/review-repository'
+import type { RehearsalContext } from './story-rehearsal'
+import type { PostProcessRunData, PostProcessStepData } from '../../electron/repositories/post-process-repository'
+
+// ===== 数据库操作 =====
+export interface DatabaseChannels {
+  'agent:state-read': { args: []; return: string | null }
+  'agent:state-write': { args: [serialized: string]; return: void }
+  'story:index': { args: [projectPath: string, query?: string, offset?: number]; return: import('./story-revision').StoryIndex }
+  'story:read': { args: [projectPath: string, request: import('./story-revision').StoryReadRequest]; return: import('./story-revision').StoryReadResult }
+  'story:apply': { args: [projectPath: string, request: import('./story-revision').StoryRevisionRequest]; return: import('./story-revision').StoryRevision }
+  'story:history': { args: [projectPath: string]; return: import('./story-revision').StoryRevision[] }
+  'story:undo': { args: [projectPath: string, id: string]; return: import('./story-revision').StoryRevision }
+  'db:rehearsal-context': { args: [projectPath: string, chapterNumber: number]; return: RehearsalContext }
+  'db:close': { args: []; return: { success: boolean } }
+
+  // 1. project_core
+  'db:project-core-get': { args: []; return: ProjectCoreData | null }
+  'db:project-core-update': { args: [data: Partial<ProjectCoreData>]; return: { success: boolean; error?: string } }
+
+  // 2. blueprints
+  'db:blueprint-get-all': { args: [projectPath?: string]; return: BlueprintData[] }
+  'db:blueprint-get': { args: [chapterNumber: number]; return: BlueprintData | null }
+  'db:blueprint-upsert': { args: [data: BlueprintData, projectPath?: string]; return: { success: boolean; error?: string } }
+  'db:blueprint-commit': { args: [items: BlueprintData[], deleted: number[], expected: BlueprintData[], projectPath: string]; return: { success: boolean; error?: string } }
+  'db:blueprint-upsert-many': { args: [items: BlueprintData[], projectPath?: string]; return: { success: boolean; error?: string } }
+  'db:blueprint-update-notes': { args: [chapterNumber: number, notes: string]; return: { success: boolean; error?: string } }
+
+  // 3. characters
+  'db:character-get-all': { args: []; return: CharacterData[] }
+  'db:character-upsert': { args: [data: CharacterData]; return: { success: boolean; error?: string } }
+  'db:character-save-all': { args: [items: CharacterData[]]; return: { success: boolean; error?: string } }
+  'db:character-delete': { args: [name: string]; return: { success: boolean; error?: string } }
+  'db:character-update-state': { args: [name: string, state: CharacterStateData]; return: { success: boolean; error?: string } }
+
+  // 4. drafts
+  'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite'; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
+  'db:draft-list': { args: [chapterNumber: number]; return: DraftMeta[] }
+  'db:draft-get-meta': { args: [id: number]; return: DraftMeta | null }
+  'db:draft-get-full': { args: [id: number]; return: DraftFull | null }
+  'db:draft-get-latest': { args: [chapterNumber: number]; return: DraftMeta | null }
+  'db:draft-get-finalized': { args: [chapterNumber: number]; return: DraftMeta | null }
+  'db:draft-get-max-finalized-chapter': { args: []; return: number }
+  'db:draft-next-version': { args: [chapterNumber: number]; return: number }
+  'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
+  'db:draft-update-content': { args: [id: number, content: string, wordCount: number]; return: { success: boolean; error?: string } }
+
+  // 5. revisions
+  'db:revision-create': { args: [params: { baseDraftId: number; revisionIndex: number; revisionType: 'refine' | 'review-fix' | 'deai'; userPrompt?: string; reviewSourceId?: number; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
+  'db:revision-list': { args: [baseDraftId: number]; return: RevisionMeta[] }
+  'db:revision-get-pending': { args: [baseDraftId: number]; return: RevisionMeta[] }
+  'db:revision-get-full': { args: [id: number]; return: RevisionFull | null }
+  'db:revision-next-index': { args: [baseDraftId: number]; return: number }
+  'db:revision-mark-merged': { args: [id: number, mergedToDraftId: number]; return: { success: boolean; error?: string } }
+  'db:revision-mark-discarded': { args: [id: number]; return: { success: boolean; error?: string } }
+
+  // 6. reviews
+  'db:review-create': { args: [params: { baseDraftId: number; reviewIndex: number; content: string }]; return: { success: boolean; id?: number; error?: string } }
+  'db:review-list': { args: [baseDraftId: number]; return: ReviewMeta[] }
+  'db:review-get-latest': { args: [baseDraftId: number]; return: ReviewFull | null }
+  'db:review-get-full': { args: [id: number]; return: ReviewFull | null }
+  'db:review-next-index': { args: [baseDraftId: number]; return: number }
+
+  // 7. post_process
+  'db:post-process-create-run': { args: [params: { triggerSourceType: string; triggerSourceId: string; sourceLabel: string; steps: Array<{ key: string; label: string; critical: boolean }> }]; return: { success: boolean; id?: string; error?: string } }
+  'db:post-process-get-latest-run': { args: [sourceType: string, sourceId: string]; return: PostProcessRunData | null }
+  'db:post-process-get-steps': { args: [runId: string]; return: PostProcessStepData[] }
+  'db:post-process-mark-step-ok': { args: [runId: string, stepKey: string]; return: { success: boolean; error?: string } }
+  'db:post-process-mark-step-failed': { args: [runId: string, stepKey: string, errorMsg: string]; return: { success: boolean; error?: string } }
+  'db:post-process-is-all-passed': { args: [sourceType: string, sourceId: string]; return: boolean }
+
+  // 沿用旧表
+  'db:log-llm-call': { args: [call: Record<string, unknown>]; return: { success: boolean } }
+  'db:get-llm-stats': { args: []; return: { totalCalls: number; failedCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
+  'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
+  'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }
+  'db:get-latest-summary': { args: []; return: { characterStates: string; chapterNumber: number } | null }
+
+  // ===== Canon Store (叙事一致性) =====
+  'db:canon-timeline-get': { args: [maxChapter: number, includeFlashback?: boolean]; return: CanonTimelineEvent[] }
+  'db:canon-timeline-get-chapter': { args: [chapterNumber: number]; return: CanonTimelineEvent[] }
+  'db:canon-timeline-append': { args: [event: CanonTimelineEventInput]; return: { success: boolean; id?: number; error?: string } }
+  'db:canon-timeline-clear-chapter': { args: [chapterNumber: number]; return: { success: boolean } }
+  'db:canon-character-state-get-all': { args: []; return: CanonCharacterStateSnapshot[] }
+  'db:canon-character-state-get': { args: [character: string]; return: CanonCharacterStateSnapshot | null }
+  'db:canon-character-state-upsert': { args: [snapshot: CanonCharacterStateSnapshot]; return: { success: boolean; error?: string } }
+  'db:canon-plot-list': { args: [status?: 'active' | 'resolved' | 'paused']; return: CanonPlotLine[] }
+  'db:canon-plot-add': { args: [line: CanonPlotLineInput]; return: { success: boolean; id?: number; error?: string } }
+  'db:canon-plot-advance': { args: [id: number, currentState: string, lastAdvancedAt: number]; return: { success: boolean } }
+  'db:canon-plot-resolve': { args: [id: number, chapterNumber: number]; return: { success: boolean } }
+  'db:canon-fact-list': { args: []; return: CanonFact[] }
+  'db:canon-fact-add': { args: [fact: CanonFactInput]; return: { success: boolean; id?: number; error?: string } }
+  'db:canon-fact-clear-chapter': { args: [chapterNumber: number]; return: { success: boolean } }
+  'db:canon-summary-get': { args: [chapterNumber: number]; return: CanonChapterSummary | null }
+  'db:canon-summary-list-recent': { args: [limit?: number]; return: CanonChapterSummary[] }
+  'db:canon-summary-upsert': { args: [summary: CanonChapterSummary]; return: { success: boolean; error?: string } }
+
+  // 原子写回（推荐路径：单次事务）
+  'db:canon-writeback-atomic': {
+    args: [payload: CanonWritebackPayload]
+    return: { success: boolean; error?: string; timelineIds?: number[]; characterStatesWritten?: number; plotIds?: number[]; factIds?: number[] }
+  }
+}
+
+// CanonWritebackPayload 与主进程 CanonRepository.writebackAtomically 入参兼容
+export interface CanonWritebackPayload {
+  chapterNumber: number
+  newEvents: Array<{
+    chapterNumber: number
+    sequence: number
+    characters: string[]
+    location: string
+    timeFlow: 'sequential' | 'flashback'
+    summary: string
+    impact: string
+  }>
+  characterDeltas: Array<{
+    character: string
+    chapterNumber: number
+    after: {
+      location?: string
+      powerLevel?: string
+      physicalState?: string
+      mentalState?: string
+      keyItems?: string
+      currentGoal?: string
+      knowledge?: string[]
+      relationships?: Record<string, string>
+      recentEvents?: string
+    }
+  }>
+  plotLineChanges?: {
+    added?: Array<{
+      name: string
+      status: 'active' | 'resolved' | 'paused'
+      startedAt: number
+      lastAdvancedAt: number
+      resolvedAt?: number
+      characters: string[]
+      currentState: string
+      description: string
+    }>
+    advanced?: Array<{ id: number; currentState: string; lastAdvancedAt: number }>
+    resolved?: number[]
+  }
+  newFacts: Array<{
+    category: 'world' | 'location' | 'item' | 'event' | 'relationship' | 'identity'
+    statement: string
+    introducedAt: number
+    characters: string[]
+    evidence?: string
+  }>
+}
+
+// ===== Canon Store 类型别名（避免 ipc-channels.ts 直接依赖 narrative-consistency） =====
+export interface CanonTimelineEvent {
+  id?: number
+  chapterNumber: number
+  sequence: number
+  characters: string[]
+  location: string
+  timeFlow: 'sequential' | 'flashback'
+  summary: string
+  impact: string
+  createdAt?: string
+}
+export interface CanonTimelineEventInput {
+  chapterNumber: number
+  sequence: number
+  characters: string[]
+  location: string
+  timeFlow: 'sequential' | 'flashback'
+  summary: string
+  impact: string
+}
+export interface CanonCharacterStateSnapshot {
+  character: string
+  location: string
+  powerLevel: string
+  physicalState: string
+  mentalState: string
+  keyItems: string
+  currentGoal: string
+  knowledge: string[]
+  relationships: Record<string, string>
+  recentEvents: string
+  updatedAtChapter: number
+  updatedAt: string
+}
+export interface CanonPlotLine {
+  id?: number
+  name: string
+  status: 'active' | 'resolved' | 'paused'
+  startedAt: number
+  lastAdvancedAt: number
+  resolvedAt?: number
+  characters: string[]
+  currentState: string
+  description: string
+}
+export interface CanonPlotLineInput {
+  name: string
+  status: 'active' | 'resolved' | 'paused'
+  startedAt: number
+  lastAdvancedAt: number
+  resolvedAt?: number
+  characters: string[]
+  currentState: string
+  description: string
+}
+export interface CanonFact {
+  id?: number
+  category: 'world' | 'location' | 'item' | 'event' | 'relationship' | 'identity'
+  statement: string
+  introducedAt: number
+  characters: string[]
+  evidence?: string
+}
+export interface CanonFactInput {
+  category: 'world' | 'location' | 'item' | 'event' | 'relationship' | 'identity'
+  statement: string
+  introducedAt: number
+  characters: string[]
+  evidence?: string
+}
+export interface CanonChapterSummary {
+  chapterNumber: number
+  title: string
+  summary: string
+  createdAt: string
+}
+
+
+// ===== 知识库频道 =====
+/** 拆书：单章记录 */
+export interface BookChapterEntry {
+  number: number
+  title: string
+  wordCount: number
+  /** 该章在知识库中的文档 id */
+  docId: string
+  /** 该章在知识库中的文档名（检索结果里显示的名字） */
+  fileName: string
+}
+
+/** 拆书档案 */
+export interface BookRecord {
+  id: string
+  name: string
+  sourcePath: string
+  importedAt: string
+  chapterCount: number
+  wordCount: number
+  /** 是否已生成向量（无 Embedding 模型时为 false，仅全文检索） */
+  vectorized: boolean
+  chapters: BookChapterEntry[]
+}
+
+export interface KnowledgeBaseChannels {
+  'kb:import-document': { args: [filePath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string } }
+  'kb:import-folder': { args: [folderPath: string]; return: { success: boolean; importedCount: number; failedFiles: string[]; error?: string } }
+  'kb:import-text': { args: [text: string, fileName: string, projectPath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string } }
+  'kb:search': { args: [query: string, topK?: number]; return: Array<{ text: string; score: number; fileName: string }> }
+  'kb:search-with-scope': { args: [query: string, fromChapter: number, toChapter: number, topK?: number]; return: Array<{ text: string; score: number; fileName: string }> }
+  'kb:list-documents': { args: []; return: Array<{ id: string; fileName: string; importedAt: string; chunkCount: number; filePath: string }> }
+  'kb:remove-document': { args: [docId: string]; return: { success: boolean } }
+  'kb:stats': { args: []; return: { documentCount: number; totalChunks: number; vectorDimension: number } }
+  'dialog:select-files': { args: []; return: string[] | null }
+  'dialog:select-import-folder': { args: []; return: string | null }
+  'kb:get-vectorless-count': { args: []; return: { count: number } }
+  'kb:backfill-vectors': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
+  'kb:deconstruct-book': { args: [filePath: string]; return: { success: boolean; book?: BookRecord; error?: string } }
+  'kb:list-books': { args: []; return: BookRecord[] }
+  'kb:get-document-text': { args: [docId: string]; return: { success: boolean; text?: string; fileName?: string; chunkCount?: number; error?: string } }
+  'kb:remove-book': { args: [bookId: string]; return: { success: boolean; removedChapters: number; error?: string } }
+}
+
+// ===== 导入小说 =====
+export interface ImportChannels {
+  'dialog:select-novel-files': { args: []; return: string[] | null }
+  'import:split-chapters': {
+    args: [filePaths: string[], options?: { separator?: string }]
+    return: {
+      success: boolean
+      chapters: Array<{ number: number; title: string; content: string; wordCount: number }>
+      totalWords: number
+      error?: string
+    }
+  }
+}
+
+// ===== MCP =====
+export interface MCPChannels {
+  'mcp:load-config': { args: [configPath?: string]; return: { success: boolean; configs: unknown[]; error?: string } }
+  'mcp:connect': { args: [config: Record<string, unknown>]; return: { success: boolean; error?: string } }
+  'mcp:disconnect': { args: [serverId: string]; return: { success: boolean; error?: string } }
+  'mcp:disconnect-all': { args: []; return: { success: boolean; error?: string } }
+  'mcp:list-tools': { args: []; return: unknown[] }
+  'mcp:list-resources': { args: []; return: unknown[] }
+  'mcp:call-tool': { args: [serverId: string, toolName: string, args: Record<string, unknown>]; return: { success: boolean; content: string; error?: string } }
+  'mcp:get-servers-status': { args: []; return: unknown[] }
+  'mcp:get-config-path': { args: []; return: string }
+}
+
+// ===== Skill 管理频道 =====
+export interface SkillChannels {
+  'skill:get-paths': { args: []; return: { velaHome: string; userDir: string; projectDir: string | null } }
+  'skill:list-files': { args: []; return: Array<{ name: string; scope: 'user' | 'project'; filePath: string; size: number }> }
+  'skill:read-file': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; content: string; filePath: string; error?: string } }
+  'skill:write-file': { args: [name: string, content: string, scope: 'user' | 'project']; return: { success: boolean; filePath?: string; error?: string } }
+  'skill:delete-file': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; error?: string } }
+  'skill:copy-file': { args: [name: string, from: 'user' | 'project', to: 'user' | 'project']; return: { success: boolean; filePath?: string; error?: string } }
+  'skill:get-disabled': { args: []; return: { disabled: string[] } }
+  'skill:set-disabled': { args: [names: string[]]; return: { success: boolean } }
+  'skill:import-file': { args: []; return: { name: string; content: string } | null }
+  'skill:open-dir': { args: [scope: 'user' | 'project']; return: { success: boolean; error?: string } }
+  'skill:list-pipelines': { args: []; return: Array<{ name: string; scope: 'user' | 'project'; filePath: string; title: string; stepCount: number }> }
+  'skill:read-pipeline': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; content: string; filePath: string; error?: string } }
+  'skill:write-pipeline': { args: [name: string, content: string, scope: 'user' | 'project']; return: { success: boolean; filePath?: string; error?: string } }
+  'skill:delete-pipeline': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; error?: string } }
+  'skill:inspect-package': {
+    args: [options: { kind: 'zip' | 'github'; filePath?: string; url?: string }]
+    return: {
+      success: boolean
+      /** 用户取消了文件选择 */
+      cancelled?: boolean
+      /** 安装会话令牌；连同候选一起返回 */
+      token?: string
+      source?: SkillPackageSource
+      candidates?: SkillPackageCandidate[]
+      error?: string
+    }
+  }
+  'skill:install-package': {
+    args: [options: { token: string; dir: string; scope: 'user' | 'project'; name?: string; overwrite?: boolean }]
+    return: {
+      success: boolean
+      name?: string
+      dir?: string
+      fileCount?: number
+      version?: string
+      /** exists 表示同名 Skill 已存在，界面确认后再带 overwrite 重试 */
+      code?: 'exists'
+      error?: string
+    }
+  }
+}
+
+/** Skill 包来源（标签 + 可追溯地址） */
+export interface SkillPackageSource {
+  kind: 'zip' | 'github'
+  label: string
+  url?: string
+  ref?: string
+  subdir?: string
+  filePath?: string
+}
+
+/** 包内一个可安装的 Skill */
+export interface SkillPackageCandidate {
+  dir: string
+  indexPath: string
+  name: string
+  displayName?: string
+  description?: string
+  version?: string
+  fileCount: number
+  body: string
+}
+
+/** Skill 的来源标记（存在 Skill 目录下的 .vela-source.json） */
+export interface SkillOrigin {
+  kind?: string
+  label?: string
+  url?: string | null
+  ref?: string | null
+  subdir?: string | null
+  version?: string | null
+  importedAt?: string
+}
+
+// ===== 导出 / 备份频道（EPUB 与 zip 需要主进程压缩与二进制写盘） =====
+export interface ExportChannels {
+  'novel:export-epub': {
+    args: [options: {
+      outputDir: string
+      fileName: string
+      title: string
+      author?: string
+      language?: string
+      description?: string
+      chapters: Array<{ title: string; content: string }>
+    }]
+    return: { success: boolean; path?: string; size?: number; error?: string }
+  }
+  'novel:write-zip': {
+    args: [options: {
+      outputDir: string
+      fileName: string
+      entries: Array<{ path: string; content: string }>
+    }]
+    return: { success: boolean; path?: string; size?: number; error?: string }
+  }
+}
+
+// ===== 合并所有频道 =====
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels
+export type AllEventChannels = LLMStreamEvents
+
+/** 提取 invoke 频道名 */
+export type InvokeChannel = keyof AllInvokeChannels
+
+/** 提取 event 频道名 */
+export type EventChannel = keyof AllEventChannels
