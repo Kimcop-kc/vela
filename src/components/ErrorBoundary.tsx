@@ -1,6 +1,7 @@
 import { Component, createContext } from 'react'
 import type { ReactNode, ErrorInfo, ContextType } from 'react'
 import i18n from '../i18n'
+import { TriangleAlert } from 'lucide-react'
 
 interface Props {
   children: ReactNode
@@ -48,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
             color: 'var(--color-text)',
           }}
         >
-          <span style={{ fontSize: 32 }}>⚠️</span>
+          <TriangleAlert size={32} strokeWidth={1.5} style={{ color: 'var(--color-warning)' }} />
           <p style={{ fontWeight: 600, fontSize: 14 }}>
             {this.props.fallbackLabel || i18n.t('componentRenderError', { ns: 'common' })}
           </p>

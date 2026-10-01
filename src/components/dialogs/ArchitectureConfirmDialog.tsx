@@ -241,7 +241,7 @@ export default function ArchitectureConfirmDialog({
                   <span className="text-xs flex-1" style={{ color: isChecked ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
                     {archLabels[f.key]}
                     <span className="ml-1 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-                      — {archDescs[f.key]}
+                      · {archDescs[f.key]}
                     </span>
                   </span>
 
@@ -298,8 +298,9 @@ export default function ArchitectureConfirmDialog({
           )}
 
           {noneSelected && (
-            <p className="text-xs px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400">
-              ⚠️ {t('architectureConfirm.noStepSelected')}
+            <p className="text-xs px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-start gap-2">
+              <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-red-500" />
+              <span>{t('architectureConfirm.noStepSelected')}</span>
             </p>
           )}
           {/* 前置校验失败提示 */}

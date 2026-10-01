@@ -124,7 +124,7 @@ export default function SkillInvokeDialog({ open, onClose, onRun }: SkillInvokeD
           )}
 
           {error && (
-            <p className="text-[0.7rem]" style={{ color: 'var(--color-error, #ef4444)' }}>{error}</p>
+            <p className="text-[0.7rem]" style={{ color: 'var(--color-error)' }}>{error}</p>
           )}
 
           <p className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>

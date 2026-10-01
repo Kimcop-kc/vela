@@ -47,7 +47,7 @@ export default function SkillInputForm({
           <div key={field.name}>
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
               {skillInputLabel(field)}
-              {field.required && <span style={{ color: 'var(--color-error, #ef4444)' }}> *</span>}
+              {field.required && <span style={{ color: 'var(--color-error)' }}> *</span>}
             </label>
             {type === 'textarea' ? (
               <Textarea

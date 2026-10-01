@@ -400,7 +400,7 @@ export default function CodeMirrorEditor({
                 >{t('codeMirrorEditor.cancel')}</button>
                 <button
                   className="px-2.5 py-1 text-xs rounded-md font-medium transition-colors"
-                  style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
+                  style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                   disabled={aiResult === ''}

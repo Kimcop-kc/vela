@@ -1,3 +1,4 @@
+import { Z_INDEX } from '../../shared/z-index'
 import { useEffect, useState, useRef } from 'react'
 import { Save, Sparkles, Info, Loader2, ScrollText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -539,7 +540,7 @@ function Field({ label, tipItems, children }: { label: string; tipItems?: string
                   background: 'var(--color-bg-elevated, var(--color-sidebar))',
                   border: '1px solid var(--color-border)',
                   boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                  zIndex: 9999,
+                  zIndex: Z_INDEX.tooltip,
                   width: 260,
                   pointerEvents: 'none',
                 }}

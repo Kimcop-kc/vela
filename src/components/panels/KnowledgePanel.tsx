@@ -117,7 +117,7 @@ export default function KnowledgePanel() {
       <div className="flex-1 overflow-y-auto">
 
         {/* 已入库章节列表 */}
-        <div className="px-3 py-1.5 text-[0.7rem] text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
+        <div className="px-3 py-1.5 text-[0.7rem] text-[var(--color-text-muted)] font-medium">
           {t('knowledge.indexedChapters')}
         </div>
         {documents.length === 0 ? (

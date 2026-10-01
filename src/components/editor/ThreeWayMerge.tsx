@@ -10,6 +10,7 @@
  */
 import React, { useState, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Check } from 'lucide-react'
 import { Button } from '../ui/Button'
 import './three-way-merge.css'
 
@@ -429,7 +430,7 @@ export default function ThreeWayMerge({
                     <button className={`twm-adopt ${isApplied ? 'adopted' : ''}`}
                       onClick={() => toggleHunk(hunk.index)}
                       title={isApplied ? t('threeWayMerge.revertTooltip') : t('threeWayMerge.adoptTooltip')}>
-                      {isApplied ? '✓' : '«'}
+                      {isApplied ? <Check size={11} strokeWidth={2.6} /> : '«'}
                     </button>
                     <div className="twm-hunk-text">
                       <HunkLines lines={hunk.modifiedLines} padCount={rightPad} cls="twm-line-added"

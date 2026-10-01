@@ -224,7 +224,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
           </span>
           {meta && (
             <span className="text-xs truncate hidden sm:inline" style={{ color: 'var(--color-text-muted)' }}>
-              — {meta.desc}
+              · {meta.desc}
             </span>
           )}
         </div>

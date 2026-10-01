@@ -73,7 +73,7 @@ export default function BottomPanel() {
         {/* 左侧：面板名称 + 可选状态点 */}
         <div className="flex items-center gap-2">
           <span
-            className="text-xs font-semibold uppercase tracking-widest"
+            className="text-xs font-semibold tracking-[0.01em]"
             style={{ color: 'var(--color-text-muted)' }}
           >
             {label}
@@ -88,7 +88,7 @@ export default function BottomPanel() {
           {/* 活跃任务数徽章 */}
           {activeTab === 'tasks' && activeRuns.length > 0 && (
             <span
-              className="text-[0.68rem] font-mono px-1 rounded"
+              className="text-[0.68rem] tabular-nums px-1.5 rounded-[var(--radius-xs)]"
               style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
             >
               {activeRuns.length}
@@ -144,7 +144,6 @@ function TaskRunView() {
   const cancelWorkflow = useWorkflowStore(s => s.cancelWorkflow)
   const confirmContinue = useWorkflowStore(s => s.confirmContinue)
 
-  console.log('[BottomPanel] TaskRunView render: activeRuns=', activeRuns.map(r => r.id.slice(0,8) + ':' + r.status + ':' + r.steps.map(s=>s.status).join('/')))
 
   if (activeRuns.length === 0 && history.length === 0) {
     return (
@@ -180,7 +179,7 @@ function TaskRunView() {
       {/* 历史记录（简表） */}
       {history.length > 0 && (
         <div className="flex-shrink-0">
-          <div className="px-4 pt-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="px-4 pt-3 pb-1 text-[0.68rem] font-semibold tracking-[0.01em]" style={{ color: 'var(--color-text-muted)' }}>
             {t('bottomPanel.historyTasks')}
           </div>
           <div className="px-2 pb-2">
@@ -336,7 +335,7 @@ function ActiveRunPanel({
               <button
                 onClick={onConfirm}
                 className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium flex-shrink-0"
-                style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
+                style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
               >
                 <Play size={10} /> {t('bottomPanel.continue')}
               </button>
@@ -361,7 +360,7 @@ function ActiveRunPanel({
           <button
             onClick={(e) => { e.stopPropagation(); onConfirm() }}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium flex-shrink-0"
-            style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
+            style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
           >
             <Play size={10} /> {t('bottomPanel.continue')}
           </button>

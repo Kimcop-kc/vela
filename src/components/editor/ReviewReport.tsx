@@ -212,25 +212,25 @@ function lineNumberAt(content: string, offset: number): number {
 // This constant only holds visual properties (emoji, colors).
 
 const SEVERITY_META: Record<ReviewIssue['severity'], {
-  emoji: string
+  dotClass: string
   colorClass: string
   bgClass: string
   borderClass: string
 }> = {
   error: {
-    emoji: '🔴',
+    dotClass: 'bg-red-400',
     colorClass: 'text-red-400',
     bgClass: 'bg-red-500/10',
     borderClass: 'border-red-500/30',
   },
   warning: {
-    emoji: '🟡',
+    dotClass: 'bg-yellow-400',
     colorClass: 'text-yellow-400',
     bgClass: 'bg-yellow-500/10',
     borderClass: 'border-yellow-500/30',
   },
   pass: {
-    emoji: '🟢',
+    dotClass: 'bg-green-400',
     colorClass: 'text-green-400',
     bgClass: 'bg-green-500/10',
     borderClass: 'border-green-500/30',
@@ -334,16 +334,19 @@ function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }
           <div className="flex items-center gap-3 text-xs ml-auto">
             {errorCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/20 text-red-400">
-                🔴 {errorCount} {t('reviewReport.criticalIssues')}
+                <span className="inline-block rounded-full bg-red-400" style={{ width: 7, height: 7 }} />
+                {errorCount} {t('reviewReport.criticalIssues')}
               </span>
             )}
             {warningCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                🟡 {warningCount} {t('reviewReport.suggestions')}
+                <span className="inline-block rounded-full bg-yellow-400" style={{ width: 7, height: 7 }} />
+                {warningCount} {t('reviewReport.suggestions')}
               </span>
             )}
             <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/20 text-green-400">
-              🟢 {passCount} {t('reviewReport.passed')}
+              <span className="inline-block rounded-full bg-green-400" style={{ width: 7, height: 7 }} />
+              {passCount} {t('reviewReport.passed')}
             </span>
             {/* 图例帮助按钮 */}
             <button
@@ -376,10 +379,11 @@ function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }
                     'inline-flex items-center gap-1 px-2 py-0.5 rounded',
                     meta.bgClass, meta.colorClass
                   )}>
-                    {meta.emoji} {label.label}
+                    <span className={cn('inline-block rounded-full', meta.dotClass)} style={{ width: 7, height: 7 }} />
+                    {label.label}
                   </span>
                   <span style={{ color: 'var(--color-text-secondary)' }}>
-                    — {label.actionLabel}
+                    · {label.actionLabel}
                   </span>
                 </div>
               )

@@ -118,8 +118,9 @@ export default function ToolCallBlock({ toolCall }: Props) {
 
           {/* 错误 */}
           {error && (
-            <div className="tool-call-result" style={{ color: '#ef4444' }}>
-              ❌ {error}
+            <div className="tool-call-result flex items-start gap-1.5" style={{ color: 'var(--color-error)' }}>
+              <XCircle size={12} className="flex-shrink-0 mt-0.5" />
+              <span className="min-w-0">{error}</span>
             </div>
           )}
         </div>

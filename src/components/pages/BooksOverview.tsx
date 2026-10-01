@@ -5,7 +5,7 @@
  * 拆书内容与普通知识库共用 LanceDB，检索结果按书名前缀过滤即为本书范围。
  */
 import { useCallback, useEffect, useState } from 'react'
-import { BookMarked, ChevronDown, ChevronRight, Copy, Loader2, Search, ScrollText, Trash2, Upload } from 'lucide-react'
+import { BookMarked, ChevronRight, Copy, Loader2, Search, ScrollText, Trash2, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -189,29 +189,33 @@ export default function BooksOverview() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--color-bg)' }}>
-      {/* 顶部工具栏 */}
+      {/* 页头：书名 + 规模 + 操作 */}
       <div
-        className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
+        className="flex items-center justify-between gap-3 px-4 h-11 flex-shrink-0"
         style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
       >
-        <div className="flex items-center gap-1.5 min-w-0">
-          <BookMarked size={13} style={{ color: 'var(--color-accent)' }} />
-          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>
-            {t('title')}
+        <div className="flex items-baseline gap-2 min-w-0">
+          <span className="text-[0.82rem] font-semibold truncate" style={{ color: 'var(--color-text)' }}>
+            {book ? book.name : t('title')}
           </span>
           {book && (
-            <span className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
+            <span className="text-[0.68rem] flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
               {t('bookStats', { chapters: book.chapterCount, words: book.wordCount })}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Button variant="outline" size="sm" onClick={() => { void handleImport() }} disabled={importing}>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => { void handleImport() }} disabled={importing}>
             <Upload size={11} />
             {importing ? t('importing') : t('import')}
           </Button>
           {book && (
-            <Button variant="outline" size="sm" onClick={() => { void handleRemove() }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hover:text-[var(--color-error)]"
+              onClick={() => { void handleRemove() }}
+            >
               <Trash2 size={11} />
               {t('remove')}
             </Button>
@@ -221,134 +225,145 @@ export default function BooksOverview() {
 
       {!book ? (
         <div className="flex-1 flex items-center justify-center">
-          <EmptyState
-            icon={<BookMarked size={22} />}
-            message={`${t('empty')} — ${t('emptyHint')}`}
-            opacity={0.5}
-          />
+          <EmptyState icon={<BookMarked size={22} />} message={t('empty')} opacity={0.55}>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{t('emptyHint')}</span>
+          </EmptyState>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {/* 书籍信息 */}
-          <div className="text-[0.7rem] space-y-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            <div>{t('source', { path: book.sourcePath })}</div>
-            <div>{book.vectorized ? t('vectorized') : t('fulltextOnly')}</div>
-          </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[880px] mx-auto px-6 py-5 space-y-6">
+            {/* 来源与索引状态 */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem]">
+              <span className="truncate max-w-[560px]" style={{ color: 'var(--color-text-muted)' }} title={book.sourcePath}>
+                {t('source', { path: book.sourcePath })}
+              </span>
+              <span
+                className="flex-shrink-0"
+                style={{ color: book.vectorized ? 'var(--color-success-text)' : 'var(--color-warning-text)' }}
+              >
+                {book.vectorized ? t('vectorized') : t('fulltextOnly')}
+              </span>
+            </div>
 
-          {/* 本书检索 */}
-          <div className="flex items-center gap-2">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
-              placeholder={t('searchPlaceholder')}
-            />
-            <Button variant="outline" size="sm" onClick={() => { void handleSearch() }} disabled={searching || !query.trim()}>
-              <Search size={11} />
-              {t('search')}
-            </Button>
-          </div>
+            {/* 本书范围内检索 */}
+            <div className="flex items-center gap-2">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
+                placeholder={t('searchPlaceholder')}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { void handleSearch() }}
+                disabled={searching || !query.trim()}
+                className="flex-shrink-0"
+              >
+                <Search size={11} />
+                {t('search')}
+              </Button>
+            </div>
 
-          {results.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                {t('searchResults', { count: results.length })}
-              </div>
-              {results.map((r, i) => (
-                <div
-                  key={`${r.fileName}-${i}`}
-                  className="rounded p-2 text-[0.72rem] leading-relaxed"
-                  style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-border)' }}
-                >
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>{r.fileName}</span>
-                    <span className="text-[0.65rem] ml-auto flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-                      {t('score', { score: Math.round((r.score ?? 0) * 100) })}
-                    </span>
-                  </div>
-                  <div style={{ color: 'var(--color-text)' }}>{r.text}</div>
+            {results.length > 0 && (
+              <section className="space-y-2">
+                <div className="text-[0.7rem] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('searchResults', { count: results.length })}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* 章节清单 */}
-          <div>
-            <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-              {t('chapterList', { count: book.chapters.length })}
-            </div>
-            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-              {book.chapters.map((chapter, index) => {
-                const expanded = openChapterId === chapter.docId
-                const loading = loadingChapterId === chapter.docId
-                const text = chapterTexts[chapter.docId]
-                return (
-                  <div
-                    key={chapter.docId}
-                    style={{
-                      backgroundColor: index % 2 === 0 ? 'var(--color-panel)' : 'transparent',
-                      borderTop: index === 0 ? 'none' : '1px solid var(--color-border)',
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => { void handleToggleChapter(chapter) }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left"
+                <div className="rounded-[var(--radius-md)] overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                  {results.map((r, i) => (
+                    <div
+                      key={`${r.fileName}-${i}`}
+                      className="px-3 py-2.5"
+                      style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}
                     >
-                      {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                      <span className="w-10 flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-                        {chapter.number}
-                      </span>
-                      <span className="flex-1 truncate" style={{ color: 'var(--color-text)' }}>{chapter.title}</span>
-                      <span className="text-[0.65rem] flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-                        {chapter.wordCount}
-                      </span>
-                    </button>
-                    {expanded && (
-                      <div className="px-2.5 pb-2 space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={() => { void handleCopyChapter(chapter) }}
-                          >
-                            <Copy size={11} />
-                            {t('copyChapter')}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={loading}
-                            onClick={() => { void handleUseAsStyleReference(chapter) }}
-                          >
-                            <ScrollText size={11} />
-                            {t('useAsStyleReference')}
-                          </Button>
-                        </div>
-                        <div
-                          className="rounded px-2 py-1.5 text-[0.72rem] leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto"
-                          style={{
-                            backgroundColor: 'var(--color-bg)',
-                            border: '1px solid var(--color-border)',
-                            color: 'var(--color-text)',
-                          }}
+                      <div className="flex items-baseline gap-3 mb-1">
+                        <span className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
+                          {r.fileName}
+                        </span>
+                        <span
+                          className="ml-auto flex-shrink-0 text-[0.66rem] tabular-nums"
+                          style={{ color: 'var(--color-text-secondary)' }}
                         >
-                          {loading
-                            ? (
-                              <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                                <Loader2 size={11} className="animate-spin" />
-                                {t('loadingChapter')}
-                              </span>
-                            )
-                            : (text ?? '')}
-                        </div>
+                          {t('score', { score: Math.round((r.score ?? 0) * 100) })}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+                      <div className="text-[0.74rem] leading-relaxed" style={{ color: 'var(--color-text)' }}>{r.text}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 章节清单 */}
+            <section>
+              <div className="text-[0.7rem] font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                {t('chapterList', { count: book.chapters.length })}
+              </div>
+              <div className="rounded-[var(--radius-md)] overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                {book.chapters.map((chapter, index) => {
+                  const expanded = openChapterId === chapter.docId
+                  const loading = loadingChapterId === chapter.docId
+                  const text = chapterTexts[chapter.docId]
+                  return (
+                    <div key={chapter.docId} style={{ borderTop: index === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                      <button
+                        type="button"
+                        onClick={() => { void handleToggleChapter(chapter) }}
+                        className="w-full flex items-center gap-2.5 px-3 h-8 text-xs text-left transition-colors duration-150 hover:bg-[var(--color-hover)]"
+                      >
+                        <ChevronRight
+                          size={12}
+                          className="flex-shrink-0 transition-transform duration-200 ease-out"
+                          style={{
+                            color: 'var(--color-text-muted)',
+                            transform: expanded ? 'rotate(90deg)' : 'none',
+                          }}
+                        />
+                        <span className="w-8 flex-shrink-0 tabular-nums text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+                          {chapter.number}
+                        </span>
+                        <span className="flex-1 truncate" style={{ color: 'var(--color-text)' }}>{chapter.title}</span>
+                        <span className="flex-shrink-0 text-[0.65rem] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                          {chapter.wordCount}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div className="px-3 pt-1 pb-3 space-y-2" style={{ backgroundColor: 'var(--color-surface-sunken)' }}>
+                          <div className="flex items-center gap-0.5">
+                            <Button variant="ghost" size="sm" disabled={loading} onClick={() => { void handleCopyChapter(chapter) }}>
+                              <Copy size={11} />
+                              {t('copyChapter')}
+                            </Button>
+                            <Button variant="ghost" size="sm" disabled={loading} onClick={() => { void handleUseAsStyleReference(chapter) }}>
+                              <ScrollText size={11} />
+                              {t('useAsStyleReference')}
+                            </Button>
+                          </div>
+                          <div
+                            className="rounded-[var(--radius-sm)] px-3 py-2 text-[0.74rem] leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto"
+                            style={{
+                              backgroundColor: 'var(--color-surface-card)',
+                              border: '1px solid var(--color-border)',
+                              color: 'var(--color-text)',
+                            }}
+                          >
+                            {loading
+                              ? (
+                                <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                                  <Loader2 size={11} className="animate-spin" />
+                                  {t('loadingChapter')}
+                                </span>
+                              )
+                              : (text ?? '')}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
           </div>
         </div>
       )}

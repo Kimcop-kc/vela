@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
-  Languages,
+  Languages, Heart, Coffee, Handshake, Bot, Waves, Sparkles, Boxes,
+  Brain, Wrench,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
@@ -47,7 +48,7 @@ const SECTIONS: SectionItem[] = [
   { id: 'proxy', label: 'Network Proxy', icon: <Globe size={16} />, descriptionKey: 'general.proxyDesc' },
   { id: 'editor', label: 'Editor', icon: <Type size={16} />, descriptionKey: 'general.editorDesc' },
   { id: 'prompts', label: 'Prompt Templates', icon: <MessageSquare size={16} />, descriptionKey: 'general.promptsDesc' },
-  { id: 'about', label: 'About & Support', icon: <span style={{ color: '#ff4d4f', fontSize: 14 }}>❤️</span>, descriptionKey: 'general.aboutDesc' },
+  { id: 'about', label: 'About & Support', icon: <Heart size={16} />, descriptionKey: 'general.aboutDesc' },
 ]
 
 // ==================== 主组件 ====================
@@ -409,7 +410,7 @@ function ModelCard({
         className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
         style={{ backgroundColor: 'var(--color-hover)' }}
       >
-        {providerEmoji(model.provider)}
+        <ProviderIcon provider={model.provider} />
       </div>
 
       {/* 信息 */}
@@ -1069,11 +1070,17 @@ function AboutSection() {
       <div className="flex flex-col items-center justify-center py-8 rounded-xl space-y-2" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
         <h1 className="text-2xl font-bold brand-gradient tracking-wider">Vela IDE</h1>
         <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
-        <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>Crafted with ❤️ by Kimcop-kc</p>
+        <p className="text-xs mt-2 flex items-center justify-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+          Crafted by Kimcop-kc
+          <Heart size={11} strokeWidth={2} style={{ color: 'var(--color-error)' }} />
+        </p>
       </div>
 
       <div className="space-y-4 pt-2">
-        <h3 className="text-sm font-semibold pb-2" style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)' }}>☕ {t('about.sponsorship')}</h3>
+        <h3 className="text-sm font-semibold pb-2 flex items-center gap-1.5" style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
+          <Coffee size={14} strokeWidth={1.9} style={{ color: 'var(--color-text-secondary)' }} />
+          {t('about.sponsorship')}
+        </h3>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {t('about.sponsorDescription')}
         </p>
@@ -1083,7 +1090,10 @@ function AboutSection() {
       </div>
 
       <div className="space-y-4 pt-4">
-        <h3 className="text-sm font-semibold pb-2" style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)' }}>🤝 {t('about.businessInquiries')}</h3>
+        <h3 className="text-sm font-semibold pb-2 flex items-center gap-1.5" style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text)' }}>
+          <Handshake size={14} strokeWidth={1.9} style={{ color: 'var(--color-text-secondary)' }} />
+          {t('about.businessInquiries')}
+        </h3>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {t('about.businessDescription')}
         </p>
@@ -1095,9 +1105,11 @@ function AboutSection() {
 
 // ==================== 工具函数 ====================
 
-function providerEmoji(provider: string) {
-  const map: Record<string, string> = {
-    openai: '🤖', deepseek: '🐬', gemini: '✨', ollama: '🦙', bigmodel: '🧠', custom: '⚙️',
+function ProviderIcon({ provider }: { provider: string }) {
+  const map: Record<string, typeof Bot> = {
+    openai: Bot, deepseek: Waves, gemini: Sparkles,
+    ollama: Boxes, bigmodel: Brain, custom: Settings2,
   }
-  return map[provider] ?? '🔧'
+  const Icon = map[provider] ?? Wrench
+  return <Icon size={17} strokeWidth={1.75} style={{ color: 'var(--color-text-secondary)' }} />
 }

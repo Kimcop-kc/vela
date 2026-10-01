@@ -230,7 +230,7 @@ export default function WorldBuildingEditor() {
           const charExtractFailed = isCharacters && charExtractStatus && !charExtractStatus.allCriticalPassed
           // 动态边框颜色：提取失败 → 红 | 已生成 → 绿 | 未生成 → 默认
           const cardBorderColor = charExtractFailed
-            ? 'var(--color-error, #ef4444)'
+            ? 'var(--color-error)'
             : generated
               ? 'var(--color-success)'
               : 'var(--color-border)'

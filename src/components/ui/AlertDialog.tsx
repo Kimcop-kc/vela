@@ -12,6 +12,7 @@
  *   alertError('不是有效的 Vela 项目目录', { title: '打开项目失败' })
  */
 
+import { Z_INDEX } from '../../shared/z-index'
 import { createRoot } from 'react-dom/client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { AlertCircle } from 'lucide-react'
@@ -68,7 +69,7 @@ function AlertDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10000,
+        zIndex: Z_INDEX.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -92,7 +93,7 @@ function AlertDialog({
           /* 基础样式 */
           backgroundColor: 'var(--color-bg)',
           border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-2xl)',
+          borderRadius: 'var(--radius-xl)',
           boxShadow: 'var(--shadow-popover)',
           minWidth: 360,
           maxWidth: 460,

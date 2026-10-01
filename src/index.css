@@ -24,12 +24,12 @@
   font-display: swap;
 }
 
-/* Sora 斜体 */
+/* Plus Jakarta Sans — 界面工作字体：几何骨架 + 中性气质，专为工具/仪表盘设计 */
 @font-face {
-  font-family: 'Sora';
-  src: url('/fonts/Sora-VariableFont_wght.ttf') format('truetype');
-  font-weight: 100 900;
-  font-style: italic;
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/PlusJakartaSans-VariableFont_wght.ttf') format('truetype');
+  font-weight: 200 800;
+  font-style: normal;
   font-display: swap;
 }
 
@@ -77,14 +77,15 @@
 @plugin "@tailwindcss/typography";
 
 /* dark 变体：匹配 .dark 或 .galaxy 类的子元素 */
-@custom-variant dark (&:is(.dark *, .galaxy *));
+@custom-variant dark (&:is(.dark *, .galaxy *, .ocean *));
 
 /* ===== Tailwind v4 设计令牌（精简版 — 仅保留 Tailwind 需要的扩展） ===== */
 @theme {
   /* 字体栈 - 使用 Sora 替代 Inter，更具个性 */
-  --font-sans: 'Sora', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  --font-writing: 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', 'Sora', 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Sora', 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Mono', Consolas, monospace;
+  --font-writing: 'LXGW WenKai', 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
 
   /* 文字尺寸 */
   --text-2xs: 0.625rem;
@@ -166,80 +167,116 @@
   /* Logo 核心色：深邃蓝 #0A1628 · 冰蓝 #7EC8E3 · 星空蓝 #5B9ED6
      薰衣草紫 #9B8EC8 · 星辰金 #C9A76C */
   :root {
-    /* ☀️ 浅色主题 — 清冷蓝调（从 Logo 蓝紫色系延伸） */
+    /* ☀️ 浅色主题 — 亮蓝冷白（参考 B 端后台：主色 #3880F0 · 冷白底 · 纯白卡） */
 
-    /* 背景层次（冷白蓝调，与Logo深蓝形成呼应） */
-    --color-bg: #F7F9FC;
-    --color-sidebar: #EFF2F7;
-    --color-panel: #EFF2F7;
-    --color-titlebar: #F7F9FC;
-    --color-activity-bar: #E5E9F0;
-    --color-hover: #EBF0F7;
-    --color-active: #DDE3ED;
+    /* 背景层次（页面冷白，靠底色差分层而不是描边） */
+    --color-bg: #F2F5FB;
+    --color-sidebar: #F7F9FD;
+    --color-panel: #F7F9FD;
+    --color-titlebar: #FFFFFF;
+    --color-activity-bar: #FFFFFF;
+    --color-hover: #EDF2FB;
+    --color-active: #E3EBF9;
 
     /* 文字层次 */
-    --color-text: #1A2233;
-    --color-text-secondary: #4A5568;
-    --color-text-muted: #8A9AAB;
+    --color-text: #0F172A;
+    --color-text-secondary: #475569;
+    --color-text-muted: #5F6E82;
 
-    /* 边框 */
-    --color-border: #DEE3ED;
+    /* 边框（弱化，改用阴影分层） */
+    --color-border: #E6EBF4;
 
-    /* 强调色（Logo 星空蓝） */
-    --color-accent: #5B9ED6;
-    --color-accent-hover: #4A8DC5;
-    --color-accent-rgb: 91, 158, 214;
+    /* 强调色（参考图亮蓝） */
+    --color-accent: #3B82F6;
+    --color-accent-hover: #2F6FE0;
+    --color-accent-rgb: 59, 130, 246;
 
     /* 品牌金色（Logo 星辰点睛） */
     --color-gold: #C9A76C;
 
-    /* 语义色（莫兰迪低饱和度高通透感） */
+    /* 语义色 */
     --color-success: #10b981;
     --color-warning: #f59e0b;
-    --color-error: #f43f5e;
-    --color-info: #5B9ED6;
+    --color-error: #ef4444;
+    /* 强调色之上的前景：按钮/徽章内的文字与图标 */
+    --color-on-accent: #FFFFFF;
+    --color-info: #3B82F6;
+    /* 语义色「文字版」：语义色本体是给图标/描边/进度条用的，
+       在浅底上当文字直接读会掉到 3:1 以下。做文字时必须用下面这三个。 */
+    --color-success-text: #047857;
+    --color-warning-text: #B45309;
+    --color-info-text: #1D4ED8;
+
+    /* 辅助色 —— 参考图 KPI 卡上的彩色图标底块 */
+    --color-violet: #8B5CF6;
+    --color-mint: #34D399;
+    --color-amber: #F59E0B;
+    --color-rose: #F43F5E;
+    --color-cyan: #22D3EE;
+    --color-violet-rgb: 139, 92, 246;
+    --color-mint-rgb: 52, 211, 153;
+    --color-amber-rgb: 245, 158, 11;
+    --color-rose-rgb: 244, 63, 94;
+    --color-cyan-rgb: 34, 211, 238;
 
     /* Tab 系统 */
     --color-tab-bg: transparent;
     --color-tab-active: #FFFFFF;
     --color-tab-border: transparent;
-    --color-tab-indicator: #5B9ED6;
+    --color-tab-indicator: #3B82F6;
 
     /* 状态栏 */
-    --color-statusbar: #EFF2F7;
-    --color-statusbar-text: #8994A7;
+    --color-statusbar: #FFFFFF;
+    --color-statusbar-text: #94A3B8;
 
     /* 标题栏文字 */
-    --color-titlebar-text: #2D3748;
+    --color-titlebar-text: #475569;
 
-    /* 活动栏图标颜色 */
-    --color-activity-icon: #8994A7;
-    --color-activity-icon-active: #1A2233;
-    --color-activity-indicator: #5B9ED6;
+    /* 活动栏图标颜色（激活态用主色，对齐参考图左侧导航） */
+    --color-activity-icon: #94A3B8;
+    --color-activity-icon-active: #3B82F6;
+    --color-activity-indicator: #3B82F6;
 
     /* 编辑器 */
-    --color-editor-bg: #F7F9FC;
-    --color-editor-line-highlight: rgba(91, 158, 214, 0.04);
-    --color-editor-selection: rgba(91, 158, 214, 0.14);
+    --color-editor-bg: #FFFFFF;
+    --color-editor-line-highlight: rgba(59, 130, 246, 0.04);
+    --color-editor-selection: rgba(59, 130, 246, 0.16);
 
     /* 分割条 Sash */
     --color-sash: transparent;
-    --color-sash-hover: rgba(91, 158, 214, 0.15);
+    --color-sash-hover: rgba(59, 130, 246, 0.20);
 
     /* ===== 语义令牌 ===== */
 
     /* 焦点环 */
-    --color-focus-ring: rgba(91, 158, 214, 0.45);
+    --color-focus-ring: rgba(59, 130, 246, 0.40);
     /* 遮罩层 */
-    --color-backdrop: rgba(10, 22, 40, 0.20);
+    --color-backdrop: rgba(15, 23, 42, 0.32);
     /* Tooltip */
-    --color-tooltip-bg: #0F1A2E;
-    --color-tooltip-text: #E8ECF2;
+    --color-tooltip-bg: #0F172A;
+    --color-tooltip-text: #F1F5F9;
     /* 骨架屏 */
-    --color-skeleton: rgba(91, 158, 214, 0.08);
+    --color-skeleton: rgba(59, 130, 246, 0.08);
     /* Badge */
-    --color-badge-bg: rgba(91, 158, 214, 0.10);
-    --color-badge-text: #5B9ED6;
+    --color-badge-bg: rgba(59, 130, 246, 0.10);
+    --color-badge-text: #2563EB;
+
+    /* ===== 表面层次 / 光晕 / 微光 ===== */
+    --color-bg-rgb: 242, 245, 251;
+    --color-panel-rgb: 247, 249, 253;
+    --color-border-rgb: 230, 235, 244;
+    --color-gold-rgb: 201, 167, 108;
+    --color-success-rgb: 16, 185, 129;
+    --color-warning-rgb: 245, 158, 11;
+    --color-error-rgb: 239, 68, 68;
+    --color-accent-soft: rgba(59, 130, 246, 0.10);
+    --color-accent-glow: rgba(59, 130, 246, 0.22);
+    --color-sheen: rgba(255, 255, 255, 0.80);
+    --color-surface-raised: #FFFFFF;
+    --color-surface-sunken: #EDF1F9;
+    --color-surface-card: #FFFFFF;
+    --color-bg-elevated: #FFFFFF;
+    --color-text-muted-rgb: 95, 110, 130;
 
     /* ===== 尺寸规范 ===== */
     --height-titlebar: 40px;
@@ -250,19 +287,50 @@
     --width-right-bar: 44px;
     --width-bottom-bar: 32px;
 
-    /* 圆角（加大圆角，更现代） */
-    --radius-sm: 4px;
-    --radius-md: 6px;
-    --radius-lg: 10px;
-    --radius-xl: 14px;
-    --radius-2xl: 20px;
+    /* 圆角（参考图：卡片 12~16px，控件 8px） */
+    /* SHAPE CONSISTENCY LOCK（全站唯一起源，禁止绕过）
+       4px  xs   —— 微型：滚动条、色块、光标、高亮块
+       6px  sm   —— 紧凑：树项、菜单项、标签内块
+       8px  md   —— 控件层：输入框 / 按钮 / 图标按钮 / 页签 / 工具按钮
+       12px lg   —— 容器层：卡片 / 下拉 / 面板内块 / 表单分组
+       16px xl   —— 大容器：弹窗 / 主卡片 / 欢迎页大卡
+       999px pill —— 胶囊：状态标签 / 头像 / 开关 / 进度条
+       例外（仅此三类，且必须在 section 注释中标注 structural）：
+       (a) 贴边全宽结构条 = 0  (b) 1px 发丝线/文本光标 = 2px (c) inherit */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
 
-    /* 阴影（蓝调弥散阴影） */
-    --shadow-sm: 0 1px 2px rgba(10, 22, 40, 0.05);
-    --shadow-md: 0 4px 12px rgba(10, 22, 40, 0.07);
-    --shadow-lg: 0 12px 32px rgba(10, 22, 40, 0.09);
-    --shadow-popover: 0 16px 40px -8px rgba(10, 22, 40, 0.14), 0 4px 16px -4px rgba(10, 22, 40, 0.07);
-    --shadow-tooltip: 0 4px 12px rgba(10, 22, 40, 0.18);
+    /* 阴影（大范围低透明，参考图的"无边框靠阴影分层"） */
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
+    --shadow-md: 0 2px 6px rgba(15, 23, 42, 0.05), 0 8px 20px -6px rgba(15, 23, 42, 0.07);
+    --shadow-lg: 0 12px 32px -8px rgba(15, 23, 42, 0.10), 0 4px 12px -4px rgba(15, 23, 42, 0.05);
+    --shadow-popover: 0 20px 48px -12px rgba(15, 23, 42, 0.16), 0 4px 16px -4px rgba(15, 23, 42, 0.06);
+    --shadow-tooltip: 0 4px 12px rgba(15, 23, 42, 0.18);
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -10px rgba(15, 23, 42, 0.10);
+    --shadow-card-hover: 0 2px 4px rgba(15, 23, 42, 0.05), 0 16px 36px -12px rgba(15, 23, 42, 0.16);
+
+    /* Z-INDEX SCALE（全站唯一起源，禁止再引入魔法数字）
+       层级只在"元素必须脱离正常文档流"时才使用；能用 DOM 顺序解决的就不用 z-index。
+       0   base      普通文档流内容（默认，不要显式写）
+       10  raised    局部浮层：面板内浮动徽标、编辑器内浮动操作条
+       30  sticky    吸附元素：吸顶工具条、吸顶表头
+       50  dropdown  依附触发元素的下拉 / 弹出菜单 / 气泡 / 右键菜单
+       60  modal     模态遮罩与模态主体（Dialog / SettingsModal / Confirm）
+       65  tooltip   局部提示，需要浮于模态之上时用
+       70  toast     全局提示，永远在最上层（ActionToast 等）
+       说明：Tailwind 的 z-10 / z-50 分别等价于 raised / dropdown，可继续使用；
+       60/65/70 三层必须走变量（CSS）或 Z_INDEX 常量（TS），不得写字面量。 */
+    --z-base: 0;
+    --z-raised: 10;
+    --z-sticky: 30;
+    --z-dropdown: 50;
+    --z-modal: 60;
+    --z-tooltip: 65;
+    --z-toast: 70;
 
     /* 过渡（加入顺滑阻尼） */
     --transition-fast: 0.12s cubic-bezier(0.16, 1, 0.3, 1);
@@ -270,29 +338,30 @@
     --transition-spring: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
     /* 字体 */
-    --font-sans: 'Sora', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --font-sans: 'Plus Jakarta Sans', 'Sora', 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-display: 'Sora', 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Mono', Consolas, monospace;
     --font-writing: 'LXGW WenKai', 'Noto Serif SC', serif;
   }
 
   /* 🌑 星空主题 — Logo 深邃星空（直接取自 Logo 背景色 #0A1628） */
   .galaxy {
     /* 背景层次 — Logo 深蓝背景色为基底，逐层提亮 */
-    --color-bg: #0A1628;
-    --color-sidebar: #0E1B30;
-    --color-panel: #0E1B30;
-    --color-titlebar: #0A1628;
-    --color-activity-bar: #071220;
-    --color-hover: #142640;
-    --color-active: #1C3050;
+    --color-bg: #060F1E;
+    --color-sidebar: #0B1729;
+    --color-panel: #102038;
+    --color-titlebar: #081324;
+    --color-activity-bar: #050C18;
+    --color-hover: #172B47;
+    --color-active: #1F3A5C;
 
     /* 文字层次 — 冰蓝色阶梯，与Logo蓝色调和谐 */
     --color-text: #E0ECF4;
-    --color-text-secondary: #8BA4BE;
-    --color-text-muted: #5A7A96;
+    --color-text-secondary: #9AB4CD;
+    --color-text-muted: #7796B3;
 
     /* 边框 — 深蓝色边框，微弱可见 */
-    --color-border: #172B42;
+    --color-border: #1E3452;
 
     /* 强调色 — Logo 冰蓝 #7EC8E3 */
     --color-accent: #7EC8E3;
@@ -305,23 +374,28 @@
     --color-success: #4ade80;
     --color-warning: #fbbf24;
     --color-error: #fb7185;
+    --color-on-accent: #08203A;
     --color-info: #7EC8E3;
+    /* 语义色「文字版」（暗底本身已达标，与本体一致） */
+    --color-success-text: #4ade80;
+    --color-warning-text: #fbbf24;
+    --color-info-text: #7EC8E3;
 
     --color-tab-bg: transparent;
     --color-tab-active: #0E1E35;
     --color-tab-border: transparent;
     --color-tab-indicator: #7EC8E3;
 
-    --color-statusbar: #071220;
-    --color-statusbar-text: #4A6580;
+    --color-statusbar: #050C18;
+    --color-statusbar-text: #5F7C99;
 
     --color-titlebar-text: #8BA4BE;
 
-    --color-activity-icon: #4A6580;
+    --color-activity-icon: #6B8CA9;
     --color-activity-icon-active: #E0ECF4;
     --color-activity-indicator: #7EC8E3;
 
-    --color-editor-bg: #091525;
+    --color-editor-bg: #081527;
     --color-editor-line-highlight: rgba(126, 200, 227, 0.04);
     --color-editor-selection: rgba(126, 200, 227, 0.18);
 
@@ -337,15 +411,152 @@
     --color-badge-bg: rgba(126, 200, 227, 0.12);
     --color-badge-text: #7EC8E3;
 
+    /* ===== 视觉美化 2.0 —— 表面层次 / 光晕 / 微光 ===== */
+    --color-bg-rgb: 10, 22, 40;
+    --color-panel-rgb: 14, 27, 48;
+    --color-border-rgb: 23, 43, 66;
+    --color-gold-rgb: 201, 167, 108;
+    --color-success-rgb: 74, 222, 128;
+    --color-warning-rgb: 251, 191, 36;
+    --color-error-rgb: 251, 113, 133;
+    --color-accent-soft: rgba(126, 200, 227, 0.12);
+    --color-accent-glow: rgba(126, 200, 227, 0.28);
+    --color-sheen: rgba(255, 255, 255, 0.045);
+    --color-surface-raised: #152A47;
+    --color-surface-sunken: #0A1526;
+    --color-surface-card: #152A47;
+    --color-bg-elevated: #102038;
+    --color-text-muted-rgb: 119, 150, 179;
+
+    /* 辅助色（KPI 图标底块） */
+    --color-violet: #A78BFA;
+    --color-mint: #4ADE80;
+    --color-amber: #FBBF24;
+    --color-rose: #FB7185;
+    --color-cyan: #67E8F9;
+    --color-violet-rgb: 167, 139, 250;
+    --color-mint-rgb: 74, 222, 128;
+    --color-amber-rgb: 251, 191, 36;
+    --color-rose-rgb: 251, 113, 133;
+    --color-cyan-rgb: 103, 232, 249;
+
     /* 阴影 — 深蓝光晕 */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
     --shadow-md: 0 4px 12px rgba(5, 10, 20, 0.6);
     --shadow-lg: 0 12px 32px rgba(5, 10, 20, 0.7);
     --shadow-popover: 0 0 0 1px rgba(126, 200, 227, 0.06), 0 16px 40px -8px rgba(5, 10, 20, 0.85), 0 4px 16px -4px rgba(5, 10, 20, 0.7);
     --shadow-tooltip: 0 4px 12px rgba(5, 10, 20, 0.5);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 10px 28px -12px rgba(5, 10, 20, 0.8);
+    --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.5), 0 18px 40px -14px rgba(5, 10, 20, 0.9);
   }
 
   /* 📜 纸质感主题 — 写作沉浸（温暖牛皮纸色调 + Logo 紫色强调） */
+
+  /* 深海主题: 深海军蓝底 + 青色高亮 */
+  .ocean {
+    /* 背景层次 */
+    --color-bg: #141B26;
+    --color-sidebar: #18222F;
+    --color-panel: #1B2532;
+    --color-titlebar: #111823;
+    --color-activity-bar: #0F151D;
+    --color-hover: #22303F;
+    --color-active: #2A3B4E;
+
+    /* 文字层次 */
+    --color-text: #E8EEF5;
+    --color-text-secondary: #A9B8C9;
+    --color-text-muted: #7E93A8;
+
+    /* 边框 */
+    --color-border: #26313F;
+
+    /* 强调色: 青色 */
+    --color-accent: #22D3EE;
+    --color-accent-hover: #12BEDB;
+    --color-accent-rgb: 34, 211, 238;
+
+    /* 品牌金 */
+    --color-gold: #C9A76C;
+
+    --color-success: #34D399;
+    --color-warning: #FBBF24;
+    --color-error: #F87171;
+    --color-on-accent: #062028;
+    --color-info: #22D3EE;
+    --color-success-text: #34D399;
+    --color-warning-text: #FBBF24;
+    --color-info-text: #22D3EE;
+
+    --color-tab-bg: transparent;
+    --color-tab-active: #202C3B;
+    --color-tab-border: transparent;
+    --color-tab-indicator: #22D3EE;
+
+    --color-statusbar: #0F151D;
+    --color-statusbar-text: #7E93A8;
+
+    --color-titlebar-text: #A9B8C9;
+
+    --color-activity-icon: #7E93A8;
+    --color-activity-icon-active: #E8EEF5;
+    --color-activity-indicator: #22D3EE;
+
+    --color-editor-bg: #131A25;
+    --color-editor-line-highlight: rgba(34, 211, 238, 0.05);
+    --color-editor-selection: rgba(34, 211, 238, 0.20);
+
+    --color-sash: transparent;
+    --color-sash-hover: rgba(34, 211, 238, 0.18);
+
+    /* 语义令牌 */
+    --color-focus-ring: rgba(34, 211, 238, 0.55);
+    --color-backdrop: rgba(6, 10, 16, 0.62);
+    --color-tooltip-bg: #E8EEF5;
+    --color-tooltip-text: #101A24;
+    --color-skeleton: rgba(34, 211, 238, 0.07);
+    --color-badge-bg: rgba(34, 211, 238, 0.14);
+    --color-badge-text: #22D3EE;
+
+    /* 表面层次 / 光晕 / 微光 */
+    --color-bg-rgb: 20, 27, 38;
+    --color-panel-rgb: 27, 37, 50;
+    --color-border-rgb: 38, 49, 63;
+    --color-gold-rgb: 201, 167, 108;
+    --color-success-rgb: 52, 211, 153;
+    --color-warning-rgb: 251, 191, 36;
+    --color-error-rgb: 248, 113, 113;
+    --color-accent-soft: rgba(34, 211, 238, 0.12);
+    --color-accent-glow: rgba(34, 211, 238, 0.30);
+    --color-sheen: rgba(255, 255, 255, 0.05);
+    --color-surface-raised: #1F2B3A;
+    --color-surface-sunken: #101720;
+    --color-surface-card: #1B2532;
+    --color-bg-elevated: #1F2B3A;
+    --color-text-muted-rgb: 126, 147, 168;
+
+    /* 辅助色 */
+    --color-violet: #A78BFA;
+    --color-mint: #2DD4BF;
+    --color-amber: #FBBF24;
+    --color-rose: #FB7185;
+    --color-cyan: #22D3EE;
+    --color-violet-rgb: 167, 139, 250;
+    --color-mint-rgb: 45, 212, 191;
+    --color-amber-rgb: 251, 191, 36;
+    --color-rose-rgb: 251, 113, 133;
+    --color-cyan-rgb: 34, 211, 238;
+
+    /* 阴影 */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-md: 0 4px 12px rgba(6, 12, 20, 0.55);
+    --shadow-lg: 0 12px 32px rgba(6, 12, 20, 0.65);
+    --shadow-popover: 0 0 0 1px rgba(34, 211, 238, 0.08), 0 16px 40px -8px rgba(6, 12, 20, 0.80), 0 4px 16px -4px rgba(6, 12, 20, 0.65);
+    --shadow-tooltip: 0 4px 12px rgba(6, 12, 20, 0.50);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.40), 0 10px 28px -12px rgba(6, 12, 20, 0.75);
+    --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.45), 0 18px 40px -14px rgba(6, 12, 20, 0.85);
+  }
+
   .paper {
     --color-bg: #F5F0E8;
     --color-sidebar: #EDE8E0;
@@ -357,7 +568,7 @@
 
     --color-text: #2C2520;
     --color-text-secondary: #6B6058;
-    --color-text-muted: #A89888;
+    --color-text-muted: #726457;
 
     --color-border: #DDD8D0;
 
@@ -371,7 +582,12 @@
     --color-success: #4d9e72;
     --color-warning: #c8923a;
     --color-error: #c45b5b;
+    --color-on-accent: #FFFFFF;
     --color-info: #7B92C0;
+    /* 语义色「文字版」（米色纸底需要更深一档） */
+    --color-success-text: #35704F;
+    --color-warning-text: #8F6520;
+    --color-info-text: #566C9B;
 
     --color-tab-bg: transparent;
     --color-tab-active: #FAF5ED;
@@ -403,12 +619,43 @@
     --color-badge-bg: rgba(155, 142, 200, 0.10);
     --color-badge-text: #9B8EC8;
 
+    /* ===== 视觉美化 2.0 —— 表面层次 / 光晕 / 微光 ===== */
+    --color-bg-rgb: 245, 240, 232;
+    --color-panel-rgb: 237, 232, 224;
+    --color-border-rgb: 221, 216, 208;
+    --color-gold-rgb: 201, 167, 108;
+    --color-success-rgb: 77, 158, 114;
+    --color-warning-rgb: 200, 146, 58;
+    --color-error-rgb: 196, 91, 91;
+    --color-accent-soft: rgba(155, 142, 200, 0.12);
+    --color-accent-glow: rgba(155, 142, 200, 0.24);
+    --color-sheen: rgba(255, 255, 255, 0.62);
+    --color-surface-raised: #FBF7F0;
+    --color-surface-sunken: #EFE9E0;
+    --color-surface-card: #FBF7F0;
+    --color-bg-elevated: #FBF7F0;
+    --color-text-muted-rgb: 114, 100, 87;
+
+    /* 辅助色（KPI 图标底块） */
+    --color-violet: #9385C0;
+    --color-mint: #5FAE85;
+    --color-amber: #C8923A;
+    --color-rose: #C4635F;
+    --color-cyan: #6FA8B8;
+    --color-violet-rgb: 147, 133, 192;
+    --color-mint-rgb: 95, 174, 133;
+    --color-amber-rgb: 200, 146, 58;
+    --color-rose-rgb: 196, 99, 95;
+    --color-cyan-rgb: 111, 168, 184;
+
     /* 阴影 */
     --shadow-sm: 0 1px 2px rgba(44, 37, 32, 0.06);
-    --shadow-md: 0 4px 12px rgba(44, 37, 32, 0.08);
-    --shadow-lg: 0 12px 32px rgba(44, 37, 32, 0.10);
-    --shadow-popover: 0 16px 40px -8px rgba(44, 37, 32, 0.14), 0 4px 16px -4px rgba(44, 37, 32, 0.08);
+    --shadow-md: 0 2px 6px rgba(44, 37, 32, 0.06), 0 8px 20px -6px rgba(44, 37, 32, 0.08);
+    --shadow-lg: 0 12px 32px -8px rgba(44, 37, 32, 0.10), 0 4px 12px -4px rgba(44, 37, 32, 0.06);
+    --shadow-popover: 0 20px 48px -12px rgba(44, 37, 32, 0.16), 0 4px 16px -4px rgba(44, 37, 32, 0.08);
     --shadow-tooltip: 0 4px 12px rgba(44, 37, 32, 0.18);
+    --shadow-card: 0 1px 2px rgba(44, 37, 32, 0.05), 0 8px 24px -10px rgba(44, 37, 32, 0.12);
+    --shadow-card-hover: 0 2px 4px rgba(44, 37, 32, 0.06), 0 16px 36px -12px rgba(44, 37, 32, 0.18);
   }
 
   /* 🌃 黑夜主题 — VS Code / IDEA 深灰极客风（真正的暗黑模式） */
@@ -423,7 +670,7 @@
 
     --color-text: #D4D4D4;
     --color-text-secondary: #A0A0A0;
-    --color-text-muted: #888888;
+    --color-text-muted: #969696;
 
     --color-border: #3C3C3C;
 
@@ -436,7 +683,12 @@
     --color-success: #89D185;
     --color-warning: #CCA700;
     --color-error: #F14C4C;
+    --color-on-accent: #FFFFFF;
     --color-info: #3794FF;
+    /* 语义色「文字版」（深灰底本身已达标，与本体一致） */
+    --color-success-text: #89D185;
+    --color-warning-text: #CCA700;
+    --color-info-text: #3794FF;
 
     --color-tab-bg: transparent;
     --color-tab-active: #1E1E1E;
@@ -467,11 +719,42 @@
     --color-badge-bg: #4D4D4D;
     --color-badge-text: #FFFFFF;
 
+    /* ===== 视觉美化 2.0 —— 表面层次 / 光晕 / 微光 ===== */
+    --color-bg-rgb: 30, 30, 30;
+    --color-panel-rgb: 37, 37, 38;
+    --color-border-rgb: 60, 60, 60;
+    --color-gold-rgb: 201, 167, 108;
+    --color-success-rgb: 137, 209, 133;
+    --color-warning-rgb: 204, 167, 0;
+    --color-error-rgb: 241, 76, 76;
+    --color-accent-soft: rgba(14, 99, 156, 0.16);
+    --color-accent-glow: rgba(17, 119, 187, 0.28);
+    --color-sheen: rgba(255, 255, 255, 0.035);
+    --color-surface-raised: #2C2C2E;
+    --color-surface-sunken: #191919;
+    --color-surface-card: #2C2C2E;
+    --color-bg-elevated: #2C2C2E;
+    --color-text-muted-rgb: 150, 150, 150;
+
+    /* 辅助色（KPI 图标底块） */
+    --color-violet: #A78BFA;
+    --color-mint: #89D185;
+    --color-amber: #CCA700;
+    --color-rose: #F14C4C;
+    --color-cyan: #4FC1E9;
+    --color-violet-rgb: 167, 139, 250;
+    --color-mint-rgb: 137, 209, 133;
+    --color-amber-rgb: 204, 167, 0;
+    --color-rose-rgb: 241, 76, 76;
+    --color-cyan-rgb: 79, 193, 233;
+
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
-    --shadow-popover: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.4), 0 8px 20px -6px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 4px 12px -4px rgba(0, 0, 0, 0.4);
+    --shadow-popover: 0 20px 48px -12px rgba(0, 0, 0, 0.75), 0 4px 16px -4px rgba(0, 0, 0, 0.5);
     --shadow-tooltip: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -12px rgba(0, 0, 0, 0.65);
+    --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.45), 0 18px 40px -14px rgba(0, 0, 0, 0.75);
   }
 
   /* ===== 全局基础样式 ===== */
@@ -515,6 +798,23 @@
     -webkit-user-select: text;
   }
 
+  /* 文本光标 — 品牌色（写作工具最常被忽略的原生表面） */
+  :root {
+    caret-color: var(--color-accent);
+  }
+
+  /* 选中文本 — 品牌色低透明度底 */
+  ::selection {
+    background: rgba(var(--color-accent-rgb), 0.28);
+    color: var(--color-text);
+  }
+
+  /* 链接下划线：不贴字，读起来更松 */
+  a:any-link {
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+  }
+
   /* ===== 滚动条样式（细腻 6px） ===== */
   ::-webkit-scrollbar {
     width: 6px;
@@ -525,13 +825,14 @@
     background: transparent;
   }
 
+  /* structural: 滚动条滑块，随轨道收成胶囊 */
   ::-webkit-scrollbar-thumb {
-    background: rgba(128, 128, 128, 0.25);
-    border-radius: 3px;
+    background: rgba(var(--color-accent-rgb), 0.26);
+    border-radius: var(--radius-pill);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(128, 128, 128, 0.45);
+    background: rgba(var(--color-accent-rgb), 0.46);
   }
 
   .galaxy ::-webkit-scrollbar-thumb {
@@ -542,12 +843,20 @@
     background: rgba(126, 200, 227, 0.25);
   }
 
+  .ocean ::-webkit-scrollbar-thumb {
+    background: rgba(34, 211, 238, 0.16);
+  }
+
+  .ocean ::-webkit-scrollbar-thumb:hover {
+    background: rgba(34, 211, 238, 0.34);
+  }
+
   .dark ::-webkit-scrollbar-thumb {
-    background: rgba(128, 128, 128, 0.20);
+    background: rgba(var(--color-accent-rgb), 0.42);
   }
 
   .dark ::-webkit-scrollbar-thumb:hover {
-    background: rgba(128, 128, 128, 0.40);
+    background: rgba(126, 184, 226, 0.62);
   }
 
   .paper ::-webkit-scrollbar-thumb {
@@ -598,8 +907,7 @@
     height: var(--height-panel-header);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
     color: var(--color-text-muted);
     border-bottom: 1px solid var(--color-border);
     background: transparent;
@@ -743,7 +1051,8 @@
     padding: 0 8px;
     height: 100%;
     border: none;
-    border-radius: 0;
+    /* structural: 状态栏为贴边全宽条带，圆角由内层高光决定 */
+    border-radius: var(--radius-xs);
     background: transparent;
     font-size: 0.68rem;
     font-family: var(--font-sans);
@@ -772,7 +1081,8 @@
     margin-left: 2px;
     vertical-align: middle;
     background-color: var(--color-accent);
-    border-radius: 1px;
+    /* structural: 文本光标，2px 宽 -> 胶囊端头 */
+    border-radius: var(--radius-pill);
     animation: agent-cursor-blink 1s steps(1) infinite;
   }
 
@@ -1015,7 +1325,8 @@
   overflow: hidden !important;
 }
 
-.dark .cm-search {
+.dark .cm-search,
+.ocean .cm-search {
   background-color: var(--color-sidebar) !important;
   box-shadow: none !important;
 }
@@ -1112,10 +1423,11 @@
 /* 搜索结果高亮 IDEA 风格 */
 .cm-searchMatch {
   background-color: rgba(var(--color-accent-rgb), 0.3) !important;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
-.dark .cm-searchMatch {
+.dark .cm-searchMatch,
+.ocean .cm-searchMatch {
   background-color: rgba(var(--color-accent-rgb), 0.4) !important;
 }
 
@@ -1217,9 +1529,9 @@
 
 /* 玻璃态效果 */
 .glass {
-  background: rgba(var(--color-bg), 0.8);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(var(--color-border), 0.5);
+  background: rgba(var(--color-bg-rgb), 0.72);
+  backdrop-filter: blur(20px) saturate(1.25);
+  border: 1px solid rgba(var(--color-border-rgb), 0.6);
 }
 
 /* 渐变文字效果 */
@@ -1256,4 +1568,412 @@
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
+}
+
+
+/* =====================================================================
+ * 视觉美化 2.0 — 表面层次 / 极光背景 / 卡片 / 芯片
+ * 全部基于既有 CSS 变量实现，四套主题自动适配
+ * ===================================================================== */
+@layer components {
+
+  /* ---- 极光背景：欢迎页、空状态使用，营造纵深与光感 ---- */
+  .aurora {
+    background-color: var(--color-editor-bg);
+    background-image:
+      radial-gradient(58% 42% at 50% 0%, rgba(var(--color-accent-rgb), 0.20), transparent 68%),
+      radial-gradient(46% 38% at 8% 4%, rgba(155, 142, 200, 0.16), transparent 62%),
+      radial-gradient(46% 38% at 96% 8%, rgba(var(--color-gold-rgb), 0.10), transparent 62%),
+      radial-gradient(120% 70% at 50% 120%, rgba(0, 0, 0, 0.35), transparent 70%);
+    background-repeat: no-repeat;
+  }
+
+  /* ---- 表面卡片：带顶部高光细线与主题色悬停光晕 ---- */
+  .surface-card {
+    --card-tint: var(--color-accent-rgb);
+    position: relative;
+    border-radius: var(--radius-xl);
+    border: 1px solid rgba(var(--color-border-rgb), 0.9);
+    background-color: var(--color-surface-raised);
+    background-image: linear-gradient(180deg, var(--color-sheen), transparent 46%);
+    transition:
+      transform var(--transition-normal),
+      border-color var(--transition-normal),
+      box-shadow var(--transition-normal);
+  }
+
+  .surface-card::before {
+    content: '';
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    top: 0;
+    height: 1px;
+    border-radius: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-sheen), transparent);
+    pointer-events: none;
+  }
+
+  .surface-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(var(--card-tint), 0.42);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(var(--card-tint), 0.10);
+  }
+
+  .surface-card:focus-visible {
+    outline: none;
+    border-color: rgba(var(--card-tint), 0.60);
+    box-shadow: 0 0 0 2px rgba(var(--card-tint), 0.28);
+  }
+
+  .tint-gold    { --card-tint: var(--color-gold-rgb); }
+  .tint-success { --card-tint: var(--color-success-rgb); }
+
+  /* ---- 图标底座 ---- */
+  .tile {
+    @apply flex items-center justify-center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-lg);
+    flex-shrink: 0;
+  }
+
+  .tile-accent  { background: rgba(var(--color-accent-rgb), 0.14);  color: var(--color-accent); }
+  .tile-gold    { background: rgba(var(--color-gold-rgb), 0.14);    color: var(--color-gold); }
+  .tile-success { background: rgba(var(--color-success-rgb), 0.14); color: var(--color-success); }
+
+  /* ---- 芯片 ---- */
+  .chip {
+    @apply inline-flex items-center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    line-height: 1;
+    color: var(--color-accent);
+    background: rgba(var(--color-accent-rgb), 0.10);
+    border: 1px solid rgba(var(--color-accent-rgb), 0.20);
+  }
+
+  /* ---- 品牌光晕（欢迎页 Logo 背后的旋转极光） ---- */
+  .brand-halo {
+    position: absolute;
+    inset: -7px;
+    /* 同心圆角：外圈 = 内圈 12px + 7px 内缩 */
+    border-radius: calc(var(--radius-lg) + 7px);
+    background: conic-gradient(from 0deg,
+      rgba(var(--color-accent-rgb), 0.90),
+      rgba(155, 142, 200, 0.80),
+      rgba(var(--color-gold-rgb), 0.60),
+      rgba(var(--color-accent-rgb), 0.90));
+    filter: blur(11px);
+    opacity: 0.50;
+    animation: brand-spin 14s linear infinite;
+    pointer-events: none;
+  }
+
+  .brand-mark {
+    position: relative;
+    z-index: 1;
+    border-radius: var(--radius-lg);
+  }
+
+  /* ---- 顶部微光：让面板/浮层像"立起来" ---- */
+  .sheen-top {
+    box-shadow: inset 0 1px 0 var(--color-sheen);
+  }
+}
+
+@keyframes brand-spin {
+  to { transform: rotate(360deg); }
+}
+
+
+/* =====================================================================
+ * 视觉美化 3.0 — 控件层统一重绘
+ * 设计语言：白色控件 · 冷白底 · 亮蓝主色 · 大范围柔和阴影
+ * 覆盖：输入控件 / 面板头 / 树行 / 图标按钮 / 工具按钮 / 弹层 / 卡片
+ * 说明：统一用 :where() 压平特异性，组件类与 Tailwind 工具类均可覆盖
+ * ===================================================================== */
+@layer components {
+
+  /* ---- 1. 输入类控件：白底 · 10px 圆角 · 主色柔光焦点环 ---- */
+  :where(#root) :where(
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+    textarea,
+    select
+  ) {
+    background-color: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  }
+
+  :where(#root) :where(input, textarea, select):not(:disabled):hover {
+    border-color: rgba(var(--color-accent-rgb), 0.45);
+  }
+
+  :where(#root) :where(input, textarea, select):focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.16);
+  }
+
+  :where(#root) :where(input, textarea, select)::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  :where(#root) :where(input, textarea, select):disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-color: var(--color-surface-sunken);
+    box-shadow: none;
+  }
+
+  /* 复选框 / 单选：统一主色 */
+  :where(#root) :where(input[type='checkbox'], input[type='radio']) {
+    accent-color: var(--color-accent);
+    cursor: pointer;
+  }
+
+  /* ---- 2. 面板标题栏：弱化全大写压迫感，加实底 ---- */
+  .panel-header {
+    letter-spacing: 0.02em;
+    color: var(--color-text-secondary);
+    background: var(--color-panel);
+  }
+
+  /* ---- 3. 树行：圆角胶囊 · 主色淡底激活 ---- */
+  .tree-item {
+    border-radius: var(--radius-md);
+    margin: 1px 6px;
+    height: 28px;
+  }
+
+  .tree-item:hover {
+    background: var(--color-hover);
+    transform: none;
+  }
+
+  .tree-item.active {
+    background: rgba(var(--color-accent-rgb), 0.12);
+    box-shadow: inset 2px 0 0 var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  /* ---- 4. 图标按钮 / 工具按钮：圆角统一，去掉夸张缩放 ---- */
+  .icon-btn {
+    border-radius: var(--radius-md);
+  }
+
+  .icon-btn:hover {
+    background: var(--color-hover);
+    transform: none;
+  }
+
+  .icon-btn:active {
+    transform: scale(0.94);
+  }
+
+  .tool-btn {
+    border-radius: var(--radius-lg);
+    margin: 0 4px;
+  }
+
+  .tool-btn:hover {
+    background: var(--color-hover);
+    transform: none;
+  }
+
+  .tool-btn.active {
+    background: rgba(var(--color-accent-rgb), 0.13);
+    color: var(--color-activity-icon-active);
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+
+  .bottom-tool-btn {
+    border-radius: var(--radius-md);
+  }
+
+  .bottom-tool-btn:hover {
+    background: var(--color-hover);
+  }
+
+  /* ---- 5. 配置输入框：白底高对比 ---- */
+  .config-input {
+    background-color: var(--color-surface-raised);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .config-input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.16);
+  }
+
+  /* ---- 6. 弹层 / 菜单：大圆角 + 柔和阴影 ---- */
+  :where(#root) :where([role='menu'], [role='listbox'], [role='dialog']) {
+    border-radius: var(--radius-xl);
+  }
+
+  :where(#root) :where([role='menuitem'], [role='option']) {
+    border-radius: var(--radius-md);
+  }
+
+  /* ---- 7. 主按钮：亮蓝实心 + 品牌柔光 ---- */
+  .btn-primary {
+    background: linear-gradient(180deg, #4B8DF8, var(--color-accent));
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      0 1px 2px rgba(var(--color-accent-rgb), 0.28),
+      0 4px 12px rgba(var(--color-accent-rgb), 0.22);
+  }
+
+  .btn-primary:hover {
+    filter: none;
+    background: linear-gradient(180deg, #5B97FF, var(--color-accent-hover));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.26),
+      0 2px 6px rgba(var(--color-accent-rgb), 0.32),
+      0 8px 22px rgba(var(--color-accent-rgb), 0.28);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(var(--color-accent-rgb), 0.30);
+  }
+
+  /* ---- 8. 图标底座扩展色（KPI / 统计块） ---- */
+  .tile-violet { background: rgba(var(--color-violet-rgb), 0.14); color: var(--color-violet); }
+  .tile-mint   { background: rgba(var(--color-mint-rgb),   0.14); color: var(--color-mint); }
+  .tile-amber  { background: rgba(var(--color-amber-rgb),  0.14); color: var(--color-amber); }
+  .tile-rose   { background: rgba(var(--color-rose-rgb),   0.14); color: var(--color-rose); }
+  .tile-cyan   { background: rgba(var(--color-cyan-rgb),   0.14); color: var(--color-cyan); }
+
+  /* ---- 9. 通用卡片：白色 + 柔和大阴影（用阴影替代硬边框分层） ---- */
+  .card {
+    background: var(--color-surface-card);
+    border: 1px solid transparent;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: rgba(var(--color-accent-rgb), 0.35);
+  }
+
+  /* ---- 10. 卡片内分区标题 ---- */
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--color-text);
+  }
+
+  .section-sub {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  /* ---- 11. 统计数值 ---- */
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+}
+
+
+/* =====================================================================
+ * 视觉美化 3.0 · 补 — 表单字段（Input / Textarea / Select）
+ * 统一白底 · 12px 圆角 · 主色柔光焦点环 · 内置下拉箭头
+ * ===================================================================== */
+@layer components {
+
+  .vela-field {
+    background-color: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  }
+
+  .vela-field::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  .vela-field:hover:not(:disabled):not(:focus) {
+    border-color: rgba(var(--color-accent-rgb), 0.45);
+  }
+
+  .vela-field:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(var(--color-accent-rgb), 0.16);
+  }
+
+  .vela-field:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-color: var(--color-surface-sunken);
+    box-shadow: none;
+  }
+
+  /* 原生下拉：补齐缺失的箭头指示 */
+  :where(#root) :where(select).vela-field,
+  :where(#root) :where(select).config-input {
+    padding-right: 26px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px 12px;
+  }
+}
+
+/* =====================================================================
+ * 视觉美化 3.0 · 补 3 — 无障碍与排版基线
+ *  · prefers-reduced-motion：系统开启「减弱动态效果」时关闭全部过渡/动效
+ *  · 标题断行 balance / 正文断行 pretty，避免行尾孤字
+ * ===================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  h1,
+  h2,
+  h3,
+  h4,
+  .section-title {
+    text-wrap: balance;
+  }
+
+  p,
+  li,
+  blockquote {
+    text-wrap: pretty;
+  }
 }

@@ -195,7 +195,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                       onClick: () => navigator.clipboard.writeText(f.path).catch(() => { }),
                     },
                   ], e)}
-                  title={`${t('manuscript.clickToOpen')} — ${displayName}`}
+                  title={`${t('manuscript.clickToOpen')} · ${displayName}`}
                 >
                   <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                   <span className="text-sm truncate" style={{ color: 'var(--color-text-secondary)' }}>

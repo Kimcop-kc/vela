@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Sparkles, Play, AlertCircle } from 'lucide-react'
+import { Sparkles, Play, AlertCircle, Loader2 } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -331,7 +331,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                 <Button variant="ai" size="lg" onClick={handleStart} disabled={isChapterRunning}>
                   {isChapterRunning ? (
                     <span className="flex items-center gap-2">
-                      <span className="animate-spin" style={{ filter: 'brightness(1.5)' }}>🌀</span>
+                      <Loader2 size={13} className="animate-spin" />
                       {t('chapterCreation.creating')}
                     </span>
                   ) : (

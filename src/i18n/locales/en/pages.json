@@ -9,7 +9,8 @@
     "importNovel": "Import Novel",
     "importNovelDesc": "Import an existing work to continue",
     "recentProjects": "Recent Projects",
-    "footer": "Vela v0.1.0 · 7-stage AI-driven writing pipeline · Local-first data security"
+    "footer": "Vela v0.1.0 · 7-stage AI-driven writing pipeline · Local-first data security",
+    "emptyRecent": "No recent projects yet"
   },
   "knowledge": {
     "title": "Knowledge Base Overview",
@@ -19,6 +20,7 @@
   "knowledgeOverview": {
     "title": "Knowledge Base",
     "description": "Local vector database based on LanceDB. Auto-indexed after finalization, providing semantic search context for AI writing.",
+    "headerStats": "{{docs}} docs · {{chunks}} chunks",
     "openProjectFirst": "Please open a project first",
     "docCount": "Documents",
     "chunkCount": "Chunks",

@@ -61,7 +61,7 @@ export default function AIOutputPanel() {
         }}
       >
         <span
-          className="text-xs font-medium uppercase tracking-widest"
+          className="text-xs font-medium tracking-[0.01em]"
           style={{ color: 'var(--color-text-muted)' }}
         >
           {t('aiPanel.aiOutput')}
@@ -258,7 +258,7 @@ function ActiveRunView({
               border: '1px solid var(--color-border)'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.color = '#fff'
+              e.currentTarget.style.color = 'var(--color-on-accent)'
               e.currentTarget.style.backgroundColor = 'var(--color-error)'
               e.currentTarget.style.borderColor = 'var(--color-error)'
             }}
@@ -499,7 +499,7 @@ function HistoryList({ items, onSelect }: { items: WorkflowRun[]; onSelect: (id:
   return (
     <div>
       <p
-        className="text-[0.68rem] font-medium mb-2 px-1 uppercase tracking-widest"
+        className="text-[0.68rem] font-medium mb-2 px-1 tracking-[0.01em]"
         style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
       >
         {t('aiPanel.history')}

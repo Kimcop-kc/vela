@@ -204,7 +204,7 @@ export default function ProjectTree() {
           blueprintCount >= nc.totalChapters
             ? 'var(--color-success)'
             : blueprintCount > 0
-              ? 'var(--color-warning, #eab308)'
+              ? 'var(--color-warning)'
               : undefined
         }
         badgeDone={blueprintCount >= nc.totalChapters}
@@ -271,7 +271,7 @@ function WorldBuildingGroup({
             color: allDone
               ? 'var(--color-success)'
               : archDone > 0
-                ? 'var(--color-warning, #eab308)'
+                ? 'var(--color-warning)'
                 : 'var(--color-text-muted)'
           }}
         >

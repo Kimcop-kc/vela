@@ -61,11 +61,35 @@ function parseRelationships(characters: RelationshipGraphProps['characters']): R
   return edges
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  protagonist: '#6ee7b7',
-  antagonist: '#fca5a5',
-  supporting: '#93c5fd',
-  minor: '#a78bfa',
+/** 角色配色令牌：画布不能直接用 CSS 变量，因此在绘制时读取当前主题的实际色值 */
+const PALETTE_TOKENS: Array<[string, string, string]> = [
+  ['protagonist', '--color-success', '#10b981'],
+  ['antagonist', '--color-error', '#ef4444'],
+  ['supporting', '--color-accent', '#3B82F6'],
+  ['minor', '--color-violet', '#8B5CF6'],
+  ['unknown', '--color-text-muted', '#94a3b8'],
+  ['muted', '--color-text-muted', '#94a3b8'],
+  ['text', '--color-text', '#0f172a'],
+]
+
+const CANVAS_FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
+
+function readThemePalette(): Record<string, string> {
+  const style = getComputedStyle(document.documentElement)
+  const palette: Record<string, string> = {}
+  for (const [key, token, fallback] of PALETTE_TOKENS) {
+    const value = style.getPropertyValue(token).trim()
+    palette[key] = /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback
+  }
+  return palette
+}
+
+/** 十六进制色值 → 带透明度的 rgba()，避免手拼 hex 后缀 */
+function withAlpha(hex: string, alpha: number): string {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim())
+  if (!match) return hex
+  const num = parseInt(match[1], 16)
+  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`
 }
 
 /** 角色关系网 Canvas 可视化 */
@@ -115,6 +139,7 @@ export default function RelationshipGraph({ characters }: RelationshipGraphProps
       if (!ctx) return
 
       const nodes = nodesRef.current
+      const palette = readThemePalette()
 
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -128,15 +153,15 @@ export default function RelationshipGraph({ characters }: RelationshipGraphProps
         ctx.beginPath()
         ctx.moveTo(a.x, a.y)
         ctx.lineTo(b.x, b.y)
-        ctx.strokeStyle = 'rgba(148,163,184,0.3)'
+        ctx.strokeStyle = withAlpha(palette.muted, 0.35)
         ctx.stroke()
 
         // 关系标签
         if (edge.label) {
           const mx = (a.x + b.x) / 2
           const my = (a.y + b.y) / 2
-          ctx.font = '18px system-ui'
-          ctx.fillStyle = 'rgba(148,163,184,0.6)'
+          ctx.font = `18px ${CANVAS_FONT}`
+          ctx.fillStyle = withAlpha(palette.muted, 0.75)
           ctx.textAlign = 'center'
           ctx.fillText(edge.label, mx, my - 4)
         }
@@ -144,26 +169,26 @@ export default function RelationshipGraph({ characters }: RelationshipGraphProps
 
       // 绘制节点
       for (const node of nodes) {
-        const color = ROLE_COLORS[node.role] || '#94a3b8'
+        const color = palette[node.role] || palette.unknown
 
         // 光晕
         ctx.beginPath()
         ctx.arc(node.x, node.y, 28, 0, Math.PI * 2)
-        ctx.fillStyle = color + '25'
+        ctx.fillStyle = withAlpha(color, 0.16)
         ctx.fill()
 
         // 节点
         ctx.beginPath()
         ctx.arc(node.x, node.y, 20, 0, Math.PI * 2)
-        ctx.fillStyle = color + '40'
+        ctx.fillStyle = withAlpha(color, 0.26)
         ctx.fill()
         ctx.strokeStyle = color
         ctx.lineWidth = 2
         ctx.stroke()
 
         // 名字
-        ctx.font = 'bold 22px system-ui'
-        ctx.fillStyle = color
+        ctx.font = `bold 22px ${CANVAS_FONT}`
+        ctx.fillStyle = palette.text
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(node.name, node.x, node.y + 36)

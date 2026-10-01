@@ -198,7 +198,7 @@ export default function SkillImportDialog({ open, onClose, onImported }: SkillIm
                       </span>
                       {candidate.version && (
                         <span className="text-[0.6rem] px-1 rounded flex-shrink-0"
-                          style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
+                          style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
                           v{candidate.version}
                         </span>
                       )}

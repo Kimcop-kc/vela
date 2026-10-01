@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle, Check, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
 import {
@@ -32,8 +32,8 @@ function getVariableDesc(varName: string, fallback: string): string {
 
 const SOURCE_CONFIG = {
   builtin: { labelKey: 'prompts.builtin', color: 'var(--color-text-muted)', bg: 'var(--color-hover)' },
-  global: { labelKey: 'prompts.global', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
-  project: { labelKey: 'prompts.project', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+  global: { labelKey: 'prompts.global', color: 'var(--color-info-text)', bg: 'var(--color-accent-soft)' },
+  project: { labelKey: 'prompts.project', color: 'var(--color-warning-text)', bg: 'rgba(var(--color-warning-rgb), 0.12)' },
 } as const
 
 // ==================== 主组件 ====================
@@ -297,7 +297,7 @@ function TemplateItem({
           {missingVars.length > 0 && (
             <div
               className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs"
-              style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b' }}
+              style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.10)', color: 'var(--color-warning-text)' }}
             >
               <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
               <span>
@@ -351,8 +351,10 @@ function TemplateItem({
                   : 'bg-red-500/10 text-red-500 border border-red-500/20'
               )}
             >
-              {saveResult.type === 'success' ? '✅ ' : '❌ '}
-              {saveResult.msg}
+              <span className="inline-flex items-center gap-1.5">
+                {saveResult.type === 'success' ? <Check size={12} /> : <X size={12} />}
+                {saveResult.msg}
+              </span>
             </div>
           )}
         </div>

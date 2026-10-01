@@ -135,7 +135,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
               <div
                 className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs truncate"
                 style={{
-                  backgroundColor: 'var(--color-input)',
+                  backgroundColor: 'var(--color-surface-sunken)',
                   border: '1px solid var(--color-border)',
                   color: selectedFiles.length > 0 ? 'var(--color-text)' : 'var(--color-text-muted)',
                 }}
@@ -163,7 +163,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
 
           {splitError && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
-              style={{ backgroundColor: 'rgba(220, 38, 38, 0.08)', color: 'var(--color-danger, #dc2626)' }}>
+              style={{ backgroundColor: 'rgba(220, 38, 38, 0.08)', color: 'var(--color-error)' }}>
               <AlertTriangle size={14} />
               {splitError}
             </div>

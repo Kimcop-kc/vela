@@ -71,7 +71,7 @@ export default function CharacterEditor() {
             {viewMode === 'graph'
               ? t('characterEditor.characterGraph')
               : selectedCard
-                ? `${selectedCard.name || t('characterEditor.newCharacter')} ${viewMode === 'state' ? `— ${t('characterEditor.currentState')}` : `— ${t('characterEditor.editProfile')}`}`
+                ? `${selectedCard.name || t('characterEditor.newCharacter')} ${viewMode === 'state' ? `· ${t('characterEditor.currentState')}` : `· ${t('characterEditor.editProfile')}`}`
                 : t('characterEditor.characterProfile')}
           </span>
         </div>

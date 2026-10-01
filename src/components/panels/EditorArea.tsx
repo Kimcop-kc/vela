@@ -683,7 +683,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           >
             <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
               <DialogTitle className="flex items-center gap-2 text-[0.8rem]">
-                {t('editorArea.mergeTitle')} — {activeTab?.name ?? t('editorArea.diffView')}
+                {t('editorArea.mergeTitle')} · {activeTab?.name ?? t('editorArea.diffView')}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>

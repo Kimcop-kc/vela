@@ -18,6 +18,7 @@
  *   })
  */
 
+import { Z_INDEX } from '../../shared/z-index'
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState, useCallback } from 'react'
 import { X, CheckCircle2, AlertTriangle, Info, Sparkles } from 'lucide-react'
@@ -87,7 +88,7 @@ function ActionToastContainer() {
         position: 'fixed',
         bottom: 48,
         right: 20,
-        zIndex: 9998,
+        zIndex: Z_INDEX.toast,
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -233,7 +234,7 @@ function ActionToastCard({ item, onRemove }: { item: ActionToastItem; onRemove: 
                   : 'var(--color-accent)',
                 color: action.variant === 'ghost'
                   ? 'var(--color-text-secondary)'
-                  : '#fff',
+                  : 'var(--color-on-accent)',
               }}
               onMouseEnter={e => {
                 if (action.variant === 'ghost') {

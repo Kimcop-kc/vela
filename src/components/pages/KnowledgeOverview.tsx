@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Database, BookOpen, FileText,
+  BookOpen, FileText,
   Search, RefreshCw, Layers, Zap, Server, Activity,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -79,23 +79,8 @@ export default function KnowledgeOverview() {
 
   if (!currentProject) {
     return (
-      <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
-        <div
-          className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
-          style={{
-            borderBottom: '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-editor-bg)',
-          }}
-        >
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-              {t('title')}
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto relative">
-          <EmptyState icon={<BookOpen size={36} />} message={t('openProjectFirst')} opacity={0.4} />
-        </div>
+      <div className="h-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg)' }}>
+        <EmptyState icon={<BookOpen size={22} />} message={t('openProjectFirst')} opacity={0.55} />
       </div>
     )
   }
@@ -129,41 +114,47 @@ export default function KnowledgeOverview() {
   }
 
   return (
-    <div className="h-full overflow-y-auto" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
-      <div className="max-w-4xl mx-auto px-8 py-6">
+    <div className="h-full flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--color-bg)' }}>
+      {/* 页头：标题 + 规模（与拆书页同款） */}
+      <div
+        className="flex items-center justify-between gap-3 px-4 h-11 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
+      >
+        <span className="text-[0.82rem] font-semibold truncate" style={{ color: 'var(--color-text)' }}>
+          {t('title')}
+        </span>
+        <span className="text-[0.68rem] flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+          {t('headerStats', { docs: stats.documentCount, chunks: stats.totalChunks })}
+        </span>
+      </div>
 
-        {/* ===== 标题 ===== */}
-        <div className="flex items-center gap-3 mb-6">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-hover))' }}
-          >
-            <Database size={20} className="text-white" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-[var(--color-text)]">{t('title')}</h2>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              {t('description')}
-            </p>
-          </div>
-        </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-[880px] mx-auto px-6 py-5 space-y-6">
+        <p className="text-[0.72rem] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+          {t('description')}
+        </p>
 
-        {/* ===== 统计卡片 ===== */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          <StatCard icon={<FileText size={14} />} label={t('docCount')} value={stats.documentCount} />
-          <StatCard icon={<Layers size={14} />} label={t('chunkCount')} value={stats.totalChunks} />
-          <StatCard
-            icon={<Server size={14} />}
-            label={t('engine')}
-            value="LanceDB"
-            accent
-          />
-          <StatCard
-            icon={<Activity size={14} />}
+        {/* ===== 统计条 =====
+            刻意不用「四张等宽卡片」：那是模板感最强的布局，而且这四个数字之间
+            没有真实层级差异，包成卡片只是噪声。改用一条带发丝分隔线的统计条，
+            数字用等宽数字对齐，靠间距分层而不是靠卡片。 */}
+        <div
+          className="mb-6 flex flex-wrap items-stretch divide-x divide-[var(--color-border)]"
+          style={{
+            backgroundColor: 'var(--color-surface-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+          }}
+        >
+          <StatCell icon={<FileText size={13} />} label={t('docCount')} value={stats.documentCount} />
+          <StatCell icon={<Layers size={13} />} label={t('chunkCount')} value={stats.totalChunks} />
+          <StatCell icon={<Server size={13} />} label={t('engine')} value="LanceDB" />
+          <StatCell
+            icon={<Activity size={13} />}
             label={t('searchMode')}
             value={hasVectors ? t('ftsVector') : t('ftsOnly')}
-            badge={hasVectors ? t('hybrid') : t('basic')}
-            badgeColor={hasVectors ? '#22c55e' : '#3b82f6'}
+            note={hasVectors ? t('hybrid') : t('basic')}
+            noteTone={hasVectors ? 'success' : 'info'}
           />
         </div>
 
@@ -179,15 +170,15 @@ export default function KnowledgeOverview() {
                   <Zap size={16} className="text-amber-400" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-amber-300">{t('indexUpgrade')}</div>
-                  <div className="text-[0.7rem] text-amber-400/70">
+                  <div className="text-sm font-medium text-[var(--color-warning-text)]">{t('indexUpgrade')}</div>
+                  <div className="text-[0.7rem] text-[var(--color-warning-text)] opacity-80">
                     {t('vectorlessCount', { count: vectorlessCount })}
                   </div>
                 </div>
               </div>
               <Button
                 variant="outline"
-                className="text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                className="text-xs border-amber-500/30 text-[var(--color-warning-text)] hover:bg-amber-500/20"
                 onClick={handleBackfill}
                 disabled={backfilling}
               >
@@ -219,8 +210,8 @@ export default function KnowledgeOverview() {
             <span className={cn(
               'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium',
               hasVectors
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : 'bg-blue-500/15 text-blue-400'
+                ? 'bg-emerald-500/15 text-[var(--color-success-text)]'
+                : 'bg-blue-500/15 text-[var(--color-info-text)]'
             )}>
               {searchMode}
             </span>
@@ -286,8 +277,8 @@ export default function KnowledgeOverview() {
                       </span>
                       <span className={cn(
                         'text-[0.7rem] px-1.5 py-0.5 rounded font-mono',
-                        r.score > 0.8 ? 'bg-green-500/20 text-green-400' :
-                        r.score > 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
+                        r.score > 0.8 ? 'bg-green-500/20 text-[var(--color-success-text)]' :
+                        r.score > 0.6 ? 'bg-yellow-500/20 text-[var(--color-warning-text)]' :
                         'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
                       )}>
                         {r.score === 0.5 ? t('fullTextMatch') : t('similarity', { score: (r.score * 100).toFixed(1) })}
@@ -302,43 +293,45 @@ export default function KnowledgeOverview() {
             </div>
           )}
         </div>
-
+        </div>
       </div>
     </div>
   )
 }
 
-/** 统计卡片子组件 */
-function StatCard({ icon, label, value, accent, badge, badgeColor }: {
+/** 统计条单体：标签在上、数字在下，靠发丝线分隔，不用卡片 */
+function StatCell({ icon, label, value, note, noteTone }: {
   icon: React.ReactNode
   label: string
   value: number | string
-  accent?: boolean
-  badge?: string
-  badgeColor?: string
+  note?: string
+  noteTone?: 'success' | 'info'
 }) {
   return (
-    <div
-      className="rounded-xl p-4 border border-[var(--color-border)]"
-      style={{ backgroundColor: 'var(--color-sidebar)' }}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[var(--color-text-muted)]">{icon}</span>
-        <span className="text-xs text-[var(--color-text-muted)]">{label}</span>
+    <div className="flex-1 min-w-[150px] px-4 py-3">
+      <div className="mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+        {icon}
+        <span className="text-[0.7rem]">{label}</span>
       </div>
-      <div className="flex items-center gap-2">
-        <div className={cn(
-          'text-2xl font-bold',
-          accent ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'
-        )}>
+      <div className="flex items-baseline gap-2">
+        <span
+          className="text-xl font-semibold leading-none tabular-nums"
+          style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}
+        >
           {value}
-        </div>
-        {badge && (
+        </span>
+        {note && (
           <span
-            className="text-[0.6rem] px-1.5 py-0.5 rounded-full font-medium"
-            style={{ backgroundColor: `${badgeColor}20`, color: badgeColor }}
+            className="px-1.5 py-[1px] text-[0.62rem] font-medium"
+            style={{
+              borderRadius: 'var(--radius-pill)',
+              color: noteTone === 'success' ? 'var(--color-success-text)' : 'var(--color-info-text)',
+              backgroundColor: noteTone === 'success'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : 'rgba(59, 130, 246, 0.12)',
+            }}
           >
-            {badge}
+            {note}
           </span>
         )}
       </div>

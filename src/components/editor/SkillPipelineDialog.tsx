@@ -451,15 +451,15 @@ export default function SkillPipelineDialog({ open, onClose, onRun }: SkillPipel
           )}
 
           {error && (
-            <p className="text-[0.7rem]" style={{ color: 'var(--color-error, #ef4444)' }}>{error}</p>
+            <p className="text-[0.7rem]" style={{ color: 'var(--color-error)' }}>{error}</p>
           )}
           {blocking.length > 0 && (
-            <p className="text-[0.7rem]" style={{ color: 'var(--color-error, #ef4444)' }}>
+            <p className="text-[0.7rem]" style={{ color: 'var(--color-error)' }}>
               {blocking.map(issueText).join('；')}
             </p>
           )}
           {warnings.length > 0 && (
-            <p className="text-[0.7rem]" style={{ color: 'var(--color-warning, #f59e0b)' }}>
+            <p className="text-[0.7rem]" style={{ color: 'var(--color-warning)' }}>
               {warnings.map(issueText).join('；')}
             </p>
           )}

@@ -11,6 +11,7 @@
  *   if (ok) { ... }
  */
 
+import { Z_INDEX } from '../../shared/z-index'
 import { createRoot } from 'react-dom/client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from './Button'
@@ -71,7 +72,7 @@ function ConfirmDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9998,
+        zIndex: Z_INDEX.modal,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -92,7 +93,7 @@ function ConfirmDialog({
         style={{
           backgroundColor: 'var(--color-sidebar)',
           border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-2xl)',
+          borderRadius: 'var(--radius-xl)',
           boxShadow: 'var(--shadow-popover)',
           padding: '20px 24px',
           minWidth: 'min(380px, calc(100vw - 2rem))',

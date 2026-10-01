@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import { ipc } from '../services/ipc-client'
 import i18n from '../i18n'
 
-export type Theme = 'light' | 'galaxy' | 'paper' | 'dark'
+export type Theme = 'light' | 'galaxy' | 'paper' | 'dark' | 'ocean'
 
 // ─── 共享字体库 ─────────────────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ interface ThemeState {
   /** 用户选择的主题 */
   theme: Theme
   /** 实际应用的主题（解析 system 后） */
-  resolvedTheme: 'light' | 'galaxy' | 'paper' | 'dark'
+  resolvedTheme: 'light' | 'galaxy' | 'paper' | 'dark' | 'ocean'
   /** 当前缩放级别（1.0 = 100%） */
   zoom: number
   /** 当前写作字体（正文编辑区 → --font-writing） */
@@ -117,8 +117,8 @@ interface ThemeState {
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      theme: 'dark',
-      resolvedTheme: 'dark',
+      theme: 'ocean',
+      resolvedTheme: 'ocean',
       zoom: 1.0,
       writingFont: 'lxgw-wenkai',
       uiFont: 'inter',
@@ -210,7 +210,7 @@ export const useThemeStore = create<ThemeState>()(
 // ─── 内部工具函数 ─────────────────────────────────────────────────────────
 
 /** 解析主题：直接返回实际值，保留对 localStorage 旧版 system 设定的向下兼容 */
-function resolveTheme(theme: Theme): 'light' | 'galaxy' | 'paper' | 'dark' {
+function resolveTheme(theme: Theme): 'light' | 'galaxy' | 'paper' | 'dark' | 'ocean' {
   if ((theme as string) === 'system') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
@@ -218,10 +218,12 @@ function resolveTheme(theme: Theme): 'light' | 'galaxy' | 'paper' | 'dark' {
 }
 
 /** 应用主题到 DOM — 支持互斥的主题 */
-function applyTheme(theme: 'light' | 'galaxy' | 'paper' | 'dark') {
+function applyTheme(theme: 'light' | 'galaxy' | 'paper' | 'dark' | 'ocean') {
   const root = document.documentElement
-  root.classList.remove('galaxy', 'paper', 'dark')
-  if (theme === 'galaxy') {
+  root.classList.remove('galaxy', 'paper', 'dark', 'ocean')
+  if (theme === 'ocean') {
+    root.classList.add('ocean')
+  } else if (theme === 'galaxy') {
     root.classList.add('galaxy')
   } else if (theme === 'paper') {
     root.classList.add('paper')

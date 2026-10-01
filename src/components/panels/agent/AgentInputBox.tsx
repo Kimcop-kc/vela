@@ -426,7 +426,7 @@ export default function AgentInputBox() {
                 : canSend
                 ? 'var(--color-accent)'
                 : 'rgba(128,128,128,0.3)',
-              color: '#ffffff',
+              color: 'var(--color-on-accent)',
               cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
               opacity: !generating && !canSend ? 0.5 : 1,
             }}

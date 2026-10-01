@@ -155,7 +155,7 @@ export default function App() {
                       {dockSide && (
                         <>
                           <PanelResizeHandle />
-                          <Panel id="bottom-docked-sidebar" defaultSize={38} minSize={15}>
+                          <Panel id="bottom-docked-sidebar" defaultSize={28} minSize={15}>
                             <BottomPanel />
                           </Panel>
                         </>
@@ -187,7 +187,7 @@ export default function App() {
                       {dockAgent && (
                         <>
                           <PanelResizeHandle />
-                          <Panel id="bottom-docked-agent" defaultSize={38} minSize={15}>
+                          <Panel id="bottom-docked-agent" defaultSize={28} minSize={15}>
                             <BottomPanel />
                           </Panel>
                         </>

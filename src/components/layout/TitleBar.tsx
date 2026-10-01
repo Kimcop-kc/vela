@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles } from 'lucide-react'
+import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, Waves } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
@@ -11,12 +11,13 @@ import { useOnboardingStore } from '../../stores/onboarding-store'
 const isMac = navigator.userAgent.includes('Mac')
 
 const themeIcons: Record<Theme, typeof Sun> = {
+  ocean: Waves,
   light: Sun,
   galaxy: Sparkles,
   paper: ScrollText,
   dark: Moon,
 }
-const themeOrder: Theme[] = ['galaxy', 'dark', 'light', 'paper']
+const themeOrder: Theme[] = ['ocean', 'galaxy', 'dark', 'light', 'paper']
 
 /** 标题栏组件 — JetBrains 风格：36px 高，含缩放控制 */
 export default function TitleBar() {
@@ -105,13 +106,27 @@ export default function TitleBar() {
     >
       {/* 左侧：macOS 留出交通灯位置 + 应用名 */}
       <div className="flex items-center flex-shrink-0" style={{ paddingLeft: isMac ? 78 : 12 }}>
-        <span className="text-xs font-semibold tracking-wider brand-gradient">
+        <span className="text-xs font-semibold tracking-wider brand-gradient"
+                style={{ fontFamily: 'var(--font-display)' }}>
           Vela
         </span>
         {projectName && (
-          <span className="text-xs ml-2 opacity-50" style={{ color: 'var(--color-titlebar-text)' }}>
-            — {projectName}
-          </span>
+          <>
+            <span
+              aria-hidden
+              className="flex-shrink-0"
+              style={{
+                width: 1,
+                height: 11,
+                margin: '0 8px',
+                backgroundColor: 'var(--color-titlebar-text)',
+                opacity: 0.28,
+              }}
+            />
+            <span className="text-xs opacity-60" style={{ color: 'var(--color-titlebar-text)' }}>
+              {projectName}
+            </span>
+          </>
         )}
         {/* 未保存警示灯：当存在 dirty tab 时显示橙色小圆点 */}
         {hasDirty && (
@@ -122,10 +137,10 @@ export default function TitleBar() {
               width: 7,
               height: 7,
               borderRadius: '50%',
-              backgroundColor: 'var(--color-warning, #f59e0b)',
+              backgroundColor: 'var(--color-warning)',
               marginLeft: 7,
               flexShrink: 0,
-              boxShadow: '0 0 4px var(--color-warning, #f59e0b)',
+              boxShadow: '0 0 4px var(--color-warning)',
               animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
           />

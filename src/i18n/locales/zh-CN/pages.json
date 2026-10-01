@@ -9,7 +9,8 @@
     "importNovel": "导入小说",
     "importNovelDesc": "导入已有作品续写",
     "recentProjects": "最近项目",
-    "footer": "Vela v0.1.0 · 七阶段 AI 驱动创作流水线 · 本地化数据安全"
+    "footer": "Vela v0.1.0 · 七阶段 AI 驱动创作流水线 · 本地化数据安全",
+    "emptyRecent": "还没有最近打开的项目"
   },
   "knowledge": {
     "title": "知识库概览",
@@ -19,6 +20,7 @@
   "knowledgeOverview": {
     "title": "知识库",
     "description": "基于 LanceDB 的本地向量数据库，定稿后自动入库，为 AI 写作提供语义检索上下文",
+    "headerStats": "{{docs}} 文档 · {{chunks}} 分块",
     "openProjectFirst": "请先打开项目",
     "docCount": "文档数量",
     "chunkCount": "知识切片",
