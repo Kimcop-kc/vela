@@ -7,15 +7,15 @@ import type { NovelConfig } from '../../shared/ipc-channels'
 import type { CharacterData } from '../../../electron/repositories/character-repository'
 import i18n from '../../i18n'
 
-import { runPostProcessPipeline, type PostProcessStep, stripThinkingTags } from './workflow-utils'
+import { runPostProcessPipeline, type PostProcessStep } from './workflow-utils'
 import {
   buildSegmentDirective,
   buildContinuationDirective,
   callWithShrink,
-  generateWithContinuation,
+  generateJsonItemsWithResume,
   mergeByKey,
-  resolveChunkBudget,
   resolveGenerationBudgets,
+  resolveJsonChunkBudget,
   splitTextByTokenBudget,
 } from './segmented-generation'
 
@@ -177,76 +177,6 @@ export function getNarrativePOVLabel(pov: string): string {
 
 export const ARCH_CHARACTER_SCOPE = 'arch_characters'
 
-/**
- * 容错解析角色卡 JSON：兼容全角标点、尾逗号、单引号、未加引号键，以及数组/对象等不同包裹格式。
- * 解析失败时抛出 workflowDefs.charExtractError，由调用方决定是否降级。
- */
-function parseCharacterCards(raw: string): Array<Record<string, unknown>> {
-  const cleanedCards = stripThinkingTags(raw)
-  const jsonStr = cleanedCards.replace(/```json?\n?/g, '').replace(/```/g, '').trim()
-  // 容错解析：AI 输出常含全角标点（：，、“”）、尾逗号、单引号或未加引号的键
-  const normalized = jsonStr
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/：/g, ':')
-    .replace(/，/g, ',')
-    .replace(/,(\s*[}\]])/g, '$1')
-
-  const sliceJson = (s: string, open: string, close: string): string | null => {
-    const start = s.indexOf(open)
-    const end = s.lastIndexOf(close)
-    return start >= 0 && end > start ? s.substring(start, end + 1) : null
-  }
-
-  // 依次尝试多种候选：数组区间、对象区间、原文、单引号修正、未加引号键修正
-  const candidates = [
-    sliceJson(normalized, '[', ']'),
-    sliceJson(normalized, '{', '}'),
-    normalized,
-    normalized.replace(/'/g, '"'),
-    normalized.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
-  ]
-
-  let parsedData: unknown = null
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    try {
-      parsedData = JSON.parse(candidate)
-      break
-    } catch {
-      // 尝试下一个候选
-    }
-  }
-
-  if (parsedData === null) {
-    throw new Error(t('workflowDefs.charExtractError', { preview: normalized.slice(0, 500) }))
-  }
-
-  // 兼容多种格式：直接数组、{ characters: [...] }、或其他包含数组的对象
-  let parsedCards: Array<Record<string, unknown>> = []
-  if (Array.isArray(parsedData)) {
-    // 直接返回数组 [...]
-    parsedCards = parsedData as Array<Record<string, unknown>>
-  } else if (parsedData && typeof parsedData === 'object') {
-    const obj = parsedData as Record<string, unknown>
-    // 优先查找 characters 字段
-    if (Array.isArray(obj.characters)) {
-      parsedCards = obj.characters as Array<Record<string, unknown>>
-    } else {
-      // 回退：查找对象中第一个包含对象的数组字段
-      for (const value of Object.values(obj)) {
-        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
-          parsedCards = value as Array<Record<string, unknown>>
-          break
-        }
-      }
-    }
-  }
-
-  return parsedCards
-}
-
-
 export function createCharacterExtractSteps(_projectPath: string, characterDynamicsContent: string, genre: string): PostProcessStep[] {
   return [
     {
@@ -267,7 +197,9 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 只按输入预算切的话，输出必然撞上模型输出上限（finish_reason=length）。
         const model = llmStore.modelForPurpose('arch_characters')
         const budgets = resolveGenerationBudgets(model?.maxTokens)
-        const chunkBudget = resolveChunkBudget(budgets)
+        // 角色卡 JSON 往往比角色图谱本身更长，切段预算再按输出上限的膨胀系数收紧一次，
+        // 把「一次要吐出的 JSON 超过模型输出上限」挡在第一次调用之前。
+        const chunkBudget = resolveJsonChunkBudget(budgets)
         const chunks = splitTextByTokenBudget(characterDynamicsContent, chunkBudget)
         const safeChunks = chunks.length > 0 ? chunks : [characterDynamicsContent]
         const cardGroups: Array<Array<Record<string, unknown>>> = []
@@ -282,36 +214,53 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
               .withCharacterDynamics(segment)
               .withGenre(genre)
               .build() + directive
-            // 输出被长度上限截断时保留已产出的角色卡 JSON，把结尾回传给模型接着补完，
-            // 而不是整段丢弃后重跑（原样重跑通常还会在同一处截断）。
-            const outcome = await generateWithContinuation(async (ctx) => {
-              const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-                { role: 'system', content: systemRole },
-                { role: 'user', content: extractPrompt }
-              ]
-              if (ctx.round > 0) {
-                cb.log(t('segmented.continuationLog', { round: ctx.round }))
-                messages.push({ role: 'assistant', content: ctx.tail })
-                messages.push({ role: 'user', content: buildContinuationDirective(ctx.round) })
+            // 输出被长度上限截断时，先救回已经写完的角色卡，再把「已提取的角色」告诉模型让它补剩余角色；
+            // 每一轮单独解析后按名字合并，不要求几轮文本能拼成一份合法 JSON。
+            const outcome = await generateJsonItemsWithResume({
+              keyOf: (card) => String(card.name ?? ''),
+              attempt: async (ctx) => {
+                const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+                  { role: 'system', content: systemRole },
+                  { role: 'user', content: extractPrompt }
+                ]
+                if (ctx.round > 0) {
+                  cb.log(t('segmented.jsonResumeLog', { round: ctx.round, count: ctx.items.length }))
+                  messages.push({ role: 'assistant', content: ctx.tail })
+                  messages.push({ role: 'user', content: buildContinuationDirective(ctx.round, ctx.labels) })
+                }
+                let fullContent = ''
+                let truncated = false
+                await new Promise<void>((resolve, reject) => {
+                  llmStore.generateStream(
+                    messages,
+                    {
+                      onChunk: (chunk) => { fullContent += chunk; cb.appendText(chunk) },
+                      onDone: () => resolve(),
+                      onTruncated: (partial) => { fullContent = partial; truncated = true; resolve() },
+                      onError: (err) => reject(new Error(err))
+                    },
+                    undefined,
+                    { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
+                  )
+                })
+                return { text: fullContent, truncated }
               }
-              let fullContent = ''
-              let truncated = false
-              await new Promise<void>((resolve, reject) => {
-                llmStore.generateStream(
-                  messages,
-                  {
-                    onChunk: (chunk) => { fullContent += chunk; cb.appendText(chunk) },
-                    onDone: () => resolve(),
-                    onTruncated: (partial) => { fullContent = partial; truncated = true; resolve() },
-                    onError: (err) => reject(new Error(err))
-                  },
-                  undefined,
-                  { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
-                )
-              })
-              return { text: fullContent, truncated }
             })
-            return parseCharacterCards(outcome.text)
+            if (outcome.truncated) {
+              cb.log(t('segmented.jsonResumeExhausted', { rounds: outcome.rounds, count: outcome.items.length }))
+            } else if (outcome.rounds > 1) {
+              cb.log(t('segmented.jsonResumeDone', { rounds: outcome.rounds, count: outcome.items.length }))
+            }
+            if (outcome.items.length === 0) {
+              // 一条都没救回来：说清到底是「被长度上限截断」还是「格式不对」。
+              // 截断抛的是可识别的长度上限错误，交给 callWithShrink 把这一段再切小重试。
+              throw new Error(
+                outcome.truncated
+                  ? t('segmented.outputIncomplete')
+                  : t('workflowDefs.charExtractError', { preview: outcome.text.slice(0, 500) })
+              )
+            }
+            return outcome.items
           }
           try {
             // 本段输出被截断时，自动把这一段对半再切后重试，尽量把角色卡拿全

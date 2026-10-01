@@ -542,6 +542,17 @@ export function extractJsonFragment(text: string): string | null {
 
 /** 容错解析 JSON，失败返回 null（不抛错，由调用方决定降级策略） */
 export function parseLooseJson<T>(text: string): T | null {
+  // 输出被长度上限截断时，先按「已经写完的条目」重建成一份合法 JSON。
+  // 这一步必须排在片段提取之前：片段提取会从截断的文本里抠出一个残缺的内层对象，
+  // 调用方拿到它反而会以为解析成功了，实际字段全丢。
+  const repaired = repairTruncatedJson(text)
+  if (repaired) {
+    try {
+      return JSON.parse(repaired) as T
+    } catch {
+      // 修补结果不可用：退回常规片段提取
+    }
+  }
   const fragment = extractJsonFragment(text)
   if (!fragment) return null
   try {
@@ -549,6 +560,357 @@ export function parseLooseJson<T>(text: string): T | null {
   } catch {
     return null
   }
+}
+
+// ===== JSON 截断补救（结构化输出被长度上限截断后仍要能用） =====
+
+/** 结构化输出相对输入的膨胀系数：卡片/蓝图这类字段比原文更啰嗦，按它收紧切段预算 */
+export const JSON_OUTPUT_INFLATION = 1.6
+
+/**
+ * JSON 类任务的切段预算。
+ *
+ * 只按输入预算切段时，本段要吐出的 JSON 常常比输入本身更长，仍然会撞上输出上限；
+ * 这里再按「输出上限 / 膨胀系数」收紧一次，把截断挡在第一次调用之前。
+ */
+export function resolveJsonChunkBudget(budgets: GenerationBudgets, inputReserve = 2000): number {
+  const byOutput = Math.floor(budgets.outputTokens / JSON_OUTPUT_INFLATION)
+  return Math.max(600, Math.min(budgets.inputTokens - inputReserve, byOutput))
+}
+
+/** 从（可能被截断的）JSON 输出中救回的条目 */
+export interface JsonSalvageResult {
+  /** 已经完整闭合、可解析的对象条目（按出现顺序） */
+  items: Array<Record<string, unknown>>
+  /** 承载条目的数组字段名（如 characters、chapters）；无法判断时为 null */
+  field: string | null
+  /** 条目的承载结构：顶层数组 / 包在对象里的数组 / 嵌套过深无法安全重建 */
+  shape: 'array' | 'wrapped' | 'nested' | 'none'
+  /** 整段文本本身就是一份完整合法的 JSON */
+  complete: boolean
+  /** 文本结尾仍停在未闭合结构里（说明被长度上限截断） */
+  truncated: boolean
+}
+
+interface JsonScanItem {
+  start: number
+  end: number
+  value: Record<string, unknown>
+  arrayDepth: number
+}
+
+interface JsonScanResult {
+  items: JsonScanItem[]
+  field: string | null
+  arrayDepth: number | null
+  openDepth: number
+  insideString: boolean
+  broken: boolean
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * 把字符串之外的全角标点还原成半角，供容错解析使用。
+ *
+ * 字符串内部的内容原样保留（中文引号、书名号、全角逗号都是正文的一部分），
+ * 只修正结构位置上的“ ： ”与“ ， ”，避免把角色卡里的中文描写改坏。
+ */
+function normalizeJsonPunctuation(text: string): string {
+  let result = ''
+  let inString = false
+  let quote = ''
+  let escaped = false
+  for (const char of text) {
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        result += char
+        continue
+      }
+      if (char === '\\') {
+        escaped = true
+        result += char
+        continue
+      }
+      if (char === quote) {
+        inString = false
+        result += '"'
+        continue
+      }
+      result += char
+      continue
+    }
+    if (char === '"' || char === '\u201c' || char === '\u201d') {
+      inString = true
+      quote = char
+      result += '"'
+      continue
+    }
+    if (char === '\uff1a') {
+      result += ':'
+      continue
+    }
+    if (char === '\uff0c') {
+      result += ','
+      continue
+    }
+    result += char
+  }
+  return result
+}
+
+/** 解析一段 JSON；依次尝试原文、全角标点修正、去尾逗号三种形式 */
+function tryParseJsonValue(raw: string): unknown {
+  const normalized = normalizeJsonPunctuation(raw)
+  const variants = [raw, normalized, normalized.replace(/,(\s*[}\]])/g, '$1')]
+  for (const variant of variants) {
+    try {
+      return JSON.parse(variant)
+    } catch {
+      // 试下一种写法
+    }
+  }
+  return undefined
+}
+
+/** 找到数组前面的字段名：{"characters": [ ... } 里的 characters */
+function detectArrayFieldName(text: string, arrayStart: number): string | null {
+  const head = text.slice(0, arrayStart)
+  const match = head.match(/"((?:[^"\\]|\\.){1,64})"\s*:\s*$/)
+  return match ? match[1] : null
+}
+
+/**
+ * 逐字符扫描 JSON 文本，收集所有「作为数组元素且已经完整闭合」的对象。
+ *
+ * 字符串内部的括号与逗号不参与计数，所以即使输出被截断在某个字符串中间，
+ * 此前已经写完的条目依然能被完整取出来，而不是整段 JSON 一起作废。
+ */
+function scanJsonArrayItems(text: string): JsonScanResult {
+  const stack: Array<{ char: '{' | '['; start: number }> = []
+  const items: JsonScanItem[] = []
+  let inString = false
+  let escaped = false
+  let field: string | null = null
+  let arrayDepth: number | null = null
+  let broken = false
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') {
+      inString = true
+      continue
+    }
+    if (char === '{' || char === '[') {
+      stack.push({ char, start: index })
+      continue
+    }
+    if (char === '}' || char === ']') {
+      const top = stack.pop()
+      if (!top || top.char !== (char === '}' ? '{' : '[')) {
+        broken = true
+        break
+      }
+      if (char !== '}') continue
+      const parent = stack[stack.length - 1]
+      if (!parent || parent.char !== '[') continue
+      const value = tryParseJsonValue(text.slice(top.start, index + 1))
+      if (!isPlainObject(value)) continue
+      const depth = stack.length - 1
+      if (arrayDepth === null) arrayDepth = depth
+      if (depth !== arrayDepth) continue
+      if (field === null) field = detectArrayFieldName(text, parent.start)
+      items.push({ start: top.start, end: index + 1, value, arrayDepth: depth })
+    }
+  }
+
+  return { items, field, arrayDepth, openDepth: stack.length, insideString: inString, broken }
+}
+
+/**
+ * 从模型输出里抢救结构化条目。
+ *
+ * 先按完整 JSON 解析；解析不了时退回逐字符扫描，把已经闭合的条目一条条取出来。
+ * 这样「被长度上限截断」不再等于「整步失败」，已产出的结果仍然可用。
+ */
+export function salvageJson(text: string): JsonSalvageResult {
+  const trimmed = stripCodeFences(text ?? '').trim()
+  if (!trimmed) {
+    return { items: [], field: null, shape: 'none', complete: false, truncated: false }
+  }
+
+  const whole = tryParseJsonValue(trimmed)
+  if (whole !== undefined && whole !== null && typeof whole === 'object') {
+    if (Array.isArray(whole)) {
+      return { items: whole.filter(isPlainObject), field: null, shape: 'array', complete: true, truncated: false }
+    }
+    for (const [key, value] of Object.entries(whole)) {
+      if (Array.isArray(value) && value.some(isPlainObject)) {
+        return { items: value.filter(isPlainObject), field: key, shape: 'wrapped', complete: true, truncated: false }
+      }
+    }
+    return { items: [], field: null, shape: 'none', complete: true, truncated: false }
+  }
+
+  const scan = scanJsonArrayItems(trimmed)
+  const shape: JsonSalvageResult['shape'] =
+    scan.broken || scan.arrayDepth === null || scan.items.length === 0
+      ? 'none'
+      : scan.arrayDepth === 0
+        ? 'array'
+        : scan.arrayDepth === 1
+          ? 'wrapped'
+          : 'nested'
+
+  return {
+    items: scan.items.map(item => item.value),
+    field: scan.field,
+    shape,
+    complete: false,
+    truncated: scan.broken || scan.openDepth > 0 || scan.insideString,
+  }
+}
+
+/**
+ * 把被截断的 JSON 修补成一份合法 JSON：只保留已经写完的条目。
+ *
+ * 结构安全时才重建（顶层数组，或「对象里套一个数组」的常见形态），
+ * 嵌套过深或字段名判断不出来时返回 null，交给调用方按失败处理。
+ */
+export function repairTruncatedJson(text: string): string | null {
+  const salvage = salvageJson(text)
+  if (salvage.complete || salvage.items.length === 0) return null
+  if (salvage.shape === 'array') return JSON.stringify(salvage.items)
+  if (salvage.shape === 'wrapped') return JSON.stringify({ [salvage.field || 'items']: salvage.items })
+  return null
+}
+
+/**
+ * 续写衔接点修正：把已产出内容裁到「最后一条完整条目」为止，并补一个逗号。
+ *
+ * 直接把断在字符串中间的残片交给模型，它会先想办法把那半条补完，很容易继续截断；
+ * 裁掉残片后再续写，模型只需要接着写下一条，拼接结果也不会再出现半截 JSON。
+ */
+export function trimIncompleteJsonTail(text: string): string {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return text
+  const clean = stripCodeFences(trimmed).trim()
+  const salvage = salvageJson(clean)
+  if (salvage.complete || salvage.items.length === 0) return text
+  const scan = scanJsonArrayItems(clean)
+  const last = scan.items[scan.items.length - 1]
+  if (!last) return text
+  return `${clean.slice(0, last.end)},`
+}
+
+/** 条目在续写提示里的可读标识（角色名、章节标题、章节号……） */
+const ITEM_LABEL_KEYS = ['name', 'title', 'chapterTitle', 'chapter', 'number', 'chapterNumber', 'id']
+
+/** 取出条目的可读标识，供续写时告诉模型「这些已经输出过」 */
+export function describeJsonItems(items: Array<Record<string, unknown>>, max = 60): string[] {
+  const labels: string[] = []
+  for (const item of items) {
+    for (const key of ITEM_LABEL_KEYS) {
+      const value = item[key]
+      if (typeof value === 'string' && value.trim() !== '') {
+        labels.push(value.trim())
+        break
+      }
+      if (typeof value === 'number') {
+        labels.push(String(value))
+        break
+      }
+    }
+    if (labels.length >= max) break
+  }
+  return labels
+}
+
+/** 逐轮续写结构化输出时的上下文 */
+export interface JsonResumeAttemptContext {
+  /** 轮次，从 0 开始；0 表示首次生成 */
+  round: number
+  /** 已经拿到的条目（按主键去重后） */
+  items: Array<Record<string, unknown>>
+  /** 已拿到条目的标识，供拼进续写指令 */
+  labels: string[]
+  /** 已产出内容裁掉残片后的结尾片段 */
+  tail: string
+}
+
+/** 续写循环的最终结果 */
+export interface JsonResumeOutcome {
+  items: Array<Record<string, unknown>>
+  /** 实际调用轮数 */
+  rounds: number
+  /** 最后一轮是否仍被截断（true 表示结果可能仍不完整） */
+  truncated: boolean
+  /** 最后一轮的原始输出 */
+  text: string
+}
+
+export interface JsonResumeOptions {
+  /** 每轮调用一次模型，返回本轮文本与是否被长度上限截断 */
+  attempt: (ctx: JsonResumeAttemptContext) => Promise<{ text: string; truncated?: boolean }>
+  /** 条目主键，用于跨轮去重与合并（如角色名、章节号） */
+  keyOf: (item: Record<string, unknown>) => string
+  /** 同一条目在多轮中重复出现时的取值策略，默认保留先出现的 */
+  prefer?: MergePreference
+  maxRounds?: number
+  onRound?: (info: { round: number; items: number; added: number; truncated: boolean }) => void
+  isCancelled?: () => boolean
+}
+
+/**
+ * 「生成结构化条目 → 被截断就接着补」的循环。
+ *
+ * 与 generateWithContinuation 的区别：每一轮单独解析，最后按主键合并，
+ * 而不是把几轮文本拼成一份再整体 JSON.parse。模型续写时常见的
+ * 「重新开头」「重复上一条」「漏写逗号」都不再影响结果。
+ */
+export async function generateJsonItemsWithResume(options: JsonResumeOptions): Promise<JsonResumeOutcome> {
+  const maxRounds = Math.max(1, options.maxRounds ?? MAX_CONTINUATION_ROUNDS)
+  const prefer = options.prefer ?? 'first'
+  let items: Array<Record<string, unknown>> = []
+  let rounds = 0
+  let truncated = false
+  let lastText = ''
+
+  for (let round = 0; round < maxRounds; round++) {
+    if (options.isCancelled?.()) break
+    const result = await options.attempt({
+      round,
+      items,
+      labels: describeJsonItems(items),
+      tail: tailOf(trimIncompleteJsonTail(lastText)),
+    })
+    rounds = round + 1
+    lastText = result.text
+    truncated = result.truncated === true
+
+    const salvaged = salvageJson(result.text).items
+    const before = items.length
+    if (salvaged.length > 0) {
+      items = mergeByKey([items, salvaged], { keyOf: options.keyOf, prefer, keepInvalid: true })
+    }
+    const added = items.length - before
+    options.onRound?.({ round: rounds, items: items.length, added, truncated })
+
+    if (!truncated) break
+    // 续写一轮却没有任何新增：再续也难有进展，及时收手
+    if (round > 0 && added === 0) break
+  }
+
+  return { items, rounds, truncated, text: lastText }
 }
 
 // ===== 分段 / 续写指令（i18n） =====
@@ -671,6 +1033,8 @@ export async function generateWithContinuation(
  * 续写指令：配合 messages 形式使用——把上一轮输出作为 assistant 消息回传后，
  * 追加这条 user 指令要求模型从断点继续，而不是重写。
  */
-export function buildContinuationDirective(round: number): string {
-  return `---\n${t('segmented.continuationHeader', { round })}\n${t('segmented.continuationBody')}`
+export function buildContinuationDirective(round: number, labels: string[] = []): string {
+  const head = `---\n${t('segmented.continuationHeader', { round })}\n${t('segmented.continuationBody')}`
+  if (labels.length === 0) return head
+  return `${head}\n${t('segmented.continuationSkip', { labels: labels.join('、') })}`
 }

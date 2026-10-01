@@ -18,6 +18,7 @@ import {
   isOutputLengthError,
   mergeByKey,
   mergeChapterNotes,
+  repairTruncatedJson,
   resolveChunkBudget,
   resolveGenerationBudgets,
   splitTextByTokenBudget,
@@ -110,6 +111,16 @@ function parseJSON<T>(text: string): T {
   try {
     return JSON.parse(cleanText) as T
   } catch {
+    // 输出被长度上限截断时，先尽量把已经写完的条目救回来（合法但不完整），
+    // 拿不到任何条目时再抛错，让上层继续按「缩小范围」重试。
+    const repaired = repairTruncatedJson(text)
+    if (repaired) {
+      try {
+        return JSON.parse(repaired) as T
+      } catch {
+        // 修补后仍不可用：按失败处理
+      }
+    }
     // 续写若干轮后仍拿不到完整 JSON，通常是输出仍未写完：
     // 抛出可被 isOutputLengthError 识别的错误，让上层继续按「缩小范围」重试。
     throw new Error(t('segmented.outputIncomplete'))

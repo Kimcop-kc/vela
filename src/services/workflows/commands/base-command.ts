@@ -3,7 +3,15 @@ import { useLLMStore } from '../../../stores/llm-store'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import i18n from '../../../i18n'
-import { buildContinuationDirective, generateWithContinuation } from '../segmented-generation'
+import {
+  buildContinuationDirective,
+  describeJsonItems,
+  dropContinuationOverlap,
+  generateWithContinuation,
+  repairTruncatedJson,
+  salvageJson,
+  trimIncompleteJsonTail,
+} from '../segmented-generation'
 
 export interface CommandExecuteParams {
   step: unknown
@@ -222,16 +230,24 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           { role: 'user', content: prompt },
         ]
         if (ctx.round > 0) {
-          // 把上一轮的结尾作为 assistant 消息回传，再追加续写指令，模型只需补写剩余内容
+          // 把上一轮的结尾作为 assistant 消息回传，再追加续写指令，模型只需补写剩余内容；
+          // 结构化输出再额外告诉它「这些条目已经输出过」，避免同一批内容反复重写。
           callbacks.log(i18n.t('segmented.continuationLog', { ns: 'commands', round: ctx.round }))
           messages.push({ role: 'assistant', content: ctx.tail })
-          messages.push({ role: 'user', content: buildContinuationDirective(ctx.round) })
+          const doneLabels = describeJsonItems(salvageJson(ctx.accumulated).items).slice(-30)
+          messages.push({ role: 'user', content: buildContinuationDirective(ctx.round, doneLabels) })
         }
         return this.generateStreamOnce(messages, callbacks, { ...options, purpose }, context)
       },
       {
         maxRounds: options?.maxRounds,
         isCancelled: () => context?.cancelled === true,
+        // 结构化输出被截断时，先把断在中间的那半条裁掉再续写：
+        // 直接把残片丢给模型，它会先去补半条，往往继续截断；裁到上一条末尾就顺畅得多。
+        merge: (accumulated, next) => {
+          const base = trimIncompleteJsonTail(accumulated)
+          return base + dropContinuationOverlap(base, next)
+        },
       },
     )
 
@@ -272,6 +288,16 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       
       return JSON.parse(cleanText) as T
     } catch {
+      // 输出被长度上限截断时，先尽量把已经写完的条目救回来：
+      // 拿到的是一份合法（可能不完整）的结果，比整步失败好，上层也能继续按需补齐。
+      const repaired = repairTruncatedJson(text)
+      if (repaired) {
+        try {
+          return JSON.parse(repaired) as T
+        } catch {
+          // 修补后仍不可用：按下面的失败处理
+        }
+      }
       // JSON 解析失败最常见的原因是「输出被长度上限截断」：把可识别的提示一并带上，
       // 让上层能按「缩小范围重试」处理，而不是把整步判定为失败。
       throw new Error(`${i18n.t('base.jsonParseError', { ns: 'commands', tail: text.slice(-100) })} ${i18n.t('segmented.outputIncomplete', { ns: 'commands' })}`)

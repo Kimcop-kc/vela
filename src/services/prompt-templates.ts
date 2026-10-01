@@ -112,20 +112,22 @@ export const BUILTIN_PROMPTS: PromptTemplate[] = [
 5. 智能推荐：根据类型和题材推荐最合适的故事结构和叙事视角。`,
     systemSuffix: `【输出格式限制】
 - 必须以标准的 JSON 格式返回，确保匹配以下结构。
+- 只输出上面列出的字段，不要输出 totalChapters / wordsPerChapter（章数与每章字数由界面参数决定）。
+- 各字段信息写完即止，不要为凑字数注水；若接近输出长度上限，优先保证 JSON 完整闭合：宁可把当前字段写短，也绝不能让 JSON 中途断开、缺少右括号或右引号。
 
 【JSON 字段结构】
 {
-    "genre": "主类型（玄幻/仙侠/都市/科幻/历史/悬疑/游戏/军事/奇幻/武侠/现实/其他）",
-    "targetAudience": "受众目标（男频/女频/通用/短篇）",
+    "genre": "只填一个值，必须严格取自以下列表，不得追加说明、不得自创：玄幻 / 仙侠 / 都市 / 科幻 / 历史 / 军事 / 游戏 / 末世 / 悬疑 / 灵异 / 言情 / 古言 / 现言 / 奇幻 / 武侠 / 轻小说 / 同人 / 职场",
+    "targetAudience": "只填一个值，必须严格取自以下列表，不得追加说明：男频 / 女频 / 双性向 / 全龄",
     "subGenre": "细分子类型及核心标签（如：末日废土、苟道流、权谋、大女主逆袭）",
-    "plotStructure": "故事结构（three_act=三幕结构 / heros_journey=英雄之旅 / save_the_cat=节拍表 / kishotenketsu=起承转合 / multi_thread=多线叙事 / freeform=自由结构，根据类型推荐最合适的）",
-    "narrativePOV": "叙事视角（third_limited=第三人称有限视角 / first_person=第一人称 / third_omniscient=第三人称全知视角 / multi_pov=多视角轮换，根据类型推荐最合适的）",
-    "coreOutline": "核心大纲（不少于150字，含：主角的致命危机/开局困境、必须完成的核心目标、终极大危机、主要爽点起伏）",
+    "plotStructure": "只填一个枚举值，不得追加说明：three_act（三幕结构）/ heros_journey（英雄之旅）/ save_the_cat（节拍表）/ kishotenketsu（起承转合）/ multi_thread（多线叙事）/ freeform（自由结构）；选择理由写进 globalGuidance 开头一行",
+    "narrativePOV": "只填一个枚举值，不得追加说明：third_limited（第三人称有限视角）/ first_person（第一人称）/ third_omniscient（第三人称全知视角）/ multi_pov（多视角轮换）；选择理由写进 globalGuidance 开头一行",
+    "coreOutline": "核心大纲（300 字左右，上限 400 字，含：主角的致命危机/开局困境、必须完成的核心目标、终极大危机、主要爽点起伏）",
     "worldSetting": "独特的背景设定（物理维度、权力断层、核心资源争夺机制）",
     "goldenFinger": "核心卖点与金手指体系（获取方式、具体功能、进阶成长路径、副作用/限制）",
     "protagonistProfile": "主角人设档案（极具反差的性格弱点、表面伪装标签、核心驱动力：物质目标+深层灵魂渴望）",
     "globalGuidance": "全局写作指导与核心禁忌（严格基于{{number_of_chapters}}章规模：前/中/后期各占多少章、小/中/大高潮的具体章节频率、严禁触碰的毒点）",
-    "writingStyle": "文风配置（不少于100字，涵盖：叙述节奏快慢与场景切换频率、描写密度偏好、对话风格与口语化程度、用词偏好古风/现代/专业术语、情感基调热血/冷峻/诙谐/沉重、标志性修辞手法与过渡技巧。请根据类型和受众推荐最匹配的写作风格）"
+    "writingStyle": "文风配置（120 字左右，上限 200 字，涵盖：叙述节奏快慢与场景切换频率、描写密度偏好、对话风格与口语化程度、用词偏好古风/现代/专业术语、情感基调热血/冷峻/诙谐/沉重、标志性修辞手法与过渡技巧。请根据类型和受众推荐最匹配的写作风格）"
 }`,
     contentLocalized: {
       en: `Based on the author's one-line idea or initial concept, please expand and complete a novel's global bestseller configuration following the most mature and commercially dominant web novel core structure.
@@ -357,7 +359,8 @@ Describe: the overt conflict line (current biggest threat) + hidden main-line hi
 1. 主角必须严格符合主角档案基调，不可偏离。
 2. 所有角色的设计必须贴合「{{genre}}」类型的读者期待。
 3. 默认避免圣母、降智反派或纯工具人（除非作者明确要求）。
-4. 仅返回角色图谱文本，不要任何客套话。
+4. 主角与每位核心角色都要单独写一行「身份档案」，格式固定为：性别｜年龄｜当前身份与境界（一句话讲清，不要展开）。这一行会在后续提取角色卡时被直接取用，务必写准。
+5. 仅返回角色图谱文本，不要任何客套话。
 
 【参考作品风格（如有，调性与节奏可参考以下作品）】
 {{reference_works}}`,
@@ -399,7 +402,8 @@ Briefly describe how all characters inevitably clash due to survival pressures, 
 1. Protagonist must strictly match the protagonist profile's tone — no deviations.
 2. All character designs must fit reader expectations for the "{{genre}}" genre.
 3. By default avoid saintly sages, idiotic villains, or pure utility characters (unless the author explicitly requests them).
-4. Return only the character map text — no pleasantries.
+4. The protagonist and every core character must each have one dedicated "identity file" line in this exact form: gender | age | current identity and tier (one short sentence, do not elaborate). It is read verbatim when character cards are extracted later, so keep it accurate.
+5. Return only the character map text — no pleasantries.
 
 【Reference Works (if any)】
 {{reference_works}}`,
@@ -438,7 +442,8 @@ Briefly describe how all characters inevitably clash due to survival pressures, 
 1. Главный герой должен строго соответствовать тону профиля — никаких отклонений.
 2. Все персонажи должны соответствовать ожиданиям читателей жанра «{{genre}}».
 3. По умолчанию избегайте безоговорочно святых, тупых злодеев или чисто функциональных персонажей (если автор явно не попросил).
-4. Возвращайте только текст карты персонажей — никаких вступлений.
+4. Для главного героя и каждого ключевого персонажа добавьте отдельную строку «личное дело» строго в таком виде: пол | возраст | текущий статус и уровень (одно короткое предложение, без подробностей). Эта строка считывается напрямую при извлечении карточек персонажей, поэтому пишите её точно.
+5. Возвращайте только текст карты персонажей — никаких вступлений.
 
 【Эталонные произведения (если есть)】
 {{reference_works}}`
@@ -1984,10 +1989,10 @@ If no characters had state changes and no new characters appeared, return {"upda
 
 {
   "novelConfig": {
-    "genre": "主类型（玄幻/仙侠/都市/科幻/历史/悬疑/游戏/军事/奇幻/武侠/现实/其他）",
-    "targetAudience": "受众（男频/女频/通用）",
+    "genre": "只填一个值，必须严格取自以下列表，不得追加说明、不得自创：玄幻 / 仙侠 / 都市 / 科幻 / 历史 / 军事 / 游戏 / 末世 / 悬疑 / 灵异 / 言情 / 古言 / 现言 / 奇幻 / 武侠 / 轻小说 / 同人 / 职场",
+    "targetAudience": "只填一个值，必须严格取自以下列表，不得追加说明：男频 / 女频 / 双性向 / 全龄",
     "subGenre": "细分类型及标签",
-    "coreOutline": "核心大纲（150字以上，含主线目标、核心冲突、故事走向）",
+    "coreOutline": "核心大纲（300 字以内，含主线目标、核心冲突、故事走向）",
     "worldSetting": "世界观背景与力量体系",
     "goldenFinger": "主角金手指/核心能力体系",
     "protagonistProfile": "主角人设（性格、背景、核心驱动力）",
@@ -2029,7 +2034,8 @@ If no characters had state changes and no new characters appeared, return {"upda
 要求：
 1. characterCards 仅包含主角和重要配角（3-8人），不要填写次要龙套
 2. 所有字段基于内容推断，未能确定的字段填写"（待确认）"
-3. currentState 应基于最新内容（结尾采样）推断，不是初始状态`,
+3. currentState 应基于最新内容（结尾采样）推断，不是初始状态
+4. 若接近输出长度上限，优先保证 JSON 完整闭合：宁可少写 1-2 张角色卡，也不能让 JSON 中途断开、缺少右括号或右引号。`,
     contentLocalized: {
       en: `Based on the following existing novel content excerpts, reverse-engineer the complete setting system of this novel to support continuation work.
 
@@ -2176,9 +2182,15 @@ Requirements:
 【任务要求】
 1. 提取所有在图谱中明确描述的角色（主角、反派、重要配角），不要遗漏。
 2. 龙套或仅一笔带过的角色不用提取。
-3. 所有字段基于图谱内容提取。如果图谱中未明确描写外貌，请务必根据角色的身份背景与性格推测并补充一段丰满的标志性外貌描写（外貌特征绝对不要留空或写未知）。未能确定的其他次要字段可填写空字符串。
-4. role 字段仅限以下取值：protagonist（主角）、antagonist（反派）、supporting（配角）、minor（龙套）。
-5. currentState 是角色的初始状态（故事开始时），updatedAtChapter 固定为 0。
+3. 所有字段基于图谱内容提取：图谱里没写、也推不出来的字段直接填空字符串或省略，不要编造。
+4. 每个字段都要短，务必让整份结果留在本轮输出上限之内：
+   - appearance：只写 2-4 个能直接入文的辨识点（衣着、气质、独特标志），不超过 60 字；图谱没描写外貌时按身份背景合理推断，同样不超过 60 字，不要写成散文；
+   - personality、motivation、relationships、arc、notes：各不超过 50 字；
+   - background、abilities：各不超过 80 字；
+   - currentState 里的每一项：不超过 20 字。
+5. role 字段仅限以下取值：protagonist（主角）、antagonist（反派）、supporting（配角）、minor（龙套）。
+6. currentState 是角色的初始状态（故事开始时），updatedAtChapter 固定为 0。
+7. 【重要】写不下时宁可少写后面的角色，也不要在卡片中间断开：如果接近输出上限，必须先把当前这张角色卡的最后一个字段写完再收尾。写到一半的卡片会被整条丢弃。
 
 【输出格式】
 必须返回一个 JSON 对象，格式如下（characters 数组包含所有角色）：
@@ -2223,9 +2235,15 @@ Requirements:
 【Task Requirements】
 1. Extract all clearly described characters in the dynamics (protagonist, antagonist, key supporting characters) — do not omit any.
 2. Do not extract background extras or characters mentioned only in passing.
-3. All fields are extracted from the dynamics text. If the dynamics do not explicitly describe appearance, you MUST infer and provide a rich signature appearance description based on the character's background and personality (appearance must NEVER be left blank or marked as unknown). Other minor fields that cannot be determined may be left as empty strings.
-4. The role field may only have these values: protagonist, antagonist, supporting, minor.
-5. currentState represents the character's initial state (at story start); updatedAtChapter is fixed at 0.
+3. All fields come from the dynamics text: if a field is neither stated nor reasonably inferable, leave it as an empty string or omit it - never fabricate.
+4. Keep every field short so the whole result fits in one output window:
+   - appearance: only 2-4 concrete identifying details (clothing, bearing, a distinctive mark), max 60 characters; if the dynamics do not describe appearance, infer it from background and personality, still max 60 characters, never a prose paragraph;
+   - personality, motivation, relationships, arc, notes: max 50 characters each;
+   - background, abilities: max 80 characters each;
+   - each currentState field: max 20 characters.
+5. The role field may only have these values: protagonist, antagonist, supporting, minor.
+6. currentState represents the character's initial state (at story start); updatedAtChapter is fixed at 0.
+7. IMPORTANT: if you run out of room, write fewer characters rather than cutting a card in half. When you approach the output limit, always finish the last field of the current character card before stopping. A half-written card is discarded entirely.
 
 【Output Format】
 Must return a JSON object in the following format (characters array contains all characters):
@@ -2269,9 +2287,15 @@ If the dynamics contain no extractable characters, return {"characters": []}.`,
 【Требования к заданию】
 1. Извлеките всех чётко описанных персонажей (главного героя, антагониста, ключевых второстепенных) — не пропускайте ни одного.
 2. Не извлекайте фоновых extras или персонажей, упомянутых лишь мимоходом.
-3. Все поля извлекаются из текста динамики. Если динамика не описывает внешность, вы ОБЯЗАНЫ вывести и предоставить богатое описание характерной внешности на основе предыстории и характера персонажа (внешность НИКОГДА не должна оставаться пустой или помечаться как неизвестная). Другие второстепенные поля, которые невозможно определить, могут быть оставлены пустыми строками.
-4. Поле role может принимать только значения: protagonist, antagonist, supporting, minor.
-5. currentState отражает начальное состояние персонажа (в начале истории); updatedAtChapter фиксируется на 0.
+3. Все поля берутся из текста динамики: если поле не указано и не выводится разумно, оставьте пустую строку или пропустите его — не придумывайте.
+4. Каждое поле должно быть коротким, чтобы весь результат уместился в один вывод:
+   - appearance: только 2-4 конкретные узнаваемые детали (одежда, манера, особая примета), не более 60 символов; если внешность не описана, выведите её из предыстории и характера, тоже не более 60 символов, без «прозы»;
+   - personality, motivation, relationships, arc, notes: не более 50 символов каждое;
+   - background, abilities: не более 80 символов каждое;
+   - каждое поле currentState: не более 20 символов.
+5. Поле role может принимать только значения: protagonist, antagonist, supporting, minor.
+6. currentState отражает начальное состояние персонажа (в начале истории); updatedAtChapter фиксируется на 0.
+7. ВАЖНО: если места не хватает, лучше опишите меньше персонажей, но не обрывайте карточку посередине. При приближении к лимиту вывода обязательно допишите последнее поле текущей карточки. Наполовину записанная карточка отбрасывается целиком.
 
 【Формат вывода】
 Обязательно верните объект JSON в следующем формате (массив characters содержит всех персонажей):
@@ -2473,12 +2497,12 @@ Requirements:
 
 {
   "novelConfig": {
-    "genre": "主类型（玄幻/仙侠/都市/科幻/历史/悬疑/游戏/军事/奇幻/武侠/现实/其他）",
-    "targetAudience": "受众（男频/女频/通用）",
+    "genre": "只填一个值，必须严格取自以下列表，不得追加说明、不得自创：玄幻 / 仙侠 / 都市 / 科幻 / 历史 / 军事 / 游戏 / 末世 / 悬疑 / 灵异 / 言情 / 古言 / 现言 / 奇幻 / 武侠 / 轻小说 / 同人 / 职场",
+    "targetAudience": "只填一个值，必须严格取自以下列表，不得追加说明：男频 / 女频 / 双性向 / 全龄",
     "subGenre": "细分类型及标签",
     "plotStructure": "故事结构（three_act/heros_journey/save_the_cat/kishotenketsu/multi_thread/freeform）",
     "narrativePOV": "叙事视角（third_limited/first_person/third_omniscient/multi_pov）",
-    "coreOutline": "核心大纲（150字以上，含主线目标、核心冲突、故事走向）",
+    "coreOutline": "核心大纲（300 字以内，含主线目标、核心冲突、故事走向）",
     "worldSetting": "世界观背景与力量体系",
     "goldenFinger": "主角金手指/核心能力体系",
     "protagonistProfile": "主角人设（性格、背景、核心驱动力）",
@@ -2521,7 +2545,8 @@ Requirements:
 1. characterCards 仅包含主角和重要配角（3-8人），不要填写次要龙套
 2. 所有字段基于检索片段推断，未能确定的填写"（待确认）"
 3. currentState 应基于最新章节推断当前状态，而非初始状态
-4. plotStructure 和 narrativePOV 请根据实际叙事特征判断，而非猜测`,
+4. plotStructure 和 narrativePOV 请根据实际叙事特征判断，而非猜测
+5. 若接近输出长度上限，优先保证 JSON 完整闭合：宁可少写 1-2 张角色卡，也不能让 JSON 中途断开、缺少右括号或右引号。`,
     contentLocalized: {
       en: `Based on the following precisely extracted key passages from the novel, reverse-engineer the complete setting system of this novel.
 

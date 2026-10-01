@@ -419,6 +419,10 @@
     "continuationDoneLog": "✂️ Continuation finished: {{rounds}} round(s), final length {{length}} characters.",
     "continuationExhaustedLog": "⚠️ Reached the maximum continuation rounds ({{rounds}}); the result may still be incomplete."
 ,
+    "continuationSkip": "These items were already produced - do not repeat them: {{labels}}.",
+    "jsonResumeLog": "✂️ Structured output was cut off; kept {{count}} complete items and continuing with the rest (round {{round}})…",
+    "jsonResumeDone": "✂️ Continuation finished: {{rounds}} round(s), {{count}} items in total.",
+    "jsonResumeExhausted": "⚠️ Continued for {{rounds}} round(s) and the output may still be truncated; {{count}} complete items were kept.",
     "outputIncomplete": "The model hit its output length limit and returned an incomplete result. Nothing has been committed; split the work or raise the output limit."
     },
   "review": {

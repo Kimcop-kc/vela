@@ -9,7 +9,9 @@ import {
   clampToTokenBudget,
   dropContinuationOverlap,
   estimateTokens,
+  describeJsonItems,
   extractJsonFragment,
+  generateJsonItemsWithResume,
   generateWithContinuation,
   halveText,
   isFilledValue,
@@ -18,7 +20,11 @@ import {
   mergeChapterNotes,
   mergeFilled,
   parseLooseJson,
+  repairTruncatedJson,
   resolveChunkBudget,
+  resolveJsonChunkBudget,
+  salvageJson,
+  trimIncompleteJsonTail,
   resolveGenerationBudgets,
   splitItemsByTokenBudget,
   splitTextByTokenBudget,
@@ -327,5 +333,113 @@ describe('通用续写（截断后自动补齐）', () => {
 
   it('续写指令带上轮次且不含上一轮正文（正文由 assistant 消息承载）', () => {
     expect(buildContinuationDirective(2)).toContain('2')
+  })
+})
+
+describe('结构化输出截断补救', () => {
+  // 角色卡提取真实翻车现场：JSON 断在某个字段的字符串中间
+  const truncatedCards = '{\n "characters": [\n  { "name": "云玉辞", "role": "protagonist" },\n  { "name": "沈青梧", "role": "supporting" },\n  { "name": "第三'
+
+  it('完整 JSON 直接解析，不做修补', () => {
+    const salvage = salvageJson('{"characters":[{"name":"甲"}]}')
+    expect(salvage.complete).toBe(true)
+    expect(salvage.truncated).toBe(false)
+    expect(salvage.field).toBe('characters')
+    expect(salvage.items).toHaveLength(1)
+    expect(repairTruncatedJson('{"characters":[{"name":"甲"}]}')).toBeNull()
+  })
+
+  it('被截断时把已经写完的条目一条条救回来', () => {
+    const salvage = salvageJson(truncatedCards)
+    expect(salvage.complete).toBe(false)
+    expect(salvage.truncated).toBe(true)
+    expect(salvage.field).toBe('characters')
+    expect(salvage.shape).toBe('wrapped')
+    expect(salvage.items.map(card => card.name)).toEqual(['云玉辞', '沈青梧'])
+  })
+
+  it('修补后仍是可解析的 JSON，字段名保持不变', () => {
+    const repaired = repairTruncatedJson(truncatedCards)
+    expect(repaired).not.toBeNull()
+    const parsed = JSON.parse(repaired as string) as { characters: Array<{ name: string }> }
+    expect(parsed.characters.map(card => card.name)).toEqual(['云玉辞', '沈青梧'])
+  })
+
+  it('顶层数组被截断时重建为数组', () => {
+    const salvage = salvageJson('[{"number":1},{"number":2},{"numb')
+    expect(salvage.shape).toBe('array')
+    expect(salvage.truncated).toBe(true)
+    expect(repairTruncatedJson('[{"number":1},{"number":2},{"numb')).toBe('[{"number":1},{"number":2}]')
+  })
+
+  it('字符串里的括号与逗号不会打乱扫描', () => {
+    const raw = '{"characters":[{"name":"甲","appearance":"他喊了 {一声, 又举起[剑"},{"name":"乙'
+    const salvage = salvageJson(raw)
+    expect(salvage.items).toHaveLength(1)
+    expect(salvage.items[0].appearance).toBe('他喊了 {一声, 又举起[剑')
+    expect(salvage.truncated).toBe(true)
+  })
+
+  it('全角标点只在结构位置被修正，正文里的中文标点原样保留', () => {
+    const salvage = salvageJson('{"characters"：[{"name"："甲"，"appearance"："他说：好，我来"}]}')
+    expect(salvage.complete).toBe(true)
+    expect(salvage.items[0].appearance).toBe('他说：好，我来')
+  })
+
+  it('续写衔接点裁到最后一条完整条目，并补上逗号', () => {
+    const trimmed = trimIncompleteJsonTail(truncatedCards)
+    expect(trimmed.endsWith('},')).toBe(true)
+    expect(trimmed).not.toContain('第三')
+    // 已经是完整 JSON 时原样返回
+    expect(trimIncompleteJsonTail('{"characters":[{"name":"甲"}]}')).toBe('{"characters":[{"name":"甲"}]}')
+  })
+
+  it('逐轮续写：每轮独立解析后按主键合并，重复条目只保留一份', async () => {
+    const rounds = [
+      '{"characters":[{"name":"甲","role":"protagonist"},{"name":"乙","role":"supp',
+      '{"characters":[{"name":"乙","role":"supporting"},{"name":"丙","role":"minor"}]}',
+    ]
+    const tails: string[] = []
+    const outcome = await generateJsonItemsWithResume({
+      keyOf: card => String(card.name ?? ''),
+      attempt: async (ctx) => {
+        tails.push(ctx.tail)
+        return { text: rounds[ctx.round], truncated: ctx.round === 0 }
+      },
+    })
+    expect(outcome.rounds).toBe(2)
+    expect(outcome.truncated).toBe(false)
+    expect(outcome.items.map(card => card.name)).toEqual(['甲', '乙', '丙'])
+    // 第二轮拿到的是裁掉残片后的衔接上下文
+    expect(tails[1].endsWith('},')).toBe(true)
+    expect(tails[1]).not.toContain('supp')
+  })
+
+  it('续写一轮没有新增就停止，不会死循环', async () => {
+    let calls = 0
+    const outcome = await generateJsonItemsWithResume({
+      keyOf: card => String(card.name ?? ''),
+      attempt: async () => {
+        calls++
+        return { text: '{"characters":[{"name":"甲"', truncated: true }
+      },
+    })
+    expect(calls).toBe(2)
+    expect(outcome.items).toHaveLength(0)
+    expect(outcome.truncated).toBe(true)
+  })
+
+  it('条目标识用于告诉模型「这些已经输出过」', () => {
+    expect(describeJsonItems([{ name: '甲' }, { title: '第2章' }, { number: 3 }, {}])).toEqual(['甲', '第2章', '3'])
+  })
+
+  it('被截断的输出也能救回已完成的条目，而不是整组丢弃', () => {
+    const partial = parseLooseJson<{ characters: Array<{ name: string }> }>('{"characters":[{"name":"甲"},{"name":"乙')
+    expect(partial?.characters.map(card => card.name)).toEqual(['甲'])
+  })
+
+  it('JSON 任务的切段预算按输出上限的膨胀系数收紧', () => {
+    const budgets = resolveGenerationBudgets(8192)
+    expect(resolveJsonChunkBudget(budgets)).toBeLessThan(resolveChunkBudget(budgets))
   })
 })
