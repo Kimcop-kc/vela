@@ -83,5 +83,5 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 [Unreleased]: https://github.com/Kimcop-kc/vela/compare/v0.2.1...HEAD
 [0.2.1]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.1
-[0.2.0]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.0
+[0.2.0]: https://github.com/Kimcop-kc/vela/releases
 [0.1.0]: https://github.com/Kimcop-kc/vela/tags
