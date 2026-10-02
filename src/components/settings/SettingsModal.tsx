@@ -3,7 +3,7 @@ import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
   Languages, Heart, Coffee, Handshake, Bot, Waves, Sparkles, Boxes,
-  Brain, Wrench,
+  Brain, Wrench, Archive,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
@@ -25,6 +25,7 @@ import { Switch } from '../ui/Switch'
 import OllamaModelPicker from './OllamaModelPicker'
 import PurposeBindingPanel from './PurposeBindingPanel'
 import AutoConfigPanel from './AutoConfigPanel'
+import BackupSettings from './BackupSettings'
 
 // 打赏 / 联系方式 图片资源（通过 import 让 Vite 处理路径，确保打包后可正常加载）
 import rewardImg from '/buyme/reward.png?url'
@@ -32,7 +33,7 @@ import wechatImg from '/buyme/wechat.png?url'
 
 // ==================== 分类定义 ====================
 
-type SettingsSection = 'language' | 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'about'
+type SettingsSection = 'language' | 'llm' | 'embedding' | 'proxy' | 'editor' | 'backup' | 'prompts' | 'about'
 
 interface SectionItem {
   id: SettingsSection
@@ -47,6 +48,7 @@ const SECTIONS: SectionItem[] = [
   { id: 'embedding', label: 'Embedding Models', icon: <Database size={16} />, descriptionKey: 'general.embeddingDesc' },
   { id: 'proxy', label: 'Network Proxy', icon: <Globe size={16} />, descriptionKey: 'general.proxyDesc' },
   { id: 'editor', label: 'Editor', icon: <Type size={16} />, descriptionKey: 'general.editorDesc' },
+  { id: 'backup', label: 'Backup', icon: <Archive size={16} />, descriptionKey: 'general.backupDesc' },
   { id: 'prompts', label: 'Prompt Templates', icon: <MessageSquare size={16} />, descriptionKey: 'general.promptsDesc' },
   { id: 'about', label: 'About & Support', icon: <Heart size={16} />, descriptionKey: 'general.aboutDesc' },
 ]
@@ -144,6 +146,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             {section === 'embedding' && <LLMSection purposes={['embedding']} purposeLabel={t('general.embedding')} />}
             {section === 'proxy' && <ProxySection />}
             {section === 'editor' && <EditorSection />}
+            {section === 'backup' && <BackupSettings />}
             {section === 'prompts' && <PromptSettings />}
             {section === 'about' && <AboutSection />}
           </div>

@@ -714,8 +714,45 @@ export interface ExportChannels {
   }
 }
 
+// ===== 项目快照 / 恢复 =====
+export interface ProjectSnapshotInfo {
+  id: string
+  createdAt: string
+  trigger: 'manual' | 'auto_before_restore'
+  note: string
+  size: number
+  hasDatabase: boolean
+  hasPrompts: boolean
+  hasBooks: boolean
+  hasVectors: boolean
+  appVersion: string
+}
+
+export interface BackupChannels {
+  'backup:list': {
+    args: [projectPath: string]
+    return: { success: boolean; snapshots: ProjectSnapshotInfo[]; error?: string }
+  }
+  'backup:create': {
+    args: [projectPath: string, note?: string]
+    return: { success: boolean; snapshot?: ProjectSnapshotInfo; error?: string }
+  }
+  'backup:restore': {
+    args: [projectPath: string, id: string]
+    return: { success: boolean; snapshot?: ProjectSnapshotInfo; error?: string }
+  }
+  'backup:delete': {
+    args: [projectPath: string, id: string]
+    return: { success: boolean; error?: string }
+  }
+  'backup:open-folder': {
+    args: [projectPath: string]
+    return: { success: boolean; path: string; error?: string }
+  }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels & BackupChannels
 export type AllEventChannels = LLMStreamEvents
 
 /** 提取 invoke 频道名 */
