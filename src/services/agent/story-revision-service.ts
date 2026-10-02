@@ -7,7 +7,7 @@ import { globalEventBus } from '../../shared/event-bus'
 import type { StoryRevision, StoryRevisionRequest } from '../../shared/story-revision'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
-const configMap: Record<string, keyof NovelConfig> = { genre: 'genre', subGenre: 'subGenre', plotStructure: 'plotStructure', writingStyle: 'writingStyle', narrativePov: 'narrativePOV', globalGuidance: 'globalGuidance', goldenFinger: 'goldenFinger', synopsis: 'coreOutline', worldbuilding: 'worldSetting', charactersArch: 'protagonistProfile' }
+const configMap: Record<string, keyof NovelConfig> = { genre: 'genre', subGenre: 'subGenre', targetAudience: 'targetAudience', totalChapters: 'totalChapters', wordsPerChapter: 'wordsPerChapter', plotStructure: 'plotStructure', writingStyle: 'writingStyle', narrativePov: 'narrativePOV', globalGuidance: 'globalGuidance', referenceWorks: 'referenceWorks', goldenFinger: 'goldenFinger', synopsis: 'coreOutline', worldbuilding: 'worldSetting', charactersArch: 'protagonistProfile' }
 
 export interface RevisionPreflightOptions {
   allowDirtyEditor?: boolean
@@ -57,7 +57,7 @@ export function refreshAfterStoryRevision(projectPath: string, revision: StoryRe
     }
     if (change.kind !== 'core') continue
     const field = configMap[change.field]
-    if (field) Object.assign(updates, { [field]: value })
+    if (field) Object.assign(updates, { [field]: ['totalChapters', 'wordsPerChapter'].includes(field) ? Number(value) : value })
     const pathMap: Record<string, string> = { premise: 'premise', worldbuilding: 'worldbuilding', charactersArch: 'characters', synopsis: 'synopsis' }
     if (pathMap[change.field]) {
       for (const tab of useEditorStore.getState().tabs) {

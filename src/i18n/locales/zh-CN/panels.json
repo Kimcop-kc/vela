@@ -551,6 +551,7 @@
     "waitingConfirm": "待确认",
     "pending": "等待中",
     "builtin": "内置",
+    "viewAndUndo": "查看修改并整批撤回",
     "copyResult": "复制结果",
     "copy": "复制"
   },

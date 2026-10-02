@@ -5,7 +5,7 @@ import type { StoryDocument, StoryDocumentRef, StoryReadRequest, StoryReadResult
 // Draft text needs an explicit author instruction. Finalized/archived versions remain
 // protected because their canon and downstream publication state require a separate rewrite.
 const fields = {
-  core: { genre: 'genre', subGenre: 'sub_genre', plotStructure: 'plot_structure', writingStyle: 'writing_style', narrativePov: 'narrative_pov', globalGuidance: 'global_guidance', goldenFinger: 'golden_finger', premise: 'premise', worldbuilding: 'worldbuilding', charactersArch: 'characters_arch', synopsis: 'synopsis' },
+  core: { genre: 'genre', subGenre: 'sub_genre', targetAudience: 'target_audience', totalChapters: 'total_chapters', wordsPerChapter: 'words_per_chapter', plotStructure: 'plot_structure', writingStyle: 'writing_style', narrativePov: 'narrative_pov', globalGuidance: 'global_guidance', referenceWorks: 'reference_works', goldenFinger: 'golden_finger', premise: 'premise', worldbuilding: 'worldbuilding', charactersArch: 'characters_arch', synopsis: 'synopsis' },
   blueprint: { title: 'title', role: 'role', purpose: 'purpose', keyEvents: 'key_events', characters: 'characters', suspenseHook: 'suspense_hook', userGuidance: 'user_guidance' },
   character: { role: 'role', appearance: 'appearance', personality: 'personality', background: 'background', abilities: 'abilities', motivation: 'motivation', relationships: 'relationships', arc: 'arc', notes: 'notes' },
   draft: { content: 'body' },
@@ -138,6 +138,7 @@ export function applyStoryRevision(projectPath: string, request: StoryRevisionRe
       if (edit.kind === 'draft' && !after.trim()) throw new Error('改写结果为空，未覆盖正文。')
       if (edit.kind === 'core' && edit.field === 'narrativePov' && !['first_person', 'third_limited', 'third_omniscient', 'multi_pov'].includes(after)) throw new Error('叙述视角值不正确。')
       if (edit.kind === 'core' && edit.field === 'plotStructure' && !['three_act', 'heros_journey', 'save_the_cat', 'kishotenketsu', 'multi_thread', 'freeform'].includes(after)) throw new Error('故事结构值不正确。')
+      if (edit.kind === 'core' && ['totalChapters', 'wordsPerChapter'].includes(edit.field) && (!Number.isSafeInteger(Number(after)) || Number(after) <= 0)) throw new Error('章节数和每章字数必须是正整数。')
       if (edit.kind === 'blueprint' && edit.field === 'characters') {
         let names: unknown
         try { names = JSON.parse(after) } catch { throw new Error('蓝图出场人物必须是 JSON 字符串数组。') }

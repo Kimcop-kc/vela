@@ -9,7 +9,6 @@ import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { applyRevision, assertStoryProject } from '../story-revision-service'
-import type { NovelConfig } from '../../../shared/ipc-channels'
 import type { StoryReadResult } from '../../../shared/story-revision'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'panels', ...opts })
@@ -84,6 +83,9 @@ const FIELD_ALIASES: Record<string, ConfigField> = {
 const CONTENT_FIELDS: Partial<Record<ConfigField, string>> = {
   genre: 'genre',
   subGenre: 'subGenre',
+  targetAudience: 'targetAudience',
+  totalChapters: 'totalChapters',
+  wordsPerChapter: 'wordsPerChapter',
   plotStructure: 'plotStructure',
   coreOutline: 'synopsis',
   worldSetting: 'worldbuilding',
@@ -92,9 +94,8 @@ const CONTENT_FIELDS: Partial<Record<ConfigField, string>> = {
   globalGuidance: 'globalGuidance',
   writingStyle: 'writingStyle',
   narrativePOV: 'narrativePov',
+  referenceWorks: 'referenceWorks',
 }
-
-const SIMPLE_FIELDS = new Set<ConfigField>(['targetAudience', 'totalChapters', 'wordsPerChapter', 'referenceWorks'])
 
 const PLOT_STRUCTURES: Record<string, string> = {
   three_act: 'three_act',
@@ -226,6 +227,7 @@ export const updateConfigTool = buildAgentTool({
       writingStyle: { type: 'string', description: '写作风格。' },
       narrativePOV: { type: 'string', description: '叙事视角：first_person、third_limited、third_omniscient 或 multi_pov。' },
       referenceWorks: { type: 'string', description: '参考作品。' },
+      dry_run: { type: 'boolean', description: '仅预览将要修改的字段和前后值，不写入。复杂或批量配置修改前可先设为 true。' },
       updates_json: { type: 'string', description: '可选：一次修改多项时传入 JSON 数组，例如 [{"field":"genre","value":"玄幻"},{"field":"totalChapters","value":300}]。' },
     },
   },
@@ -249,6 +251,7 @@ export const updateConfigTool = buildAgentTool({
     if (!activeProject || activeProject.path !== project.path) return { success: false, content: '', error: '项目已切换，本次操作已停止。' }
 
     const changedFields: string[] = []
+    const preview: Array<{ field: string; before: string; after: string }> = []
     const contentEdits: Array<{ kind: 'core'; id: string; field: string; version: string; oldText: string; newText: string }> = []
     let coreVersion: string | null = null
 
@@ -259,38 +262,28 @@ export const updateConfigTool = buildAgentTool({
       coreVersion = current.version
       const nextValue = String(value)
       if (current.content === nextValue) continue
+      preview.push({ field, before: current.content, after: nextValue })
       contentEdits.push({ kind: 'core', id: 'main', field: storyField, version: current.version, oldText: current.content, newText: nextValue })
       changedFields.push(field)
     }
 
+    if (args.dry_run === true) {
+      return {
+        success: true,
+        content: changedFields.length === 0
+          ? '当前配置已经符合要求，无需修改。'
+          : `配置修改预览：${JSON.stringify(preview)}。尚未写入，确认方向后可去掉 dry_run 直接执行。`,
+      }
+    }
+
+    let revisionId: string | undefined
     if (contentEdits.length > 0) {
-      await applyRevision(activeProject.path, {
+      const revision = await applyRevision(activeProject.path, {
         intent: '按作者要求直接更新小说配置',
         summary: '更新小说核心配置，正文是否需要调整应另行核对。',
         edits: contentEdits,
       }, context?.signal, { allowDirtyEditor: true, allowDirtyCharacters: true })
-    }
-
-    const latestProject = useProjectStore.getState().currentProject
-    if (!latestProject || latestProject.path !== activeProject.path) {
-      return { success: false, content: '', error: '项目已切换，本次操作已停止。' }
-    }
-
-    const simpleData: Partial<NovelConfig> = {}
-    for (const [field, value] of updates) {
-      if (!SIMPLE_FIELDS.has(field)) continue
-      const currentValue = latestProject.novelConfig[field as keyof NovelConfig]
-      if (currentValue === value) continue
-      Object.assign(simpleData, { [field]: value })
-      changedFields.push(field)
-    }
-
-    if (Object.keys(simpleData).length > 0) {
-      const result = await ipc.invoke('project:update-config', latestProject.id, {
-        novelConfig: { ...latestProject.novelConfig, ...simpleData },
-      })
-      if (!result.success) return { success: false, content: '', error: result.error ?? t('agent.tools.updateConfig.updateFailed') }
-      useProjectStore.getState().updateNovelConfig(simpleData)
+      revisionId = revision.id
     }
 
     if (changedFields.length === 0) {
@@ -299,7 +292,8 @@ export const updateConfigTool = buildAgentTool({
 
     return {
       success: true,
-      content: `配置已直接保存：${changedFields.join('、')}。正文是否需要同步调整已单独说明。`,
+      content: `配置已直接保存：${changedFields.join('、')}。本次修改可整批撤回。`,
+      ...(revisionId ? { artifacts: [{ type: 'story_revision' as const, name: '小说配置更新', path: activeProject.path, revisionId }] } : {}),
     }
   },
 })

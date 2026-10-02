@@ -15,9 +15,11 @@ import {
   XCircle,
   Loader2,
   AlertTriangle,
+  History,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
+import { useAgentStore } from '../../../stores/agent-store'
 
 interface Props {
   toolCall: ToolCallInfo
@@ -56,6 +58,7 @@ export default function ToolCallBlock({ toolCall }: Props) {
   const { t } = useTranslation('panels')
   const [expanded, setExpanded] = useState(false)
   const { toolName, arguments: args, status, result, error, source } = toolCall
+  const reversible = ['update_config', 'revise_story', 'rewrite_draft'].includes(toolName)
 
   return (
     <div className="tool-call-block">
@@ -79,6 +82,19 @@ export default function ToolCallBlock({ toolCall }: Props) {
           <StatusIcon status={status} />
           <span>{statusLabel(status, t)}</span>
         </div>
+
+        {reversible && status === 'completed' && (
+          <button
+            className="tool-call-history-btn"
+            title={t('toolCall.viewAndUndo')}
+            onClick={event => {
+              event.stopPropagation()
+              useAgentStore.getState().setShowStoryHistory(true)
+            }}
+          >
+            <History size={11} />
+          </button>
+        )}
 
         {/* 展开箭头 */}
         <ChevronRight

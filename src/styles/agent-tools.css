@@ -94,6 +94,26 @@
   color: #f59e0b;
 }
 
+.tool-call-history-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tool-call-history-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-hover);
+}
+
 .tool-call-body {
   padding: 8px 10px;
   border-top: 1px solid var(--color-border);

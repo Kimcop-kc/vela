@@ -551,6 +551,7 @@
     "waitingConfirm": "Waiting",
     "pending": "Pending",
     "builtin": "Built-in",
+    "viewAndUndo": "View changes and undo batch",
     "copyResult": "Copy result",
     "copy": "Copy"
   },

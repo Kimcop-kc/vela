@@ -45,6 +45,18 @@ describe('atomic author-directed story revisions', () => {
     expect(() => applyStoryRevision(folder, { ...request([edit('draft', String(draftId), 'content', '顾野在第一章登场。', '')]), editWrittenText: true })).toThrow('结果为空')
     expect(DraftRepository.getFull(draftId)?.content).toBe('顾野在第一章登场。')
   })
+  it('updates and rolls back a batch of numeric and text config fields', () => {
+    ProjectCoreRepository.update({ targetAudience: '男频', totalChapters: 100, wordsPerChapter: 3000, referenceWorks: '旧参考' })
+    const revision = applyStoryRevision(folder, request([
+      edit('core', 'main', 'targetAudience', '男频', '女频'),
+      edit('core', 'main', 'totalChapters', '100', '300'),
+      edit('core', 'main', 'wordsPerChapter', '3000', '4000'),
+      edit('core', 'main', 'referenceWorks', '旧参考', '新参考'),
+    ]))
+    expect(ProjectCoreRepository.get()).toMatchObject({ targetAudience: '女频', totalChapters: 300, wordsPerChapter: 4000, referenceWorks: '新参考' })
+    undoStoryRevision(folder, revision.id)
+    expect(ProjectCoreRepository.get()).toMatchObject({ targetAudience: '男频', totalChapters: 100, wordsPerChapter: 3000, referenceWorks: '旧参考' })
+  })
   it('updates blueprint participants as a validated list and rejects malformed lists', () => {
     applyStoryRevision(folder, request([edit('blueprint', '3', 'characters', '["顾野"]', '["主角","商会使者"]')]))
     expect(BlueprintRepository.getByChapter(3)?.characters).toEqual(['主角', '商会使者'])

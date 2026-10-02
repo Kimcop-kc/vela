@@ -59,10 +59,11 @@ describe('agent module tools', () => {
     resetStores()
     const storyContent: Record<string, string> = {
       genre: '都市',
+      targetAudience: '男频',
+      totalChapters: '100',
       plotStructure: 'three_act',
       synopsis: '旧大纲',
     }
-    const onConfigUpdate = vi.fn()
     let appliedEdits: Array<{ kind: string; id: string; field: string; version: string; oldText: string; newText: string }> = []
 
     vi.spyOn(ipc, 'invoke').mockImplementation(async (channel, ...args) => {
@@ -70,10 +71,14 @@ describe('agent module tools', () => {
         return {
           genre: '都市',
           subGenre: '',
+          targetAudience: '男频',
+          totalChapters: 100,
+          wordsPerChapter: 3000,
           plotStructure: 'three_act',
           writingStyle: '',
           narrativePov: 'third_limited',
           globalGuidance: '',
+          referenceWorks: '',
           goldenFinger: '',
           synopsis: '旧大纲',
           worldbuilding: '',
@@ -102,10 +107,6 @@ describe('agent module tools', () => {
           })),
         } as never
       }
-      if (channel === 'project:update-config') {
-        onConfigUpdate(args[1])
-        return { success: true } as never
-      }
       return {} as never
     })
 
@@ -119,16 +120,11 @@ describe('agent module tools', () => {
     expect(result.success).toBe(true)
     expect(appliedEdits).toEqual([
       { kind: 'core', id: 'main', field: 'genre', version: 'v1', oldText: '都市', newText: '玄幻' },
+      { kind: 'core', id: 'main', field: 'targetAudience', version: 'v1', oldText: '男频', newText: '女频' },
+      { kind: 'core', id: 'main', field: 'totalChapters', version: 'v1', oldText: '100', newText: '300' },
       { kind: 'core', id: 'main', field: 'plotStructure', version: 'v1', oldText: 'three_act', newText: 'heros_journey' },
     ])
-    expect(onConfigUpdate).toHaveBeenCalledWith({
-      novelConfig: expect.objectContaining({
-        genre: '玄幻',
-        plotStructure: 'heros_journey',
-        targetAudience: '女频',
-        totalChapters: 300,
-      }),
-    })
+    expect(result.artifacts?.[0]).toMatchObject({ type: 'story_revision', revisionId: 'revision-1' })
   })
 
   it('accepts Chinese aliases and the legacy field/value shape', async () => {
@@ -136,7 +132,8 @@ describe('agent module tools', () => {
     let appliedEdit: { field: string; newText: string } | null = null
     vi.spyOn(ipc, 'invoke').mockImplementation(async (channel, ...args) => {
       if (channel === 'db:project-core-get') return {
-        genre: '都市', subGenre: '', plotStructure: 'three_act', writingStyle: '',
+        genre: '都市', subGenre: '', targetAudience: '男频', totalChapters: 100, wordsPerChapter: 3000,
+        plotStructure: 'three_act', writingStyle: '', referenceWorks: '',
         narrativePov: 'third_limited', globalGuidance: '', goldenFinger: '', synopsis: '旧大纲',
         worldbuilding: '', charactersArch: '',
       } as never
@@ -151,6 +148,30 @@ describe('agent module tools', () => {
     const result = await updateConfigTool.execute({ field: '叙事视角', value: '第一人称' })
     expect(result.success).toBe(true)
     expect(appliedEdit).toMatchObject({ field: 'narrativePov', newText: 'first_person' })
+  })
+
+  it('previews a config update without writing when dry_run is enabled', async () => {
+    resetStores()
+    const apply = vi.fn()
+    vi.spyOn(ipc, 'invoke').mockImplementation(async (channel, ...args) => {
+      if (channel === 'db:project-core-get') return {
+        genre: '都市', subGenre: '', targetAudience: '男频', totalChapters: 100, wordsPerChapter: 3000,
+        plotStructure: 'three_act', writingStyle: '', referenceWorks: '', narrativePov: 'third_limited',
+        globalGuidance: '', goldenFinger: '', synopsis: '旧大纲', worldbuilding: '', charactersArch: '',
+      } as never
+      if (channel === 'story:read') return { version: 'v1', content: (args[1] as { field: string }).field === 'genre' ? '都市' : '100', nextOffset: null } as never
+      if (channel === 'story:apply') {
+        apply()
+        return {} as never
+      }
+      return {} as never
+    })
+
+    const result = await updateConfigTool.execute({ genre: '玄幻', totalChapters: 300, dry_run: true })
+    expect(result.success).toBe(true)
+    expect(result.content).toContain('配置修改预览')
+    expect(result.content).toContain('玄幻')
+    expect(apply).not.toHaveBeenCalled()
   })
 
   it('opens requested software modules without confirmation', async () => {
