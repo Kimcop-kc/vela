@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 
 /** 左侧活动栏的视图类型 */
-export type SidebarView = 'home' | 'project' | 'knowledge' | 'books' | 'characters' | 'settings'
+export type SidebarView = 'home' | 'project' | 'knowledge' | 'books' | 'story-bible' | 'characters' | 'settings'
+
+export type StoryBibleSection = 'overview' | 'characters' | 'timeline' | 'plots' | 'facts'
 
 /** 下方工具窗口 Tab */
 export type BottomTab = 'tasks' | 'log' | 'models'
@@ -50,6 +52,8 @@ interface LayoutState {
 
   /** 拆书视图当前选中的拆书档案 id */
   selectedBookId: string | null
+  /** 故事圣经当前分区 */
+  storyBibleSection: StoryBibleSection
 
   /** 由拆书等来源送入文风分析的参考文本（待「小说配置」页消费后清空） */
   styleReferencePrefill: { source: string; text: string } | null
@@ -59,6 +63,7 @@ interface LayoutState {
   setSidebarView: (view: SidebarView) => void
   /** 切换拆书视图的当前书籍 */
   setSelectedBookId: (id: string | null) => void
+  setStoryBibleSection: (section: StoryBibleSection) => void
   /** 把一段参考文本送到文风分析弹框（自动切到项目视图） */
   sendToStyleAnalysis: (payload: { source: string; text: string }) => void
   /** 取走并清空待处理的参考文本 */
@@ -113,6 +118,7 @@ export const useLayoutStore = create<LayoutState>()((set, get) => ({
   chapterCreationOpen: false,
   chapterCreationPrefill: null,
   selectedBookId: null,
+  storyBibleSection: 'overview',
   styleReferencePrefill: null,
 
   // Actions
@@ -124,6 +130,7 @@ export const useLayoutStore = create<LayoutState>()((set, get) => ({
     })),
   setSidebarWidth: (width) => set({ sidebarWidth: Math.max(200, Math.min(500, width)) }),
   setSelectedBookId: (id) => set({ selectedBookId: id }),
+  setStoryBibleSection: (section) => set({ storyBibleSection: section }),
   sendToStyleAnalysis: (payload) => set({
     styleReferencePrefill: payload,
     sidebarView: 'project',

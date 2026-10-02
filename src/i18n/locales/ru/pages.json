@@ -12,6 +12,38 @@
     "footer": "Vela v0.1.0 · 7-ступенчатый ИИ-пайплайн написания · Локальная безопасность данных",
     "emptyRecent": "Нет недавних проектов"
   },
+  "storyBibleOverview": {
+    "openProjectFirst": "Сначала откройте проект",
+    "refresh": "Обновить",
+    "searchPlaceholder": "Поиск персонажей, событий, линий и фактов",
+    "sections": {
+      "overview": "Обзор",
+      "characters": "Персонажи",
+      "timeline": "Хронология",
+      "plots": "Сюжетные линии",
+      "facts": "Факты"
+    },
+    "stats": {
+      "characters": "Персонажи",
+      "timeline": "События",
+      "plots": "Активные линии",
+      "facts": "Факты"
+    },
+    "fields": {
+      "premise": "Основной план",
+      "world": "Мир",
+      "protagonist": "Главный герой"
+    },
+    "recentSummaries": "Последние конспекты глав",
+    "emptySummaries": "Конспектов глав пока нет",
+    "emptyCharacters": "Персонажей или совпадений нет",
+    "emptyTimeline": "Событий хронологии пока нет",
+    "emptyPlots": "Сюжетных линий пока нет",
+    "emptyFacts": "Фактов пока нет",
+    "updatedAt": "Обновлено до главы {{chapter}}",
+    "noDescription": "Описания нет",
+    "flashback": "Флешбэк"
+  },
   "knowledge": {
     "title": "Обзор базы знаний",
     "noDocuments": "Документов пока нет",

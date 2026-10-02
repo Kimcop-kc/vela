@@ -1,6 +1,6 @@
 import {
   FolderOpen, BookOpen, Users,
-  Home, Zap, ScrollText, Cpu, Library,
+  Home, Zap, ScrollText, Cpu, Library, BookMarked,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -28,6 +28,7 @@ export default function LeftToolWindowBar() {
     { id: 'project', icon: FolderOpen, label: t('activityBar.project') },
     { id: 'knowledge', icon: BookOpen, label: t('activityBar.knowledge') },
     { id: 'books', icon: Library, label: t('activityBar.books') },
+    { id: 'story-bible', icon: BookMarked, label: t('activityBar.storyBible') },
     { id: 'characters', icon: Users, label: t('activityBar.characters') },
   ]
 

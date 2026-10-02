@@ -20,6 +20,7 @@ const ThreeWayMerge = lazy(() => import('../editor/ThreeWayMerge'))
 const WelcomePage = lazy(() => import('../pages/WelcomePage'))
 const KnowledgeOverview = lazy(() => import('../pages/KnowledgeOverview'))
 const BooksOverview = lazy(() => import('../pages/BooksOverview'))
+const StoryBibleOverview = lazy(() => import('../pages/StoryBibleOverview'))
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -424,6 +425,10 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // 侧栏为「拆书」时，中间区域固定展示拆书详情（章节清单 + 本书检索）
   if (sidebarView === 'books') {
     return <Suspense fallback={<EditorLoadingFallback />}><BooksOverview /></Suspense>
+  }
+
+  if (sidebarView === 'story-bible') {
+    return <Suspense fallback={<EditorLoadingFallback />}><StoryBibleOverview /></Suspense>
   }
 
   // 未打开项目时显示欢迎页

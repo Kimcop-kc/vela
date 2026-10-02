@@ -19,7 +19,17 @@
     "project": "Project Structure",
     "knowledge": "Knowledge Base",
     "books": "Book analysis",
+    "storyBible": "Story Bible",
     "characters": "Character Management"
+  },
+  "storyBible": {
+    "overview": "Overview",
+    "characters": "Characters",
+    "timeline": "Timeline",
+    "plots": "Plot Lines",
+    "facts": "Facts",
+    "noProject": "Open a project first",
+    "refresh": "Refresh story bible"
   },
   "books": {
     "noProject": "Open a project first",

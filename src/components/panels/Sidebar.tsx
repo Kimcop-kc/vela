@@ -15,6 +15,7 @@ import BooksPanel from './BooksPanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
 import ProjectTree from './sidebar/ProjectTree'
 import CharactersView from './sidebar/CharactersView'
+import StoryBiblePanel from './sidebar/StoryBiblePanel'
 import {
   registerMenuSetter, unregisterMenuSetter,
   type SidebarMenuState,
@@ -38,6 +39,7 @@ export default function Sidebar() {
     project:    t('sidebar.project'),
     knowledge:  t('sidebar.knowledge'),
     books:      t('sidebar.books'),
+    'story-bible': t('sidebar.storyBible'),
     characters: t('sidebar.characters'),
   }
 
@@ -57,6 +59,7 @@ export default function Sidebar() {
         {sidebarView === 'project'    && <ProjectTree />}
         {sidebarView === 'knowledge'  && <KnowledgePanel />}
         {sidebarView === 'books'      && <BooksPanel />}
+        {sidebarView === 'story-bible' && <StoryBiblePanel />}
         {sidebarView === 'characters' && <CharactersView />}
       </div>
 

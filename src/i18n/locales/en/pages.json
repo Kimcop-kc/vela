@@ -12,6 +12,38 @@
     "footer": "Vela v0.1.0 · 7-stage AI-driven writing pipeline · Local-first data security",
     "emptyRecent": "No recent projects yet"
   },
+  "storyBibleOverview": {
+    "openProjectFirst": "Open a project first",
+    "refresh": "Refresh",
+    "searchPlaceholder": "Search characters, events, plots, or facts",
+    "sections": {
+      "overview": "Overview",
+      "characters": "Characters",
+      "timeline": "Timeline",
+      "plots": "Plot Lines",
+      "facts": "Facts"
+    },
+    "stats": {
+      "characters": "Characters",
+      "timeline": "Events",
+      "plots": "Active plots",
+      "facts": "Facts"
+    },
+    "fields": {
+      "premise": "Core Outline",
+      "world": "Worldbuilding",
+      "protagonist": "Protagonist"
+    },
+    "recentSummaries": "Recent Chapter Summaries",
+    "emptySummaries": "No chapter summaries yet",
+    "emptyCharacters": "No characters or matching results",
+    "emptyTimeline": "No timeline events yet",
+    "emptyPlots": "No plot lines yet",
+    "emptyFacts": "No facts yet",
+    "updatedAt": "Updated through chapter {{chapter}}",
+    "noDescription": "No description",
+    "flashback": "Flashback"
+  },
   "knowledge": {
     "title": "Knowledge Base Overview",
     "noDocuments": "No documents yet",

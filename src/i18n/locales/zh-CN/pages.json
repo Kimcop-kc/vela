@@ -12,6 +12,38 @@
     "footer": "Vela v0.1.0 · 七阶段 AI 驱动创作流水线 · 本地化数据安全",
     "emptyRecent": "还没有最近打开的项目"
   },
+  "storyBibleOverview": {
+    "openProjectFirst": "请先打开项目",
+    "refresh": "刷新",
+    "searchPlaceholder": "搜索角色、事件、剧情或事实",
+    "sections": {
+      "overview": "总览",
+      "characters": "角色",
+      "timeline": "时间线",
+      "plots": "剧情线",
+      "facts": "关键事实"
+    },
+    "stats": {
+      "characters": "角色",
+      "timeline": "事件",
+      "plots": "进行中剧情",
+      "facts": "事实"
+    },
+    "fields": {
+      "premise": "核心大纲",
+      "world": "世界观",
+      "protagonist": "主角设定"
+    },
+    "recentSummaries": "最近章节摘要",
+    "emptySummaries": "还没有章节摘要",
+    "emptyCharacters": "暂无角色或没有匹配结果",
+    "emptyTimeline": "还没有时间线事件",
+    "emptyPlots": "还没有剧情线",
+    "emptyFacts": "还没有关键事实",
+    "updatedAt": "更新至第 {{chapter}} 章",
+    "noDescription": "暂无简介",
+    "flashback": "闪回"
+  },
   "knowledge": {
     "title": "知识库概览",
     "noDocuments": "暂无文档",
