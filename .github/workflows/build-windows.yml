@@ -154,6 +154,10 @@ jobs:
         with:
           path: release-assets
 
+      - name: 生成发布说明
+        shell: bash
+        run: node scripts/extract-release-notes.mjs "$GITHUB_REF_NAME" release-notes.md
+
       - name: 创建或更新 Release
         shell: bash
         env:
@@ -169,12 +173,16 @@ jobs:
           fi
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG 已存在，仅更新安装包资产"
+            echo "Release $TAG 已存在，更新发布说明和安装包资产"
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Vela $TAG" \
+              --notes-file release-notes.md
           else
             gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --title "Vela $TAG" \
-              --generate-notes
+              --notes-file release-notes.md
           fi
 
           while IFS= read -r file; do

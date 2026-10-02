@@ -48,6 +48,8 @@ npm run test:perf
   Artifact，不修改已有 Release。
 * 推送 `vX.Y.Z` 标签：先运行同一套质量检查，再构建并发布安装包。标签版本必须与
   `package.json` 的 `version` 完全一致，否则发布会失败。
+* Release 的更新说明从 `CHANGELOG.md` 对应版本章节自动提取，不再使用 GitHub
+  自动生成的提交汇总。
 * 手动运行 workflow：只构建 Artifact，不自动发布 Release。
 
 ## 原生模块 ABI 说明
