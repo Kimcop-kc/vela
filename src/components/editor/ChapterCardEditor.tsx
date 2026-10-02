@@ -28,8 +28,9 @@ import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { globalEventBus } from '../../shared/event-bus'
+import { CHAPTER_ROLE_VALUES, normalizeChapterRole } from '../../shared/chapter-roles'
 
-const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
+const ROLES = CHAPTER_ROLE_VALUES
 
 const ROLE_LABELS: Record<string, string> = {
   '建置': 'chapterCard.roles.setup',
@@ -129,8 +130,9 @@ function ChapterCardEditorSession() {
       const maxFinalized = await ipc.invoke('db:draft-get-max-finalized-chapter')
       const active = useProjectStore.getState().currentProject
       if (active?.id !== projectId || active.path !== projectPath) return
-      setBlueprints(data)
-      setSavedBlueprints(data)
+      const normalized = data.map(bp => ({ ...bp, role: normalizeChapterRole(bp.role) }))
+      setBlueprints(normalized)
+      setSavedBlueprints(normalized)
       setDeletedBlueprints([])
       setDirty(false)
       setSaveError('')

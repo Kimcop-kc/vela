@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, ClipboardCheck, Wrench, Puzzle, Layers } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, ClipboardCheck, Wrench, Puzzle, Layers, Undo2, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { useProjectStore } from '../../stores/project-store'
@@ -22,7 +22,7 @@ import {
   type SkillPipelineWorkflowStep,
 } from '../../services/workflows/chapter-workflow'
 import { getPendingRevisions, getReviewsForVersion, type RevisionEntry } from '../../services/draft-index'
-import { readDraftBody } from '../../stores/draft-store'
+import { readDraftBody, useDraftStore } from '../../stores/draft-store'
 import { skillRegistry, type LoadedSkill } from '../../services/agent/skill-registry'
 import { pipelineStepInput, type SkillPipeline } from '../../services/agent/skill-pipeline'
 import { ipc } from '../../services/ipc-client'
@@ -50,6 +50,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   const [pendingRevisions, setPendingRevisions] = useState<RevisionEntry[]>([])
   const [reviewCount, setReviewCount] = useState(0)
   const [storyRefresh, setStoryRefresh] = useState(0)
+  const draftsByChapter = useDraftStore(s => s.draftsByChapter)
   useEffect(() => globalEventBus.on('STORY_REVISED', ({ projectPath, revision }) => {
     if (projectPath === useProjectStore.getState().currentProject?.path && revision.changes.some(c => c.kind === 'draft' && filePath === `vela://draft/${c.id}`)) setStoryRefresh(n => n + 1)
   }), [filePath])
@@ -90,6 +91,14 @@ export default function DraftEditor({ filePath, content }: Props) {
       cancelled = true
     }
   }, [filePath, storyRefresh, t])
+
+  useEffect(() => {
+    if (!meta) return
+    const stored = (draftsByChapter[meta.chapterNumber] || []).find(draft => draft.filePath === filePath)
+    if (stored && stored.status !== meta.status) {
+      setMeta(prev => prev ? { ...prev, status: stored.status } : prev)
+    }
+  }, [draftsByChapter, filePath, meta])
 
   const status: DraftStatus = meta?.status ?? 'draft'
   const isReadonly = status === 'finalized' || status === 'archived'
@@ -304,6 +313,67 @@ export default function DraftEditor({ filePath, content }: Props) {
       }), false)
     } catch (e) {
       toast.error(t('draftEditor.finalizeStartFailed', { error: e }))
+    }
+  }
+
+  /** 解除定稿（仅允许从最后一章定稿开始倒序解除） */
+  const doUnfinalize = async () => {
+    if (!meta || isChapterBusy || !filePath.startsWith('vela://draft/')) return
+    const draftId = Number(filePath.replace('vela://draft/', ''))
+    if (!Number.isSafeInteger(draftId)) {
+      toast.error(t('draftEditor.unfinalizeFailed', { error: t('draftEditor.draft') }))
+      return
+    }
+
+    const ok = await confirm(
+      t('draftEditor.unfinalizeConfirmText', { chapter: meta.chapterNumber }),
+      {
+        title: t('draftEditor.unfinalizeConfirmTitle'),
+        confirmText: t('draftEditor.unfinalizeConfirm'),
+        danger: true,
+      }
+    )
+    if (!ok) return
+
+    try {
+      const { useDraftStore } = await import('../../stores/draft-store')
+      const result = await useDraftStore.getState().unfinalizeDraft(draftId, meta.chapterNumber)
+      if (!result.success) {
+        toast.error(result.error || t('draftEditor.unfinalizeFailed', { error: '' }))
+        return
+      }
+      setMeta(prev => prev ? { ...prev, status: 'draft' } : prev)
+      if (result.warning) toast.warning(result.warning)
+      else toast.success(t('draftEditor.unfinalizeComplete'))
+    } catch (error) {
+      toast.error(t('draftEditor.unfinalizeFailed', { error: String(error) }))
+    }
+  }
+
+  /** 删除本章全部草稿版本，回到尚未生成的状态 */
+  const doResetChapter = async () => {
+    if (!meta || isChapterBusy) return
+    const ok = await confirm(
+      t('draftEditor.resetChapterConfirmText', { chapter: meta.chapterNumber }),
+      {
+        title: t('draftEditor.resetChapterConfirmTitle'),
+        confirmText: t('draftEditor.resetChapterConfirm'),
+        danger: true,
+      }
+    )
+    if (!ok) return
+
+    try {
+      const { useDraftStore } = await import('../../stores/draft-store')
+      const result = await useDraftStore.getState().resetChapter(meta.chapterNumber)
+      if (!result.success) {
+        toast.error(t('draftEditor.resetChapterFailed', { error: result.error || '' }))
+        return
+      }
+      if (result.warning) toast.warning(result.warning)
+      else toast.success(t('draftEditor.resetChapterComplete', { chapter: meta.chapterNumber }))
+    } catch (error) {
+      toast.error(t('draftEditor.resetChapterFailed', { error: String(error) }))
     }
   }
 
@@ -552,6 +622,17 @@ export default function DraftEditor({ filePath, content }: Props) {
               {t('draftEditor.skillPipeline')}
             </Button>
 
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={doResetChapter}
+              disabled={isChapterBusy}
+              title={t('draftEditor.resetChapterTooltip')}
+              aria-label={t('draftEditor.resetChapter')}
+            >
+              <RotateCcw size={11} />
+            </Button>
+
             {/* 定稿 */}
             <Button
               variant="success"
@@ -577,6 +658,28 @@ export default function DraftEditor({ filePath, content }: Props) {
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               {status === 'finalized' ? t('draftEditor.finalizedReadonly') : t('draftEditor.archivedReadonly')}
             </span>
+            {status === 'finalized' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={doUnfinalize}
+                disabled={isChapterBusy}
+                title={t('draftEditor.unfinalizeTooltip')}
+              >
+                <Undo2 size={11} />
+                {t('draftEditor.unfinalize')}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={doResetChapter}
+              disabled={isChapterBusy}
+              title={t('draftEditor.resetChapterTooltip')}
+              aria-label={t('draftEditor.resetChapter')}
+            >
+              <RotateCcw size={11} />
+            </Button>
             {/* 已定稿 → 有失败项时显示修复定稿按钮 */}
             {status === 'finalized' && meta && hasProcessFailure && (
               <Button

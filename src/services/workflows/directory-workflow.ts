@@ -4,6 +4,7 @@ import { ipc } from '../ipc-client'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { stripThinkingTags } from './workflow-utils'
 import i18n from '../../i18n'
+import { normalizeChapterRole } from '../../shared/chapter-roles'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
@@ -78,7 +79,10 @@ export function parseTextBlueprints(content: string, startNum: number, endNum: n
     if (!Number.isSafeInteger(chapterNumber) || chapterNumber < startNum || chapterNumber > endNum ||
         typeof p.title !== 'string' || !p.title.trim() || typeof keyEvents !== 'string' || !keyEvents.trim()) continue
     if (!distinct.has(chapterNumber)) distinct.set(chapterNumber, {
-      ...EMPTY_BLUEPRINT, chapterNumber, title: p.title.trim(), role: String(p.role || t('workflowDefs.dirDefaultRole')),
+      ...EMPTY_BLUEPRINT,
+      chapterNumber,
+      title: p.title.trim(),
+      role: normalizeChapterRole(p.role || t('workflowDefs.dirDefaultRole')),
       purpose: String(p.purpose || ''), keyEvents,
       characters: Array.isArray(p.characters) ? p.characters.filter((c): c is string => typeof c === 'string') : [],
       suspenseHook: String(p.suspenseHook || p.suspense_hook || ''),
@@ -90,7 +94,9 @@ export function parseTextBlueprints(content: string, startNum: number, endNum: n
 export async function loadDirectoryBlueprints(): Promise<ChapterBlueprint[]> {
   try {
     const blueprints = await ipc.invoke('db:blueprint-get-all')
-    return blueprints.sort((a, b) => a.chapterNumber - b.chapterNumber)
+    return blueprints
+      .map(bp => ({ ...bp, role: normalizeChapterRole(bp.role) }))
+      .sort((a, b) => a.chapterNumber - b.chapterNumber)
   } catch {
     return []
   }

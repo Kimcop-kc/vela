@@ -2,6 +2,7 @@ import { Component, createContext } from 'react'
 import type { ReactNode, ErrorInfo, ContextType } from 'react'
 import i18n from '../i18n'
 import { TriangleAlert } from 'lucide-react'
+import { appLogger } from '../services/app-logger'
 
 interface Props {
   children: ReactNode
@@ -29,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary] 组件崩溃:', error, info)
+    appLogger.error('ui', 'React 组件崩溃', { error, componentStack: info.componentStack })
     this.setState({ componentStack: info.componentStack ?? '' })
   }
 

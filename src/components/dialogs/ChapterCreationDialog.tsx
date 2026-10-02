@@ -17,6 +17,17 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
+import { CHAPTER_ROLE_VALUES, normalizeChapterRole } from '../../shared/chapter-roles'
+
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  '建置': 'setup',
+  '铺垫': 'setupAlt',
+  '发展': 'development',
+  '冲突': 'conflict',
+  '高潮': 'climax',
+  '转折': 'turning',
+  '收尾': 'resolution',
+}
 
 interface Props {
   isOpen: boolean
@@ -83,7 +94,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
           // 章节号自动 +1
           setChapterNumber((last.chapterNumber || 0) + 1)
           setTitle('') // 标题不继承，让用户自填
-          setRole(last.role || '发展')
+          setRole(normalizeChapterRole(last.role) || '发展')
           setPurpose(last.purpose || '')
           setKeyEvents(last.keyEvents || '')
           setCharacters(last.characters || '')
@@ -110,7 +121,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
         // 使用章节蓝图预填数据
         setChapterNumber(Number(prefill.chapterNumber) || 1)
         setTitle(String(prefill.title || ''))
-        setRole(String(prefill.role || '发展'))
+        setRole(normalizeChapterRole(prefill.role) || '发展')
         setPurpose(String(prefill.purpose || ''))
         setKeyEvents(String(prefill.keyEvents || ''))
         setCharacters(String(prefill.characters || ''))
@@ -180,7 +191,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
     const workflow = createChapterWorkflow({
       chapterNumber: Number(chapterNumber) || 1,
       title: title || t('chapterCreation.defaultTitle', { chapterNumber: chapterNumber || 1 }),
-      role,
+      role: normalizeChapterRole(role),
       purpose,
       characters: characters.split(/[、,，]/).map(s => s.trim()).filter(Boolean),
       keyEvents,
@@ -263,16 +274,10 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                 <div>
                   <Label>{t('chapterCreation.chapterRole')}</Label>
                   <NativeSelect value={role} onChange={(e) => setRole(e.target.value)}>
-                    {[
-                      { key: 'opening', value: '开篇' },
-                      { key: 'setup', value: '铺垫' },
-                      { key: 'development', value: '发展' },
-                      { key: 'conflict', value: '冲突' },
-                      { key: 'climax', value: '高潮' },
-                      { key: 'turning', value: '转折' },
-                      { key: 'resolution', value: '收尾' },
-                    ].map((r) => (
-                      <option key={r.key} value={r.value}>{t(`chapterCreation.roles.${r.key}`)}</option>
+                    {CHAPTER_ROLE_VALUES.map((value) => (
+                      <option key={value} value={value}>
+                        {t(`chapterCreation.roles.${ROLE_LABEL_KEYS[value]}`)}
+                      </option>
                     ))}
                   </NativeSelect>
                 </div>

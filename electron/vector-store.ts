@@ -13,6 +13,7 @@ import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schem
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { joinChunkTexts, stripChunkOverlap } from './embedding'
 
 // ===== 类型定义 =====
 
@@ -50,6 +51,15 @@ export interface SearchResult {
   fileName: string
 }
 
+export interface DocumentTextPage {
+  text: string
+  fileName: string
+  chunkStart: number
+  nextChunkIndex: number
+  done: boolean
+  totalChunks: number
+}
+
 /** 知识库统计 */
 export interface KBStats {
   documentCount: number
@@ -85,6 +95,7 @@ export async function getConnection(projectPath: string): Promise<lancedb.Connec
 /** 关闭指定项目的连接 */
 export function closeConnection(projectPath: string): void {
   const dbPath = path.join(projectPath, '.vela', 'lancedb')
+  connectionPool.get(dbPath)?.close()
   connectionPool.delete(dbPath)
 }
 
@@ -269,6 +280,71 @@ export async function getChunksByDoc(
   } catch (error) {
     console.error('[Vela VectorStore] 按文档读取文本块失败:', error)
     return []
+  }
+}
+
+/**
+ * 按块范围读取文档正文，用于大章节分页预览。
+ *
+ * 查询只取正文需要的列，并额外读取前一块用于去掉分块 overlap；
+ * 不会把整章文本和向量一次加载到主进程。
+ */
+export async function getDocumentTextPage(
+  projectPath: string,
+  docId: string,
+  chunkStart: number,
+  maxChunks: number,
+): Promise<DocumentTextPage> {
+  const db = await getConnection(projectPath)
+  const tableNames = await db.tableNames()
+  if (!tableNames.includes(TABLE_NAME)) {
+    return { text: '', fileName: '', chunkStart, nextChunkIndex: chunkStart, done: true, totalChunks: 0 }
+  }
+
+  const safeStart = Math.max(0, Math.floor(chunkStart))
+  const safeMax = Math.max(1, Math.min(200, Math.floor(maxChunks)))
+  const queryStart = Math.max(0, safeStart - 1)
+  const queryEnd = safeStart + safeMax
+  const escaped = String(docId).replace(/'/g, "''")
+  const table = await db.openTable(TABLE_NAME)
+  const rows = await table.query()
+    .where(`docId = '${escaped}' AND chunkIndex >= ${queryStart} AND chunkIndex < ${queryEnd}`)
+    .select(['text', 'chunkIndex', 'totalChunks', 'fileName'])
+    .limit(safeMax + 1)
+    .toArray() as Array<{
+      text: string
+      chunkIndex: number
+      totalChunks: number
+      fileName: string
+    }>
+
+  rows.sort((a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0))
+  const previous = rows.find(row => row.chunkIndex === safeStart - 1)
+  const pageRows = rows.filter(row => row.chunkIndex >= safeStart)
+
+  if (pageRows.length === 0) {
+    return {
+      text: '',
+      fileName: previous?.fileName ?? '',
+      chunkStart: safeStart,
+      nextChunkIndex: safeStart,
+      done: true,
+      totalChunks: previous?.totalChunks ?? 0,
+    }
+  }
+
+  let text = joinChunkTexts(pageRows.map(row => row.text))
+  if (previous) text = stripChunkOverlap(previous.text, text)
+
+  const lastChunkIndex = pageRows[pageRows.length - 1].chunkIndex
+  const totalChunks = pageRows[0].totalChunks ?? 0
+  return {
+    text,
+    fileName: pageRows[0].fileName ?? '',
+    chunkStart: safeStart,
+    nextChunkIndex: lastChunkIndex + 1,
+    done: totalChunks <= 0 || lastChunkIndex + 1 >= totalChunks,
+    totalChunks,
   }
 }
 

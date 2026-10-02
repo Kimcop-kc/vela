@@ -40,7 +40,7 @@ function getModelConfig(modelId: string): ModelProfile | null {
 function resolveModelForRequest(modelId: string | undefined, purpose?: string): ModelProfile | null {
   if (modelId) {
     const explicit = getModelConfig(modelId)
-    if (explicit) return explicit
+    if (explicit && explicit.enabled !== false) return explicit
   }
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
   const resolvedId = pickModelIdForCategory(categorizePurpose(purpose), {

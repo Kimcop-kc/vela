@@ -10,6 +10,7 @@ import type { BookRecord } from '../shared/ipc-channels'
 
 export type { BookRecord } from '../shared/ipc-channels'
 export type { BookChapterEntry } from '../shared/ipc-channels'
+export type { BookImportProgress } from '../shared/ipc-channels'
 
 /** 选择要拆解的小说文件（txt / md） */
 export async function selectBookFiles(): Promise<string[] | null> {
@@ -34,6 +35,11 @@ export async function removeBook(bookId: string) {
 /** 按章节文档 id 取回正文（拆书章节回看 / 作为文风参考） */
 export async function getChapterText(docId: string) {
   return ipc.invoke('kb:get-document-text', docId)
+}
+
+/** 按文本块分页读取章节正文，供大章节预览与完整复制使用 */
+export async function getChapterTextPage(docId: string, chunkStart = 0, maxChunks = 32) {
+  return ipc.invoke('kb:get-document-text-page', docId, chunkStart, maxChunks)
 }
 
 /** 在知识库中检索（结果按拆书前缀过滤即为「本书范围内检索」） */

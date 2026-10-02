@@ -180,4 +180,15 @@ export class PostProcessRepository {
         const run = PostProcessRepository.getLatestRun(sourceType, sourceId)
         return run?.allCriticalPassed ?? false
     }
+
+    /** 删除某个业务实体的全部后处理记录（步骤由外键级联清理）。 */
+    static deleteRunsBySource(sourceType: string, sourceId: string): number {
+        const db = getProjectDb()
+        if (!db) return 0
+        const result = db.prepare(`
+      DELETE FROM post_process_runs
+      WHERE trigger_source_type = ? AND trigger_source_id = ?
+    `).run(sourceType, sourceId)
+        return result.changes
+    }
 }

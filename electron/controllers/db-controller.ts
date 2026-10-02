@@ -1,11 +1,12 @@
 import { ipcMain } from 'electron'
-import { closeProjectDatabase, getProjectDb } from '../database'
+import { closeProjectDatabase, getCurrentProjectPath, getProjectDb } from '../database'
 import { readRehearsalContext, requireProjectDatabase } from '../repositories/rehearsal-repository'
 import { indexStory, readStoryDocument, applyStoryRevision, listStoryRevisions, undoStoryRevision } from '../repositories/story-revision-repository'
 import type { StoryReadRequest, StoryRevisionRequest } from '../../src/shared/story-revision'
 import fs from 'node:fs'
 import path from 'node:path'
 import { VELA_HOME } from '../utils/config-utils'
+import { listDocuments as listKnowledgeDocuments, removeDocument as removeKnowledgeDocument } from '../knowledge-base'
 
 // 导入所有 Repository
 import { ProjectCoreRepository, ProjectCoreData } from '../repositories/project-core-repository'
@@ -15,6 +16,7 @@ import { DraftRepository } from '../repositories/draft-repository'
 import { RevisionRepository } from '../repositories/revision-repository'
 import { ReviewRepository } from '../repositories/review-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
+import { ChapterRollbackRepository } from '../repositories/chapter-rollback-repository'
 
 // 沿用的旧表
 import { LLMHistoryRepository } from '../repositories/llm-repository'
@@ -36,6 +38,73 @@ import type {
   Fact,
   ChapterSummary,
 } from '../../src/services/narrative-consistency/types'
+
+function getFinalizedProjectionPaths(chapterNumber: number, chapterTitle?: string): string[] {
+  const projectPath = getCurrentProjectPath()
+  if (!projectPath) return []
+
+  const safeTitle = chapterTitle ? ` ${chapterTitle.replace(/[/\\]/g, '_')}` : ''
+  const paths = [path.join(projectPath, `第${chapterNumber}章${safeTitle}.txt`)]
+  if (safeTitle) {
+    paths.push(path.join(projectPath, `第${chapterNumber}章.txt`))
+  }
+  paths.push(path.join(projectPath, `chapter_${chapterNumber}.txt`))
+  return Array.from(new Set(paths))
+}
+
+function removeFinalizedProjection(chapterNumber: number, chapterTitle?: string): string | undefined {
+  for (const projectionPath of getFinalizedProjectionPaths(chapterNumber, chapterTitle)) {
+    if (!fs.existsSync(projectionPath)) continue
+    try {
+      fs.rmSync(projectionPath)
+      return undefined
+    } catch (error) {
+      return `根目录定稿文件删除失败：${String(error)}`
+    }
+  }
+  return undefined
+}
+
+async function removeChapterKnowledgeDocuments(chapterNumber: number, chapterTitle?: string): Promise<string | undefined> {
+  const projectPath = getCurrentProjectPath()
+  if (!projectPath) return undefined
+  const safeTitle = chapterTitle ? `第${chapterNumber}章 ${chapterTitle.replace(/[/\\]/g, '_')}.txt` : ''
+  const generatedNames = new Set([
+    safeTitle,
+    `第${chapterNumber}章.txt`,
+    `chapter_${chapterNumber}.txt`,
+  ].filter(Boolean))
+  try {
+    for (const document of await listKnowledgeDocuments(projectPath)) {
+      if (!generatedNames.has(document.fileName)) continue
+      await removeKnowledgeDocument(document.id, projectPath)
+    }
+    return undefined
+  } catch (error) {
+    return `知识库定稿记录清理失败：${String(error)}`
+  }
+}
+
+async function restoreChapterDerivedState(chapterNumber: number, chapterTitle?: string): Promise<string | undefined> {
+  let warning: string | undefined
+  const rollback = ChapterRollbackRepository.restore(chapterNumber)
+  if (!rollback.restored) {
+    // 旧版本定稿没有快照：仍清理章节级派生数据，但无法恢复角色/剧情线历史。
+    BlueprintRepository.clearGeneratedNotes(chapterNumber)
+    CanonRepository.clearChapterTimeline(chapterNumber)
+    CanonRepository.clearChapterFacts(chapterNumber)
+    CanonRepository.clearChapterSummary(chapterNumber)
+    SummaryRepository.clearChapter(chapterNumber)
+    warning = '该章节定稿早于回滚快照功能，角色状态和剧情线只能做部分清理。'
+  }
+
+  PostProcessRepository.deleteRunsBySource('chapter_finalize', String(chapterNumber))
+  const projectionWarning = removeFinalizedProjection(chapterNumber, chapterTitle)
+  const knowledgeWarning = await removeChapterKnowledgeDocuments(chapterNumber, chapterTitle)
+  warning = warning ?? projectionWarning
+  warning = warning ?? knowledgeWarning
+  return warning
+}
 
 export function registerDatabaseController() {
   const agentStatePath = path.join(VELA_HOME, 'author-agent-state.json')
@@ -235,6 +304,69 @@ export function registerDatabaseController() {
       DraftRepository.updateContent(id, content, wordCount)
       return { success: true }
     } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:draft-unfinalize', async (_event, id: number) => {
+    try {
+      const target = DraftRepository.assertCanUnfinalize(id)
+      const blueprint = BlueprintRepository.getByChapter(target.chapterNumber)
+      const warning = await restoreChapterDerivedState(target.chapterNumber, blueprint?.title)
+      const draft = DraftRepository.unfinalize(id)
+      return {
+        success: true,
+        draft,
+        warning,
+      }
+    } catch (err) {
+      console.error('[db:draft-unfinalize] 失败:', err)
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:draft-delete', async (_event, id: number) => {
+    try {
+      const meta = DraftRepository.getMeta(id)
+      DraftRepository.delete(id)
+      if (meta && DraftRepository.listByChapter(meta.chapterNumber).length === 0) {
+        ChapterRollbackRepository.clear(meta.chapterNumber)
+      }
+      return { success: true }
+    } catch (err) {
+      console.error('[db:draft-delete] 失败:', err)
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:draft-reset-chapter', async (_event, chapterNumber: number) => {
+    if (!Number.isSafeInteger(chapterNumber) || chapterNumber < 1) {
+      return { success: false, error: '章节号无效。' }
+    }
+
+    try {
+      DraftRepository.assertCanResetChapter(chapterNumber)
+      const blueprint = BlueprintRepository.getByChapter(chapterNumber)
+      const warning = await restoreChapterDerivedState(chapterNumber, blueprint?.title)
+      const result = DraftRepository.resetChapter(chapterNumber)
+      ChapterRollbackRepository.clear(chapterNumber)
+
+      return { success: true, ...result, warning }
+    } catch (err) {
+      console.error('[db:draft-reset-chapter] 失败:', err)
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:chapter-rollback-capture', async (_event, chapterNumber: number) => {
+    if (!Number.isSafeInteger(chapterNumber) || chapterNumber < 1) {
+      return { success: false, error: '章节号无效。' }
+    }
+    try {
+      const result = ChapterRollbackRepository.capture(chapterNumber)
+      return { success: true, size: result.size }
+    } catch (err) {
+      console.error('[db:chapter-rollback-capture] 失败:', err)
       return { success: false, error: String(err) }
     }
   })

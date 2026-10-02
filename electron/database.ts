@@ -13,6 +13,7 @@ const Database = require('better-sqlite3') as typeof import('better-sqlite3')
 import type BetterSqlite3 from 'better-sqlite3'
 
 let projectDb: BetterSqlite3.Database | null = null
+let currentProjectPath: string | null = null
 
 /** 初始化项目数据库（打开项目时调用） */
 export function initProjectDatabase(projectPath: string): void {
@@ -22,6 +23,7 @@ export function initProjectDatabase(projectPath: string): void {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
   projectDb = new Database(dbPath)
+  currentProjectPath = projectPath
   projectDb.pragma('journal_mode = WAL')
   projectDb.pragma('foreign_keys = ON')
 
@@ -38,6 +40,12 @@ export function closeProjectDatabase(): void {
     projectDb.close()
     projectDb = null
   }
+  currentProjectPath = null
+}
+
+/** 当前已打开项目路径；供需要清理项目投影文件的主进程服务使用。 */
+export function getCurrentProjectPath(): string | null {
+  return currentProjectPath
 }
 
 /** 已执行的 schema 迁移版本号（用于幂等迁移） */
@@ -310,6 +318,15 @@ function createTables(db: BetterSqlite3.Database) {
       chapter_number INTEGER NOT NULL,
       character_states TEXT DEFAULT '',
       created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- ============================================================
+    -- 定稿回滚快照 — 记录章节定稿前的动态设定，供解除/重置时恢复
+    -- ============================================================
+    CREATE TABLE IF NOT EXISTS chapter_rollback_snapshots (
+      chapter_number INTEGER PRIMARY KEY,
+      created_at TEXT DEFAULT (datetime('now')),
+      payload BLOB NOT NULL
     );
 
     -- ============================================================

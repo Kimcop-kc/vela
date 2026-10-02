@@ -47,8 +47,8 @@
     "targetWords": "Целевое количество слов",
     "chapterRole": "Роль главы",
     "roles": {
-      "opening": "Начало",
-      "setup": "Завязка",
+      "setup": "Экспозиция",
+      "setupAlt": "Завязка",
       "development": "Развитие",
       "conflict": "Конфликт",
       "climax": "Кульминация",

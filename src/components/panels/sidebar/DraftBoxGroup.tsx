@@ -3,12 +3,13 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen } from 'lucide-react'
+import { ChevronRight, ChevronDown, CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen, Archive, Undo2, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { DraftMeta } from '../../../stores/draft-store'
 import { useDraftStore, readDraftBody } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { confirm } from '../../ui/Confirm'
+import { toast } from '../../ui/Toast'
 import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
 import { showSidebarMenu } from './SidebarShared'
 import { ipc } from '../../../services/ipc-client'
@@ -115,6 +116,25 @@ function DraftChapterGroup({
   const chapterPrefix = t('manuscript.chapterFormat', { number: chapterNumber })
   const displayTitle = baseTitle.startsWith(chapterPrefix) ? baseTitle : (baseTitle ? `${chapterPrefix} ${baseTitle}` : chapterPrefix)
 
+  const resetChapter = async () => {
+    const ok = await confirm(
+      t('drafts.confirmResetChapter', { chapter: chapterNumber }),
+      {
+        title: t('drafts.confirmResetChapterTitle'),
+        confirmText: t('drafts.confirmResetChapterBtn'),
+        danger: true,
+      }
+    )
+    if (!ok) return
+    const result = await useDraftStore.getState().resetChapter(chapterNumber)
+    if (!result.success) {
+      toast.error(t('drafts.resetChapterFailed', { error: result.error || '' }))
+      return
+    }
+    if (result.warning) toast.warning(result.warning)
+    else toast.success(t('drafts.resetChapterComplete', { chapter: chapterNumber }))
+  }
+
   return (
     <div>
       {/* 章节行 */}
@@ -122,6 +142,15 @@ function DraftChapterGroup({
         className="tree-item gap-1.5 cursor-pointer select-none"
         style={{ paddingLeft: 26 }}
         onClick={() => setOpen(v => !v)}
+        onContextMenu={e => showSidebarMenu([
+          {
+            key: 'reset-chapter',
+            label: t('drafts.resetChapter'),
+            icon: <RotateCcw size={13} />,
+            danger: true,
+            onClick: resetChapter,
+          },
+        ], e)}
         title={displayTitle}
       >
         {open
@@ -204,18 +233,54 @@ function DraftItem({
     })
   }
 
-  /** 将草稿标记为归档（软删除） */
-  const deleteDraft = async () => {
-    if (isFinalized) return
+  const isFinalized = draft.status === 'finalized'
+  const isArchived = draft.status === 'archived'
+
+  /** 归档草稿（软删除） */
+  const archiveDraft = async () => {
     const ok = await confirm(
       t('drafts.confirmArchive', { title: `${chapterTitleText} v${draft.version}` }),
       { title: t('drafts.confirmArchiveTitle'), confirmText: t('drafts.confirmArchiveBtn'), danger: true }
     )
     if (!ok) return
-    await useDraftStore.getState().markDraftStatus(draft.filePath, draft.chapterNumber, 'archived')
+    const result = await useDraftStore.getState().archiveDraft(draft.id, draft.chapterNumber)
+    if (!result.success) toast.error(t('drafts.archiveFailed', { error: result.error || '' }))
   }
 
-  const isFinalized = draft.status === 'finalized'
+  /** 解除定稿（仅限最后一章定稿） */
+  const unfinalizeDraft = async () => {
+    const ok = await confirm(
+      t('drafts.confirmUnfinalize', { title: `${chapterTitleText} v${draft.version}` }),
+      { title: t('drafts.confirmUnfinalizeTitle'), confirmText: t('drafts.confirmUnfinalizeBtn'), danger: true }
+    )
+    if (!ok) return
+    const result = await useDraftStore.getState().unfinalizeDraft(draft.id, draft.chapterNumber)
+    if (!result.success) {
+      toast.error(result.error || t('drafts.unfinalizeFailed'))
+      return
+    }
+    if (result.warning) toast.warning(result.warning)
+    else toast.success(t('drafts.unfinalizeComplete'))
+  }
+
+  /** 永久删除草稿 */
+  const deleteDraft = async () => {
+    if (isFinalized) {
+      toast.warning(t('drafts.deleteFinalizedHint'))
+      return
+    }
+    const ok = await confirm(
+      t('drafts.confirmDelete', { title: `${chapterTitleText} v${draft.version}` }),
+      { title: t('drafts.confirmDeleteTitle'), confirmText: t('drafts.confirmDeleteBtn'), danger: true }
+    )
+    if (!ok) return
+    const result = await useDraftStore.getState().deleteDraft(draft.id, draft.chapterNumber)
+    if (!result.success) {
+      toast.error(t('drafts.deleteFailed', { error: result.error || '' }))
+      return
+    }
+    toast.success(t('drafts.deleteComplete'))
+  }
 
   return (
     <div
@@ -242,13 +307,27 @@ function DraftItem({
           icon: <Copy size={13} />,
           onClick: () => navigator.clipboard.writeText(draft.filePath).catch(() => { }),
         },
+        ...(isFinalized
+          ? [{
+              key: 'unfinalize',
+              label: t('drafts.unfinalizeDraft'),
+              icon: <Undo2 size={13} />,
+              onClick: unfinalizeDraft,
+            }]
+          : !isArchived
+            ? [{
+                key: 'archive',
+                label: t('drafts.archiveDraft'),
+                icon: <Archive size={13} />,
+                onClick: archiveDraft,
+              }]
+            : []),
         { key: 'div2', type: 'divider' as const },
         {
           key: 'delete',
-          label: t('drafts.deleteDraft'),
+          label: t('drafts.deletePermanently'),
           icon: <Trash2 size={13} />,
           danger: true,
-          disabled: isFinalized,
           onClick: deleteDraft,
         },
       ], e)}

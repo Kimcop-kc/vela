@@ -35,6 +35,14 @@ interface DraftState {
 
   /** 手动标记草稿状态（修稿/审稿后更新用） */
   markDraftStatus: (draftPath: string, chapterNumber: number, status: DraftStatus) => Promise<void>
+  /** 归档草稿（软删除） */
+  archiveDraft: (draftId: number, chapterNumber: number) => Promise<{ success: boolean; error?: string }>
+  /** 解除定稿并恢复为可编辑草稿 */
+  unfinalizeDraft: (draftId: number, chapterNumber: number) => Promise<{ success: boolean; warning?: string; error?: string }>
+  /** 永久删除草稿及其修稿、审稿记录 */
+  deleteDraft: (draftId: number, chapterNumber: number) => Promise<{ success: boolean; error?: string }>
+  /** 将整章回滚到尚未生成草稿的状态 */
+  resetChapter: (chapterNumber: number) => Promise<{ success: boolean; warning?: string; error?: string }>
   /** 清除指定章节的缓存（下次访问时重新加载） */
   invalidateChapter: (chapterNumber: number) => void
   /** 应用合并后的修稿，更新文件和各类状态 */
@@ -125,6 +133,56 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     await updateDraftStatusInIndex(chapterDir, version, status)
     // 重新加载该章草稿以刷新缓存
     await get().loadChapterDrafts(chapterNumber)
+  },
+
+  archiveDraft: async (draftId, chapterNumber) => {
+    const result = await ipc.invoke('db:draft-update-status', draftId, 'archived')
+    if (result.success) await get().loadChapterDrafts(chapterNumber)
+    return result
+  },
+
+  unfinalizeDraft: async (draftId, chapterNumber) => {
+    const result = await ipc.invoke('db:draft-unfinalize', draftId)
+    if (result.success) {
+      await Promise.all([
+        get().loadChapterDrafts(chapterNumber),
+        useProjectStore.getState().refreshFileTree(),
+      ])
+    }
+    return result
+  },
+
+  deleteDraft: async (draftId, chapterNumber) => {
+    const result = await ipc.invoke('db:draft-delete', draftId)
+    if (result.success) {
+      const draftPath = `vela://draft/${draftId}`
+      const { useEditorStore } = await import('./editor-store')
+      const targetTab = useEditorStore.getState().tabs.find(tab => tab.filePath === draftPath)
+      if (targetTab) useEditorStore.getState().closeTab(targetTab.id)
+      await get().loadChapterDrafts(chapterNumber)
+    }
+    return result
+  },
+
+  resetChapter: async (chapterNumber) => {
+    const draftPaths = new Set(
+      (get().draftsByChapter[chapterNumber] ?? []).map(draft => draft.filePath)
+    )
+    const result = await ipc.invoke('db:draft-reset-chapter', chapterNumber)
+    if (result.success) {
+      const { useEditorStore } = await import('./editor-store')
+      const editor = useEditorStore.getState()
+      for (const tab of editor.tabs) {
+        if (tab.filePath && draftPaths.has(tab.filePath)) editor.closeTab(tab.id)
+      }
+      await Promise.all([
+        get().loadAllDrafts(),
+        useProjectStore.getState().refreshFileTree(),
+      ])
+      const { globalEventBus } = await import('../shared/event-bus')
+      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
+    }
+    return result
   },
 
   invalidateChapter: (chapterNumber) => {

@@ -47,8 +47,8 @@
     "targetWords": "目标字数",
     "chapterRole": "章节定位",
     "roles": {
-      "opening": "开篇",
-      "setup": "铺垫",
+      "setup": "建置",
+      "setupAlt": "铺垫",
       "development": "发展",
       "conflict": "冲突",
       "climax": "高潮",

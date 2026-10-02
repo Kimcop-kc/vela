@@ -10,10 +10,16 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { chunkText, generateEmbeddings } from './embedding'
 import { addChunks, removeDocument as removeDocFromStore, listDocuments as storeListDocuments } from './vector-store'
-import { splitFilePathsIntoChapters } from './chapter-splitting'
+import { splitFileIntoChaptersAsync } from './chapter-splitting'
 import type { BookChapterEntry, BookRecord } from '../src/shared/ipc-channels'
 
 export type { BookChapterEntry, BookRecord }
+
+export interface BookImportProgress {
+  phase: 'reading' | 'chunking' | 'embedding' | 'indexing' | 'saving'
+  current: number
+  total: number
+}
 
 /** 拆书档案存放目录 */
 function booksDir(projectPath: string): string {
@@ -49,11 +55,14 @@ export async function deconstructBook(
   projectPath: string,
   protocol: 'openai' | 'gemini',
   model: { baseUrl: string; apiKey: string },
+  onProgress?: (progress: BookImportProgress) => void,
 ): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
   try {
-    const split = splitFilePathsIntoChapters([filePath])
-    if (!split.success) return { success: false, error: split.error ?? '拆分章节失败' }
-    if (split.chapters.length === 0) return { success: false, error: '未能从文件中拆出任何章节' }
+    onProgress?.({ phase: 'reading', current: 0, total: 0 })
+    const chapters = await splitFileIntoChaptersAsync(filePath, lines => {
+      onProgress?.({ phase: 'reading', current: lines, total: 0 })
+    })
+    if (chapters.length === 0) return { success: false, error: '未能从文件中拆出任何章节' }
 
     const bookName = path.basename(filePath, path.extname(filePath))
     const bookId = randomUUID()
@@ -62,9 +71,11 @@ export async function deconstructBook(
     const entries: BookChapterEntry[] = []
     let vectorized = false
 
-    for (const chapter of split.chapters) {
+    for (let index = 0; index < chapters.length; index++) {
+      const chapter = chapters[index]
       const fileName = `${bookName} · 第${chapter.number}章 ${chapter.title}`.trim()
       const docId = randomUUID()
+      onProgress?.({ phase: 'chunking', current: index + 1, total: chapters.length })
       const chunks = chunkText(chapter.content, 500, 50)
       if (chunks.length === 0) continue
 
@@ -72,6 +83,7 @@ export async function deconstructBook(
       let vectors: number[][] | undefined
       if (model.apiKey) {
         try {
+          onProgress?.({ phase: 'embedding', current: index + 1, total: chapters.length })
           vectors = await generateEmbeddings(chunks, protocol, model)
           if (vectors.length > 0) vectorized = true
         } catch (e) {
@@ -86,6 +98,7 @@ export async function deconstructBook(
         await removeDocFromStore(projectPath, duplicate.id)
       }
 
+      onProgress?.({ phase: 'indexing', current: index + 1, total: chapters.length })
       const result = await addChunks(
         projectPath,
         docId,
@@ -123,6 +136,7 @@ export async function deconstructBook(
 
     const dir = booksDir(projectPath)
     fs.mkdirSync(dir, { recursive: true })
+    onProgress?.({ phase: 'saving', current: entries.length, total: entries.length })
     fs.writeFileSync(path.join(dir, `${bookId}.json`), JSON.stringify(book, null, 2), 'utf-8')
 
     return { success: true, book }
