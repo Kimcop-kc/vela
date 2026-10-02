@@ -7,16 +7,21 @@ import { globalEventBus } from '../../shared/event-bus'
 import type { StoryRevision, StoryRevisionRequest } from '../../shared/story-revision'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
-const configMap: Record<string, keyof NovelConfig> = { genre: 'genre', subGenre: 'subGenre', writingStyle: 'writingStyle', narrativePov: 'narrativePOV', globalGuidance: 'globalGuidance', goldenFinger: 'goldenFinger', synopsis: 'coreOutline', worldbuilding: 'worldSetting', charactersArch: 'protagonistProfile' }
+const configMap: Record<string, keyof NovelConfig> = { genre: 'genre', subGenre: 'subGenre', plotStructure: 'plotStructure', writingStyle: 'writingStyle', narrativePov: 'narrativePOV', globalGuidance: 'globalGuidance', goldenFinger: 'goldenFinger', synopsis: 'coreOutline', worldbuilding: 'worldSetting', charactersArch: 'protagonistProfile' }
+
+export interface RevisionPreflightOptions {
+  allowDirtyEditor?: boolean
+  allowDirtyCharacters?: boolean
+}
 export function assertStoryProject(projectPath: string) {
   const state = useProjectStore.getState()
   if (state.loading || state.currentProject?.path !== projectPath) throw new Error('项目已切换，本次操作已停止。')
 }
 
-async function ready(projectPath: string) {
+async function ready(projectPath: string, options: RevisionPreflightOptions = {}) {
   assertStoryProject(projectPath)
   if (useWorkflowStore.getState().hasActiveRun()) throw new Error('请等当前写作任务结束后再调整方向，避免两项任务互相覆盖。')
-  if (useEditorStore.getState().tabs.some(tab => tab.dirty)) throw new Error('编辑器中有未保存的修改。请先保存或放弃编辑，再继续这次调整。')
+  if (!options.allowDirtyEditor && useEditorStore.getState().tabs.some(tab => tab.dirty)) throw new Error('编辑器中有未保存的修改。请先保存或放弃编辑，再继续这次调整。')
   const core = await ipc.invoke('db:project-core-get')
   assertStoryProject(projectPath)
   const config = useProjectStore.getState().currentProject!.novelConfig
@@ -27,7 +32,7 @@ async function ready(projectPath: string) {
       throw new Error('小说配置与已保存内容不同，请先保存配置或重新打开项目，再调整方向。')
     }
   }
-  if (useCharacterStore.getState().loaded) {
+  if (!options.allowDirtyCharacters && useCharacterStore.getState().loaded) {
     const saved = await ipc.invoke('db:character-get-all')
     assertStoryProject(projectPath)
     const local = useCharacterStore.getState().characters
@@ -35,7 +40,7 @@ async function ready(projectPath: string) {
   }
   // Recheck immediately before the caller dispatches the write, including after reads.
   assertStoryProject(projectPath)
-  if (useWorkflowStore.getState().hasActiveRun() || useEditorStore.getState().tabs.some(tab => tab.dirty)) throw new Error('项目开始了新任务或编辑，请先完成后再调整。')
+  if (useWorkflowStore.getState().hasActiveRun() || (!options.allowDirtyEditor && useEditorStore.getState().tabs.some(tab => tab.dirty))) throw new Error('项目开始了新任务或编辑，请先完成后再调整。')
 }
 
 export function refreshAfterStoryRevision(projectPath: string, revision: StoryRevision) {
@@ -65,8 +70,8 @@ export function refreshAfterStoryRevision(projectPath: string, revision: StoryRe
   globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
 }
 
-export async function applyRevision(projectPath: string, request: StoryRevisionRequest, signal?: AbortSignal) {
-  await ready(projectPath)
+export async function applyRevision(projectPath: string, request: StoryRevisionRequest, signal?: AbortSignal, options?: RevisionPreflightOptions) {
+  await ready(projectPath, options)
   if (signal?.aborted) throw new Error('调整已取消，未提交修改。')
   const result = await ipc.invoke('story:apply', projectPath, request)
   refreshAfterStoryRevision(projectPath, result)

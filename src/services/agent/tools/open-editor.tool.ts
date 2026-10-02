@@ -30,7 +30,7 @@ export const openEditorTool = buildAgentTool({
     },
     required: ['file_path'],
   },
-  requiresConfirmation: true,
+  requiresConfirmation: false,
   isReadOnly: false,
   execute: async (args) => {
     const filePath = args.file_path as string

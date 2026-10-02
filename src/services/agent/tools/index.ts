@@ -18,6 +18,7 @@ import { writeFileTool } from './write-file.tool'
 import { openEditorTool } from './open-editor.tool'
 import { updateConfigTool } from './update-config.tool'
 import { configureModelTool } from './configure-model.tool'
+import { openModuleTool } from './open-module.tool'
 import { storyIndexTool, storyReadTool, storyReviseTool, storyHistoryTool, storyUndoTool, storyRewriteDraftTool } from './story-content.tool'
 
 /** 所有内置 Tool（供外部引用） */
@@ -32,9 +33,10 @@ export const builtinTools = [
   readProjectStateTool,
   readDraftsTool,
   listChaptersTool,
-  // 行动 Tool（需确认）
+  // 行动 Tool
   writeFileTool,
   openEditorTool,
+  openModuleTool,
   updateConfigTool,
   configureModelTool,
 ]

@@ -392,7 +392,7 @@
         "failed": "❌ Setup failed: {{error}}"
       },
       "updateConfig": {
-        "desc": "Update the novel project's configuration information, such as genre, target audience, outline, writing style, etc. This modifies core project settings and requires user confirmation.",
+        "desc": "Directly update one or more novel project settings, including genre, target audience, chapter count, story structure, narrative POV, outline, worldbuilding, protagonist profile, and writing style. Multiple fields can be supplied in one call.",
         "fieldDesc": "Field name to update",
         "valueDesc": "New value",
         "missingParams": "Missing field or value parameter",
@@ -400,7 +400,7 @@
         "updated": "✅ Configuration updated: {{field}} = \"{{value}}\""
       },
       "writeFile": {
-        "desc": "Write or modify files within the project. Can be used to create new files or overwrite existing file content. This is a write operation that requires user confirmation.",
+        "desc": "Directly write or modify files inside the current novel project. The path must remain within the current project.",
         "filePathDesc": "File path relative to project root",
         "contentDesc": "File content to write",
         "missingParams": "Missing file_path or content parameter",

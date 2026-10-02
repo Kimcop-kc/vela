@@ -27,7 +27,7 @@ export const writeFileTool = buildAgentTool({
     },
     required: ['file_path', 'content'],
   },
-  requiresConfirmation: true,
+  requiresConfirmation: false,
   isReadOnly: false,
   execute: async (args) => {
     const filePath = args.file_path as string
