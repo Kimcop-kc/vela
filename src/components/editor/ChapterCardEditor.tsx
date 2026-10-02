@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
   Sparkles, PenLine, GitBranch
@@ -55,6 +55,33 @@ const ROLE_COLORS: Record<string, string> = {
   resolution: 'bg-green-500/20 text-green-400',
 }
 
+function sameStringList(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index])
+}
+
+function areBlueprintsEqual(a: ChapterBlueprint | undefined, b: ChapterBlueprint | undefined): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.chapterNumber === b.chapterNumber &&
+    a.title === b.title &&
+    a.role === b.role &&
+    a.purpose === b.purpose &&
+    a.keyEvents === b.keyEvents &&
+    sameStringList(a.characters, b.characters) &&
+    a.suspenseHook === b.suspenseHook &&
+    a.userGuidance === b.userGuidance &&
+    a.notes === b.notes &&
+    a.notesUpdatedAt === b.notesUpdatedAt
+  )
+}
+
+function areBlueprintListsEqual(a: ChapterBlueprint[], b: ChapterBlueprint[]): boolean {
+  if (a.length !== b.length) return false
+  const bByChapter = new Map(b.map(item => [item.chapterNumber, item]))
+  return a.every(item => areBlueprintsEqual(item, bByChapter.get(item.chapterNumber)))
+}
+
 function getRoleLabel(role: string): string {
   const key = ROLE_LABELS[role]
   return key ? i18n.t(key, { ns: 'editors' }) : role
@@ -85,7 +112,7 @@ function ChapterCardEditorSession() {
   const guidanceRef = useRef<HTMLTextAreaElement>(null)
   const [focusGuidance, setFocusGuidance] = useState(false)
   const [deletedBlueprints, setDeletedBlueprints] = useState<ChapterBlueprint[]>([])
-  const dirty = JSON.stringify(blueprints) !== JSON.stringify(savedBlueprints)
+  const [dirty, setDirty] = useState(false)
   // 下一个可写的章节号
   const [nextWriteChapter, setNextWriteChapter] = useState<number | null>(null)
 
@@ -105,6 +132,7 @@ function ChapterCardEditorSession() {
       setBlueprints(data)
       setSavedBlueprints(data)
       setDeletedBlueprints([])
+      setDirty(false)
       setSaveError('')
       if (data.length > 0) setSelectedIdx(0)
       setNextWriteChapter(maxFinalized !== null ? maxFinalized + 1 : 1)
@@ -148,10 +176,14 @@ function ChapterCardEditorSession() {
 
   const selected = blueprints[selectedIdx] ?? null
   const selectedChapter = selected?.chapterNumber
+  const savedByChapter = useMemo(
+    () => new Map(savedBlueprints.map(item => [item.chapterNumber, item])),
+    [savedBlueprints],
+  )
   const rememberSession = useCallback((session: RehearsalSession) => {
     if (selectedChapter !== undefined) setRehearsalSessions(prev => new Map(prev).set(selectedChapter, session))
   }, [selectedChapter])
-  const selectedDirty = !!selected && JSON.stringify(selected) !== JSON.stringify(savedBlueprints.find(bp => bp.chapterNumber === selected.chapterNumber))
+  const selectedDirty = !!selected && !areBlueprintsEqual(selected, savedByChapter.get(selected.chapterNumber))
 
   useEffect(() => {
     if (!showRehearsal && focusGuidance) {
@@ -176,6 +208,7 @@ function ChapterCardEditorSession() {
     setBlueprints(prev =>
       prev.map((b, i) => (i === selectedIdx ? { ...b, [key]: value } : b))
     )
+    setDirty(true)
   }
 
   /** 保存当前章节蓝图 */
@@ -185,10 +218,10 @@ function ChapterCardEditorSession() {
     setSaveError('')
     try {
       await commit([selected], [])
-      setSavedBlueprints(previous => {
-        const saved = previous.filter(bp => bp.chapterNumber !== selected.chapterNumber)
-        return [...saved, selected].sort((a, b) => a.chapterNumber - b.chapterNumber)
-      })
+      const saved = savedBlueprints.filter(bp => bp.chapterNumber !== selected.chapterNumber)
+      const nextSaved = [...saved, selected].sort((a, b) => a.chapterNumber - b.chapterNumber)
+      setSavedBlueprints(nextSaved)
+      setDirty(!areBlueprintListsEqual(blueprints, nextSaved))
       addLog('info', t('chapterCard.blueprintSaved', { chapter: selected.chapterNumber }))
       toast.success(t('chapterCard.blueprintSaved', { chapter: selected.chapterNumber }))
     } catch (error) {
@@ -204,11 +237,12 @@ function ChapterCardEditorSession() {
     setSaving(true)
     setSaveError('')
     try {
-      const changed = blueprints.filter(bp => JSON.stringify(bp) !== JSON.stringify(savedBlueprints.find(saved => saved.chapterNumber === bp.chapterNumber)))
+      const changed = blueprints.filter(bp => !areBlueprintsEqual(bp, savedByChapter.get(bp.chapterNumber)))
       const deleted = savedBlueprints.filter(bp => !blueprints.some(current => current.chapterNumber === bp.chapterNumber)).map(bp => bp.chapterNumber)
       await commit(changed, deleted)
       setSavedBlueprints(blueprints)
       setDeletedBlueprints([])
+      setDirty(false)
       addLog('info', t('chapterCard.allBlueprintsSaved', { count: blueprints.length }))
     } catch (error) {
       setSaveError(t('rehearsal.saveFailed', { message: String(error) }))
@@ -234,6 +268,7 @@ function ChapterCardEditorSession() {
     }
     setBlueprints(prev => [...prev, newBlueprint])
     setSelectedIdx(blueprints.length)
+    setDirty(true)
   }
 
   /** 删除选中章节 */
@@ -249,6 +284,7 @@ function ChapterCardEditorSession() {
     const newList = blueprints.filter((_, i) => i !== selectedIdx)
     setBlueprints(newList)
     setSelectedIdx(Math.max(0, selectedIdx - 1))
+    setDirty(true)
   }
 
   /** 触发蓝图批量生成（来自 DirectoryConfigDialog 的确认回调） */
@@ -378,6 +414,7 @@ function ChapterCardEditorSession() {
         <Button variant="outline" disabled={saving} onClick={() => {
           setBlueprints(prev => [...prev, ...deletedBlueprints].sort((a, b) => a.chapterNumber - b.chapterNumber))
           setDeletedBlueprints([])
+          setDirty(true)
         }}>{t('chapterCard.undoDelete')}</Button>
       </div>}
 
@@ -399,8 +436,9 @@ function ChapterCardEditorSession() {
         onAdopt={(guidance, original) => {
           const activeProject = useProjectStore.getState().currentProject
           if (activeProject?.id !== currentProject.id || activeProject.path !== currentProject.path ||
-              JSON.stringify(selected) !== JSON.stringify(original)) return false
+              !areBlueprintsEqual(selected, original)) return false
           setBlueprints(prev => prev.map((bp, index) => index === selectedIdx ? appendRehearsalGuidance(bp, guidance) : bp))
+          setDirty(true)
           setFocusGuidance(true)
           toast.success(t('rehearsal.adopted'))
           return true
