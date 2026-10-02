@@ -1,25 +1,25 @@
 import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ScrollText, ChevronLeft, ChevronRight, PenTool } from 'lucide-react'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
-import CodeMirrorEditor from '../editor/CodeMirrorEditor'
-import NovelConfigEditor from '../editor/NovelConfigEditor'
-import CharacterEditor from '../editor/CharacterEditor'
-import ChapterCardEditor from '../editor/ChapterCardEditor'
-import WorldBuildingEditor from '../editor/WorldBuildingEditor'
-import ArchFileViewer from '../editor/ArchFileViewer'
-import DraftEditor from '../editor/DraftEditor'
-import VersionHistory from '../editor/VersionHistory'
-import ReviewReport from '../editor/ReviewReport'
-import StyleGuideView from '../editor/StyleGuideView'
-import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
-import WelcomePage from '../pages/WelcomePage'
-import KnowledgeOverview from '../pages/KnowledgeOverview'
-import BooksOverview from '../pages/BooksOverview'
+const CodeMirrorEditor = lazy(() => import('../editor/CodeMirrorEditor'))
+const NovelConfigEditor = lazy(() => import('../editor/NovelConfigEditor'))
+const CharacterEditor = lazy(() => import('../editor/CharacterEditor'))
+const ChapterCardEditor = lazy(() => import('../editor/ChapterCardEditor'))
+const WorldBuildingEditor = lazy(() => import('../editor/WorldBuildingEditor'))
+const ArchFileViewer = lazy(() => import('../editor/ArchFileViewer'))
+const DraftEditor = lazy(() => import('../editor/DraftEditor'))
+const VersionHistory = lazy(() => import('../editor/VersionHistory'))
+const ReviewReport = lazy(() => import('../editor/ReviewReport'))
+const StyleGuideView = lazy(() => import('../editor/StyleGuideView'))
+const ThreeWayMerge = lazy(() => import('../editor/ThreeWayMerge'))
+const WelcomePage = lazy(() => import('../pages/WelcomePage'))
+const KnowledgeOverview = lazy(() => import('../pages/KnowledgeOverview'))
+const BooksOverview = lazy(() => import('../pages/BooksOverview'))
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -30,6 +30,14 @@ import { toast } from '../ui/Toast'
 
 import { clearChapterTitleCache } from './Sidebar'
 import '../editor/novel-editor.css'
+
+function EditorLoadingFallback() {
+  return (
+    <div className="w-full h-full flex items-center justify-center" style={{ color: 'var(--color-text-muted)' }}>
+      <span className="text-xs animate-pulse">Loading…</span>
+    </div>
+  )
+}
 
 // ─── 正文章节编辑器包装层（含字数信息栏） ─────────────────────────────────────────────
 function ProseEditorWrapper({
@@ -375,20 +383,22 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // 侧栏为「主页」时，中间区域显示欢迎页
   if (sidebarView === 'home') {
     return (
-      <WelcomePage
-        onNewProject={() => {
-          useLayoutStore.getState().openNewProject()
-        }}
-        onOpenProject={async () => {
-          const folder = await ipc.invoke('dialog:select-folder')
-          if (folder) {
-            useProjectStore.getState().openProject(folder)
-          }
-        }}
-        onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
-        }}
-      />
+      <Suspense fallback={<EditorLoadingFallback />}>
+        <WelcomePage
+          onNewProject={() => {
+            useLayoutStore.getState().openNewProject()
+          }}
+          onOpenProject={async () => {
+            const folder = await ipc.invoke('dialog:select-folder')
+            if (folder) {
+              useProjectStore.getState().openProject(folder)
+            }
+          }}
+          onImportNovel={() => {
+            useLayoutStore.getState().openImportNovel()
+          }}
+        />
+      </Suspense>
     )
   }
 
@@ -399,36 +409,40 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         className="w-full h-full flex flex-col overflow-hidden"
         style={{ backgroundColor: 'var(--color-editor-bg)' }}
       >
-        <CharacterEditor />
+        <Suspense fallback={<EditorLoadingFallback />}>
+          <CharacterEditor />
+        </Suspense>
       </div>
     )
   }
 
   // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面（跳过 Tab 系统）
   if (sidebarView === 'knowledge') {
-    return <KnowledgeOverview />
+    return <Suspense fallback={<EditorLoadingFallback />}><KnowledgeOverview /></Suspense>
   }
 
   // 侧栏为「拆书」时，中间区域固定展示拆书详情（章节清单 + 本书检索）
   if (sidebarView === 'books') {
-    return <BooksOverview />
+    return <Suspense fallback={<EditorLoadingFallback />}><BooksOverview /></Suspense>
   }
 
   // 未打开项目时显示欢迎页
   if (!currentProject) {
     return (
-      <WelcomePage
-        onNewProject={onNewProject}
-        onOpenProject={async () => {
-          const folder = await ipc.invoke('dialog:select-folder')
-          if (folder) {
-            useProjectStore.getState().openProject(folder)
-          }
-        }}
-        onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
-        }}
-      />
+      <Suspense fallback={<EditorLoadingFallback />}>
+        <WelcomePage
+          onNewProject={onNewProject}
+          onOpenProject={async () => {
+            const folder = await ipc.invoke('dialog:select-folder')
+            if (folder) {
+              useProjectStore.getState().openProject(folder)
+            }
+          }}
+          onImportNovel={() => {
+            useLayoutStore.getState().openImportNovel()
+          }}
+        />
+      </Suspense>
     )
   }
 
@@ -589,6 +603,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
       {/* 编辑区主体 */}
       <div className="flex-1 overflow-hidden">
+        <Suspense fallback={<EditorLoadingFallback />}>
         {activeTab?.type === 'chapter' && activeTab.filePath?.startsWith('vela://draft/') && (
           // 草稿文件：使用 DraftEditor（工具栏含修稿/审稿/定稿按鈕）
           <DraftEditor
@@ -728,6 +743,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             </div>
           </DialogContent>
         </Dialog>
+        </Suspense>
 
       </div>
 
