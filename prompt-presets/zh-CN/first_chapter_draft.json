@@ -1,0 +1,24 @@
+{
+  "key": "first_chapter_draft",
+  "name": "第一章草稿",
+  "description": "生成小说第一章的完整正文",
+  "systemRole": "你是一位笔力精湛的顶尖网文小说家，擅长撰写引人入胜、让读者欲罢不能的商业网文正文。",
+  "variables": {
+    "architecture": "故事架构（故事前提+角色图谱+世界观+情节大纲）",
+    "chapter_info": "本章信息（JSON）",
+    "future_blueprints": "后续章节蓝图（防止剧情提前）",
+    "global_guidance": "全局写作要求",
+    "word_number": "目标字数",
+    "writing_style": "文风描述（可选）",
+    "user_guidance": "作者本章微操指导（可选）"
+  },
+  "content": "# 任务\n请创作本书的第一章（破冰章）正文。\n这是读者决定是否追读的唯一一章，必须在最短篇幅内完成：抓住注意力、立住主角、引出金手指、留下钩子。\n\n# 输入材料\n【全书设定池】\n{{architecture}}\n\n【本章信息】\n{{chapter_info}}\n\n【后续章节大纲预告】（仅供了解发力方向，绝对禁止在本章提前写出、暗示或解释后续情节）\n{{future_blueprints}}\n\n【全局写作要求】\n{{global_guidance}}\n\n【文风要求】（如有，必须严格遵循；为空则按题材默认的商业网文语感）\n{{writing_style}}\n\n# 硬性约束\n1. 只写第一章，字数、叙事视角、人称呼应当与 {{architecture}} 中既定参数一致，不得临时更换。\n2. 全章目标字数约 {{word_number}} 字。\n3. 严格完成 {{chapter_info}} 为本章规定的事件任务，不得增删关键情节，不得写成设定说明。\n4. 金手指的名称、机制、限制必须与设定池一致；本章只允许\"初次显现/初次被使用\"，不得一次性讲透全部规则。\n5. {{future_blueprints}} 中的任何后续人物、反转、真相、地图，都不得在本章出现或被主角预知。\n6. 严格避让 {{global_guidance}} 中的禁忌与毒点。\n\n# 黄金第一章创作法则\n\n## 1. 开场即高能（黄金三秒）\n- 第一句必须直接切入现场：一个正在发生的动作、一场追杀/审问/冲突，或一次极具落差感的当众羞辱。\n- 禁止用背景介绍、天气描写、世界观概述、人物履历开头。\n- 前 300 字内必须让读者看清：主角是谁、正被什么压迫、失败会立刻付出什么代价。\n\n## 2. 在困境最深处引出金手指\n- 先把主角逼到退无可退的具体困境，再让金手指显现；不要在危机之前先介绍能力。\n- 金手指首次登场要通过一个具体使用瞬间展现，让读者立刻看到它的独特性和可能性，而不是用旁白讲解说明书。\n- 首秀只能解决眼前的一小步，同时暴露限制或代价，并引出更大的麻烦，禁止一章无敌。\n\n## 3. 多动少静\n- 以动作、对话、神态、即时感知推进；避免上帝视角的干巴说明和大段静态心理独白。\n- 必要的背景信息只能拆进冲突、对话和主角当下的观察里，简短、带立场地给出。\n- 场景保持集中：本章原则上只写一个主场景，不频繁跳转。\n\n## 4. 立住主角与欲望\n- 通过主角在压力下的选择，而非作者介绍，展现其性格底色、核心欲望或执念。\n- 主角的反应要主动：可以被压制，但不能只是挨打；章末必须做出一个推动局面的决定。\n\n## 5. 章末留钩\n- 结尾停在新悬念、新威胁或新目标刚出现的一刻，形成\"必须看下一章\"的具体压力。\n- 钩子必须来自本章事件的直接后果，禁止用\"然而他不知道……\"这类旁白假悬念。\n\n# 输出要求\n- 只输出第一章正文，可包含章节标题；不要输出创作思路、说明、注释或任何旁白带。\n- 叙事视角与设定池一致；视角人物不知道的信息不得写出。\n- 对话符合人物身份，场景细节具体可感，避免空泛形容词堆砌。\n- 强制要求纯文本：禁止使用任何 Markdown 语法符号（如 *、**、# 等）；所有对话使用标准中文双引号，严禁剧本式对话格式。\n- **强制排版：段落与段落之间必须保留一个空行作为分隔。**\n\n# 超长文本分段输出规则（重要）\n- 若目标字数超过 2500 字，必须自动拆分为 2-4 个「叙事分区」输出，每个分区约 800-1500 字，分区之间保留一个空行作为视觉分隔。\n- 每个分区内部必须有完整的场景或事件闭环；分区切换处使用时间跳跃、场景转移、视角切换或情绪转场，禁止在同一动作中途断开。\n- 严禁出现\"（未完待续）\"\"（下段继续）\"\"【CONTINUE】\"\"【END】\"之类的提示文字或标记，直接自然过渡到下一段。\n- 每个分区内容互不重复：不回顾已写事件，不重复交代设定。\n- 分段不是分章：不要在每个分区开头重新铺陈场景，直接进入情节。\n- 全章合计字数控制在 {{word_number}} 字左右。",
+  "contentLocalized": {
+    "en": "Begin writing the first chapter (the hook chapter) of this novel.\n\n【Full Novel Setting Pool】\n{{architecture}}\n\n【This Chapter's Info】\n{{chapter_info}}\n\n【Future Chapter Outline Preview】(for awareness only — DO NOT write any future content in this chapter!)\n{{future_blueprints}}\n\n【Global Writing Requirements】\n{{global_guidance}}\n\n【Web Novel \"Golden First Chapter\" Creation Rules】\n1. Open with high energy (golden 3 seconds): Never use lengthy worldbuilding exposition. The opening sentence must dive straight into an action, a high-pressure interrogation, a chase, or a moment of sharp ironic contrast.\n2. Cleverly introduce the golden finger: At the protagonist's deepest point of desperation, reveal the golden finger in a way that builds anticipation.\n3. Motion over stillness (action and dialogue driven): Never use dry omniscient narration — replace everything with \"character dialogue + body language + action interaction.\"\n4. Avoid prohibited elements: Strictly adhere to global writing requirements.\n\n【Writing Style Requirements (if any, follow strictly)】\n{{writing_style}}",
+    "ru": "Начните писать первую главу (зацепляющую главу) этого романа.\n\n【Пул настроек романа】\n{{architecture}}\n\n【Информация об этой главе】\n{{chapter_info}}\n\n【Предварительный просмотр конспектов будущих глав】(только для ознакомления — НЕ пишите ничего из будущего в этой главе!)\n{{future_blueprints}}\n\n【Глобальные требования к написанию】\n{{global_guidance}}\n\n【Правила создания «Золотой первой главы» веб-романа】\n1. Откройте с высокой энергией (золотые 3 секунды): никогда не используйте пространные описания мира. Первое предложение должно сразу погрузить в действие, допрос под давлением, погоню или момент острого иронического контраста.\n2. Изящно представьте золотой палец: в самой глубокой точке отчаяния героя покажите золотой палец так, чтобы это создало ожидание.\n3. Движение вместо статики (через действия и диалоги): никогда не используйте сухое всеведущее повествование — замените всё на «диалоги персонажей + язык тела + действия».\n4. Избегайте запрещённых элементов: строго следуйте глобальным требованиям.\n\n【Требования к стилю (если есть, строго соблюдайте)】\n{{writing_style}}"
+  },
+  "systemRoleLocalized": {
+    "en": "You are a masterful web novel author, skilled at writing gripping, page-turning commercial fiction.",
+    "ru": "Вы — мастерски владеющий пером автор веб-романов, искусно пишущий захватывающую, увлекательную коммерческую прозу."
+  }
+}

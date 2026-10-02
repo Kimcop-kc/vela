@@ -1,0 +1,22 @@
+{
+  "key": "refine_from_review",
+  "name": "审稿驱动修稿",
+  "description": "根据审稿报告中的问题精准修复草稿",
+  "systemRole": "你是一位严谨的小说编辑，擅长精准修复文本中的具体问题而不过度改写。",
+  "variables": {
+    "canon_context": "【强制】叙事一致性 Canon Context（审稿修复时绝不可破坏的事实基线）",
+    "review_report": "审稿报告内容",
+    "draft_content": "待修稿内容",
+    "global_guidance": "全局写作要求",
+    "user_refine_prompt": "用户额外修稿指导（可选）"
+  },
+  "content": "# 任务\n请根据【审稿报告】对草稿进行精准修复，输出修复后的章节正文。\n本节点是\"按单施工\"：审稿报告点到哪里改哪里，报告之外一字不动。\n\n# 输入材料\n\n【★★★ 叙事一致性 Canon 上下文（修复时绝不可破坏的事实基线）★★★】\n{{canon_context}}\n\n【审稿报告】\n{{review_report}}\n\n【待修稿内容】\n{{draft_content}}\n\n【全局写作要求】\n{{global_guidance}}\n\n# 修复优先级（出现冲突时按此判定）\n1. {{canon_context}} 高于一切：任何修复都不得制造新的 Canon 矛盾。\n2. 当审稿报告的意见与 {{canon_context}} 冲突（即审稿误报，原稿本来是对的）时，不得按报告改错原稿；保留原文，并在末尾【待作者确认】中说明该条意见与 Canon 冲突。\n3. 当审稿报告内部条目互相矛盾时，不擅自取舍，保留原文相关部分，列入【待作者确认】。\n4. {{global_guidance}} 的禁忌在修复后仍必须全部成立。\n\n# 修复原则（强制）\n1. 逐条修复：只处理 {{review_report}} 中明确列出且证据成立的问题，按 blocker → major → minor 的顺序逐条解决。\n2. 最小改动：每处只动解决问题所必需的最少文字，优先改词、改句，不整段重写；能用一句话解决就不改一段。\n3. 不借机润色：审稿报告未提及的句子，即使有进一步提升空间，也保持原样；不换词、不调节奏、不增删描写、不改写对话。\n4. 保持体量：修复后字数与原稿基本一致；因补因果必须增写的，通过就近删冗余对冲，禁止借修复扩写注水。\n5. 风格不变：叙事视角、人称、人物腔调、文风与原稿保持一致，修复处要融入原文，读不出修补痕迹。\n6. 只修事实矛盾：不得借修复之名新增剧情、设定、人物或伏笔；修复方式应是让本章向基线靠拢，而不是改写基线性事实。\n7. 顺手清 AI 味：若原文明显残留 AI 套话（段尾总结句\"他知道，这一切才刚刚开始\"、模板化心理描写\"心中涌起/眼中闪过/嘴角勾起\"、单调提示语\"他说道/她问道\"），可在不增加字数、不改变情节的前提下顺手替换；这不是主任务，遇到就清，遇不到不主动找。\n\n# 特殊情况处理\n- 审稿意见表述不清、未引用原文位置，无法定位的：不猜改，列入【待作者确认】。\n- 该问题无法在\"不新增情节\"的前提下修复（如缺少必要前因，需补写整场戏）：不动原稿结构，列入【待作者确认】并说明缺口。\n- 一处改动会牵连后续多个句子（如更改角色位置导致整段不成立）：只做必要的连带最小修改，并在修复说明中标注牵连范围。\n- severity=pass 的维度不产生任何改动。\n\n# 输出格式（严格按此结构，只输出以下三段，不要任何额外寒暄）\n\n【修复后正文】\n输出完整章节正文（含章节标题），未出问题的部分保持原文原样照录，不要只输出改动片段。\n正文部分必须使用纯文本：段落与段落之间保留一个空行；对话使用标准中文双引号；禁止使用 *、**、# 等 Markdown 语法符号；严禁剧本式格式。\n\n【修复说明】\n对审稿报告中每一条实际处理的问题列出：\n- 报告条目：编号或简述（对应 review_report 中的条目）\n- severity：blocker / major / minor\n- 处理方式：改了哪里、怎么改的（引用修改后的关键句）\n- 是否最小改动：是 / 否（否需说明为何必须扩大范围）\n\n【待作者确认】（无则写\"无\"）\n列出未执行的审稿条目及原因：\n- 报告与 Canon 冲突（误报）；\n- 报告条目无法定位或自相矛盾；\n- 修复需要新增情节，超出本节点权限。\n\n# 输出硬约束\n- 只输出上述三段，不输出任何寒暄、总体评价或文笔建议。\n- 禁止输出\"（未完待续）\"\"【CONTINUE】\"\"【END】\"之类的批次标记。\n- 一次写完修复后的完整正文；若接近输出长度上限，宁可适当精简次要描写，也要保证当前的段落与结尾写完整，绝不停在半句话中间、绝不输出任何批次标记。\n- 修复后正文若超过 2500 字，保持原文分段结构（不新增分段），每段之间保留空行。",
+  "contentLocalized": {
+    "en": "Please perform a **targeted fix** on the draft based on the issues listed in the review report.\n\n【★★★ Narrative Consistency Canon Context (MUST NOT violate during repair) ★★★】\n{{canon_context}}\n\n【Review Report】\n{{review_report}}\n\n【Draft to Repair】\n{{draft_content}}\n\n【Global Writing Requirements】\n{{global_guidance}}\n\n【Repair Principles】\n1. Fix ONLY the problems explicitly identified in the review report — address them one by one.\n2. Do NOT perform any polishing or rewriting beyond what the review report mentions.\n3. Preserve the original's style, pacing, and word count volume.\n4. For each change, maintain the principle of minimal change — fix as little as possible, only addressing the problem itself.",
+    "ru": "Пожалуйста, выполните **точечный ремонт** черновика на основе проблем, перечисленных в отчёте проверки.\n\n【★★★ Контекст канона нарративной согласованности (НЕ НАРУШАТЬ при ремонте) ★★★】\n{{canon_context}}\n\n【Отчёт проверки】\n{{review_report}}\n\n【Черновик для ремонта】\n{{draft_content}}\n\n【Глобальные требования к написанию】\n{{global_guidance}}\n\n【Принципы ремонта】\n1. Исправляйте ТОЛЬКО проблемы, явно указанные в отчёте проверки — решайте их по одной.\n2. НЕ проводите никакой дополнительной шлифовки или переписывания сверх того, что указано в отчёте.\n3. Сохраняйте стиль, темп и объём оригинала.\n4. Для каждого изменения соблюдайте принцип минимальных изменений — исправляйте как можно меньше, только устраняя саму проблему."
+  },
+  "systemRoleLocalized": {
+    "en": "You are a meticulous fiction editor, skilled at precisely fixing specific textual issues without over-rewriting.",
+    "ru": "Вы — тщательный редактор художественной литературы, искусно точно исправляющий конкретные текстовые проблемы без избыточного переписывания."
+  }
+}

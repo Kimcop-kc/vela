@@ -1,0 +1,29 @@
+{
+  "key": "premise",
+  "name": "故事前提",
+  "description": "故事架构第一步：提炼故事前提（Story Premise），浓缩全书的核心卖点与冲突链",
+  "systemRole": "你是一位顶尖的网络小说策划专家与故事架构师。",
+  "variables": {
+    "genre": "小说类型",
+    "sub_genre": "细分类型",
+    "topic": "核心主题/故事简介",
+    "target_audience": "目标受众",
+    "number_of_chapters": "总章数",
+    "word_number": "每章字数",
+    "core_setting": "世界观基盘设定",
+    "golden_finger": "核心金手指/卖点",
+    "protagonist_profile": "主角人设",
+    "global_guidance": "全局写作要求",
+    "step_guidance": "作者对本步骤的补充指导（可选）",
+    "reference_works": "参考作品（可选）"
+  },
+  "content": "# 任务\n请提炼本书的故事前提（Story Premise）。\n这是一本【{{genre}}】小说，细分类别：【{{sub_genre}}】。\n\n# 核心设定参数\n- 核心大纲：{{topic}}\n- 目标受众：{{target_audience}}\n- 预期篇幅：约 {{number_of_chapters}} 章，每章约 {{word_number}} 字\n- 世界观基盘：{{core_setting}}\n- 核心金手指/体系：{{golden_finger}}\n- 主角核心人设：{{protagonist_profile}}\n- 全局写作要求与禁忌：{{global_guidance}}\n- 参考作品（调性与节奏参考，非仿写）：{{reference_works}}\n# 优先级规则\n1. 作者补充指导非空时，在不违反 {{global_guidance}} 禁忌的前提下优先满足。\n2. 不得发明与上述参数冲突的新设定；参数之间冲突时，以主角人设和金手指体系为准，并在末尾用一行提示冲突点。\n3. {{reference_works}} 为空时，不要自行寻找或虚构参考作品。\n\n# 输出格式（全文 300–500 字，严格使用以下四个 Markdown 小节，不加额外解释）\n\n## 一句话前提（Logline）\n用 30–50 字，按句式浓缩：\"当 [主角身份] 遭遇 [触发事件]，必须 [核心行动]，否则 [灾难后果]。\"\n主角身份要带出其核心欲望或执念，不要用职业头衔代替。\n\n## 核心冲突链（约 100 字）\n按顺序写清四环，不得跳过：\n初始困境 → 打破平衡的触发事件 → 核心主线目标 → 主要阻碍势力。\n阻碍必须包含两个层次：一个具体的显性敌人/对手，以及一个更深层的危机（规则、势力或真相）。\n\n## 金手指定位（约 100–150 字）\n按四要素写全，缺一不可：\n获取方式 → 核心机制与功能（写清精确边界，不要\"可以变强\"这类空话）\n→ 与世界观规则的交互点（它利用或违反了哪条世界规则）\n→ 进阶路线与限制/代价（为什么主角不能靠它一路无敌）。\n金手指必须是推动主线的核心手段，而非背景挂件。\n\n## 悬念骨架（约 100 字）\n- 显性冲突线：当前阶段最大、最直接的威胁。\n- 隐藏主线暗示：贯穿全书的终极悬念或深层真相，只能给线索性暗示，不在此揭晓答案。\n两条线要能在后续交汇，显性威胁应是隐藏真相浮出水面的一层外壳。",
+  "contentLocalized": {
+    "en": "Please distill the story premise for this novel. This is a [{{genre}}] novel (sub-genre: {{sub_genre}}).\n\n【Core Setting Parameters】\n- Core outline: {{topic}}\n- Target audience: {{target_audience}}\n- Expected length: approximately {{number_of_chapters}} chapters ({{word_number}} words each)\n- Worldbuilding foundation: {{core_setting}}\n- Golden finger / core selling point: {{golden_finger}}\n- Protagonist profile: {{protagonist_profile}}\n- Global writing requirements and prohibitions: {{global_guidance}}\n\n【Generation Task】\nGenerate a 300–500 word structured story premise, strictly following these four sections:\n\n## One-Line Premise (Logline)\nCondense the entire novel's core in 30–50 words: \"When [protagonist identity] encounters [triggering event], they must [core action] or else [catastrophic consequence].\"\n\n## Core Conflict Chain\nElaborate: protagonist's initial dilemma → the event that shatters equilibrium → core main-line objective → primary antagonistic forces. (~100 words)\n\n## Golden Finger Positioning\nDetail: how the golden finger is obtained → core mechanics and functions → interaction points with world rules → progression paths and limitations/costs. (~100–150 words)\n\n## Suspense Skeleton\nDescribe: the overt conflict line (current biggest threat) + hidden main-line hints (ultimate mystery / deep truth). (~100 words)\n\n【Requirements】\n1. The golden finger must be a core plot-driving mechanism — describe its unique mechanics in detail, no vague hand-waving.\n2. Must embody the protagonist's core desire or obsession derived from their setting.\n3. The conflict chain must include both an overt enemy and a deeper crisis.\n4. Strictly avoid any prohibited elements listed in global writing requirements.\n5. Use the Markdown section headings above as separators; do not add extra commentary.\n\n【Reference Works (if any — match tone and pacing)】\n{{reference_works}}",
+    "ru": "Пожалуйста, сформулируйте сюжетную посылку для этого романа. Это роман жанра [{{genre}}] (поджанр: {{sub_genre}}).\n\n【Параметры основных настроек】\n- Основной конспект: {{topic}}\n- Целевая аудитория: {{target_audience}}\n- Ожидаемый объём: примерно {{number_of_chapters}} глав (по {{word_number}} слов в каждой)\n- Фундамент мироздания: {{core_setting}}\n- Золотой палец / ключевая фишка: {{golden_finger}}\n- Профиль главного героя: {{protagonist_profile}}\n- Глобальные требования и запреты на написание: {{global_guidance}}\n\n【Задание по генерации】\nСоздайте структурированную сюжетную посылку из 300–500 слов, строго следуя четырём разделам:\n\n## Однострочная посылка (Логлайн)\nУместите ядро всего романа в 30–50 слов: «Когда [идентичность героя] сталкивается с [триггерным событием], он должен [ключевое действие], иначе [катастрофическое последствие].»\n\n## Цепь основных конфликтов\nРазверните: начальная дилемма героя → событие, разрушающее равновесие → основная главная цель → главные противостоящие силы. (~100 слов)\n\n## Позиционирование золотого пальца\nДетализируйте: способ получения золотого пальца → основные механики и функции → точки взаимодействия с правилами мира → пути развития и ограничения/цена. (~100–150 слов)\n\n## Каркас интриги\nОпишите: линия явного конфликта (текущая главная угроза) + скрытые подсказки основной линии (тайна финала / глубинная правда). (~100 слов)\n\n【Требования】\n1. Золотой палец должен быть ключевым двигателем сюжета — опишите его уникальные механики подробно, без абстрактных общих фраз.\n2. Должно отражаться основное желание или одержимость героя, вытекающие из его сеттинга.\n3. Цепь конфликтов должна включать как явного врага, так и более глубокую угрозу.\n4. Строго избегайте любых запрещённых элементов из глобальных требований.\n5. Используйте заголовки разделов выше как разделители; не добавляйте лишних комментариев.\n\n【Эталонные произведения (если есть — ориентируйтесь на тон и ритм)】\n{{reference_works}}"
+  },
+  "systemRoleLocalized": {
+    "en": "You are a top-tier web novel planning expert and story architect.",
+    "ru": "Вы — ведущий эксперт по планированию веб-романов и архитектор сюжетов."
+  }
+}
