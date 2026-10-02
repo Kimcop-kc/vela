@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ipc } from '../ipc-client'
 import {
   BUILTIN_PROMPTS,
+  deleteCustomPrompt,
+  deleteProjectCustomPrompt,
   ensurePromptsLoaded,
   getPromptTemplate,
   listPromptVersions,
@@ -57,8 +59,11 @@ describe('prompt version history', () => {
     })
 
     const base = BUILTIN_PROMPTS.find(template => template.key === 'character_dynamics')!
+    expect(getPromptTemplate(base.key)?.content).toBe(base.content)
+
     await saveCustomPrompt({ ...base, content: 'version one', contentLocalized: undefined })
     await saveCustomPrompt({ ...base, content: 'version two', contentLocalized: undefined })
+    expect(getPromptTemplate(base.key)?.content).toBe('version two')
 
     const versions = await listPromptVersions(base.key, 'global')
     expect(versions).toHaveLength(1)
@@ -75,5 +80,11 @@ describe('prompt version history', () => {
     dirs.add('C:/project/.vela/prompts')
     await ensurePromptsLoaded('C:/project')
     expect(getPromptTemplate(base.key)?.content).toBe('project override')
+
+    await deleteProjectCustomPrompt('C:/project', base.key)
+    expect(getPromptTemplate(base.key)?.content).toBe('version one')
+
+    await deleteCustomPrompt(base.key)
+    expect(getPromptTemplate(base.key)?.content).toBe(base.content)
   })
 })

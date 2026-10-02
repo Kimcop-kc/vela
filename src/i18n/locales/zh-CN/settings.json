@@ -116,10 +116,10 @@
   },
   "prompts": {
     "title": "提示词设置",
-    "builtin": "内置",
+    "builtin": "内置默认",
     "custom": "自定义",
-    "global": "全局",
-    "project": "项目",
+    "global": "全局自定义",
+    "project": "项目自定义",
     "reset": "重置为默认",
     "resetDefault": "恢复默认",
     "save": "保存修改",

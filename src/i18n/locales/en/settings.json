@@ -116,10 +116,10 @@
   },
   "prompts": {
     "title": "Prompt Settings",
-    "builtin": "Built-in",
+    "builtin": "Built-in default",
     "custom": "Custom",
-    "global": "Global",
-    "project": "Project",
+    "global": "Global custom",
+    "project": "Project custom",
     "reset": "Reset to Default",
     "resetDefault": "Restore Default",
     "save": "Save Changes",
