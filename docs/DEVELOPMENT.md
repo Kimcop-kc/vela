@@ -28,6 +28,28 @@ npm run rebuild
 npm run dev
 ```
 
+## 本地质量检查
+
+提交前运行完整质量检查：
+
+```bash
+npm run ci:quality
+```
+
+它依次执行类型检查、单元测试和 ESLint。性能基准测试对机器负载比较敏感，单独运行：
+
+```bash
+npm run test:perf
+```
+
+## 发布流程
+
+* 推送到 `master` / `main`：运行质量检查并构建三套安装包，只上传为 GitHub Actions
+  Artifact，不修改已有 Release。
+* 推送 `vX.Y.Z` 标签：先运行同一套质量检查，再构建并发布安装包。标签版本必须与
+  `package.json` 的 `version` 完全一致，否则发布会失败。
+* 手动运行 workflow：只构建 Artifact，不自动发布 Release。
+
 ## 原生模块 ABI 说明
 
 同一份 `better-sqlite3` 二进制不能同时满足 Node 与 Electron：

@@ -31,6 +31,7 @@ import {
   type PostProcessStep,
 } from '../workflow-utils'
 import type { ChapterInfo } from '../chapter-workflow'
+import type { StepCallbacks } from '../../../stores/workflow-store'
 import { extractAndWriteback, runConsistencyGate, buildCanonContext } from '../../narrative-consistency'
 
 export interface FinalizeChapterParams {
@@ -270,7 +271,7 @@ export function buildFinalizePostProcessSteps(
       key: 'canon_compression',
       label: t('finalize.compression'),
       critical: false,
-      executor: async (callbacks: any) => {
+      executor: async (callbacks: StepCallbacks) => {
         try {
           const { canonStore } = await import('../../narrative-consistency/canon-store');
           const recent = await canonStore.getRecentSummaries(20);
@@ -281,7 +282,7 @@ export function buildFinalizePostProcessSteps(
           // 将前15章合并为压缩摘要
           const oldSummaries = recent.slice(0, 15);
           const compressed = oldSummaries
-            .map((s: any) => '第' + s.chapterNumber + '章：' + (s.summary || '').slice(0, 80))
+            .map(s => '第' + s.chapterNumber + '章：' + (s.summary || '').slice(0, 80))
             .join(' | ');
           callbacks.log(t('finalize.compressionDone', { count: oldSummaries.length, length: compressed.length }));
           // 写入压缩后的 canonical summary
@@ -526,15 +527,15 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
       const canon = await buildCanonContext({
         chapterNumber: this.params.chapterNumber,
         architecture: {
-          premise: (core as any)?.premise || '',
-          charactersArch: (core as any)?.charactersArch || '',
-          worldbuilding: (core as any)?.worldbuilding || '',
-          synopsis: (core as any)?.synopsis || '',
+          premise: core?.premise || '',
+          charactersArch: core?.charactersArch || '',
+          worldbuilding: core?.worldbuilding || '',
+          synopsis: core?.synopsis || '',
         },
-        characters: (allCharacters || []).map((c: any) => ({
-          name: c.name as string,
-          role: c.role as string,
-          currentState: c.currentState as any,
+        characters: (allCharacters || []).map(c => ({
+          name: c.name,
+          role: c.role,
+          currentState: c.currentState,
         })),
         chapterGoal: t('finalize.chapterGoalPrefix', { chapter: this.params.chapterNumber }),
         previousEnding: '',

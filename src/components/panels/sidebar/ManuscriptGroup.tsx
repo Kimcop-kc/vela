@@ -1,6 +1,7 @@
 /**
  * ManuscriptGroup — 正文章节折叠组（已定稿章节列表）
  */
+/* eslint-disable react-refresh/only-export-components */
 
 import { useState, useEffect } from 'react'
 import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool, Download } from 'lucide-react'

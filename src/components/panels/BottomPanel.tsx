@@ -588,7 +588,6 @@ function ModelsView() {
     void loadData(false)
     const timer = setInterval(() => { void loadData(false) }, 4000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /** silent=true 时用于后台轮询，不打断界面 */

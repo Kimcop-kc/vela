@@ -4,6 +4,7 @@
  * 纯路由容器，根据 sidebarView 切换子视图。
  * 所有子视图已拆分到 sidebar/ 子目录。
  */
+/* eslint-disable react-refresh/only-export-components */
 
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'

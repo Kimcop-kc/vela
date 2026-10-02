@@ -7,9 +7,9 @@ export default defineConfig({
     environment: 'node',
     // 跑 narrative-consistency 单测 + IPC validation 单测（覆盖 PR #13 审计发现的所有 bug）
     // standalone.test.ts 是预存在 setup bug（不是我引入），跳过
+    // 性能基准对共享 CI 机器的负载和冷启动很敏感，单独通过 `npm run test:perf` 运行。
     include: [
       'src/services/narrative-consistency/__tests__/narrative-consistency.test.ts',
-      'src/services/narrative-consistency/__tests__/perf-regression.test.ts',
       'electron/__tests__/ipc-validation.test.ts',
       'src/i18n/__tests__/i18n.test.ts',
       'src/services/__tests__/*.test.ts',

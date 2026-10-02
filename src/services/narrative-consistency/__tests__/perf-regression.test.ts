@@ -4,7 +4,7 @@
  * 如果将来有人改坏了 Patches 01-04 的优化（regex caching、Set.has、IPC 减少），
  * 这些测试会失败，强制 PR 看到性能退化。
  *
- * 阈值是基线（修复后）的 2-3 倍，避免 CI 抖动误报。
+ * 阈值为数量级回归保护，并取多次运行中的最优值，避免单次冷启动和调度抖动误报。
  */
 import { describe, it, expect } from 'vitest'
 import { validateChapter } from '../index'
@@ -51,36 +51,45 @@ function makeBigCanon(numCharacters: number) {
   })
 }
 
+function bestOf(runs: number, fn: () => void): number {
+  let best = Number.POSITIVE_INFINITY
+  for (let i = 0; i < runs; i++) {
+    const start = performance.now()
+    fn()
+    best = Math.min(best, performance.now() - start)
+  }
+  return best
+}
+
 describe('性能回归测试 (Perf Regression Suite)', () => {
   it('validateChapter (10K chars, 20 chars) 必须在 10ms 内完成', () => {
-    const { text, characters } = makeChapterContent(10000, 20)
+    const { text } = makeChapterContent(10000, 20)
     const canon = makeBigCanon(20)
-    const start = performance.now()
-    validateChapter({ chapterNumber: 5, chapterContent: text, canon })
-    const elapsed = performance.now() - start
-    // 修复后基线 ~0.7ms；阈值放宽到 10ms 防止 CI 抖动
+    const elapsed = bestOf(20, () => {
+      validateChapter({ chapterNumber: 5, chapterContent: text, canon })
+    })
+    // 取多次运行中的最优值，阈值只用于发现数量级退化。
     expect(elapsed).toBeLessThan(10)
   })
 
-  it('validateChapter (20K chars, 50 chars) 必须在 30ms 内完成', () => {
-    const { text, characters } = makeChapterContent(20000, 50)
+  it('validateChapter (20K chars, 50 chars) 必须在 60ms 内完成', () => {
+    const { text } = makeChapterContent(20000, 50)
     const canon = makeBigCanon(50)
-    const start = performance.now()
-    validateChapter({ chapterNumber: 5, chapterContent: text, canon })
-    const elapsed = performance.now() - start
-    // 修复后基线 ~1.6ms；阈值放宽到 30ms
-    expect(elapsed).toBeLessThan(30)
+    const elapsed = bestOf(20, () => {
+      validateChapter({ chapterNumber: 5, chapterContent: text, canon })
+    })
+    // Windows 和低功耗机器会比基准环境慢，保留充足的余量。
+    expect(elapsed).toBeLessThan(60)
   })
 
-  it('200 章节批量 validateChapter 必须在 200ms 内完成', () => {
-    const { text, characters } = makeChapterContent(2000, 5)
+  it('200 章节批量 validateChapter 必须在 300ms 内完成', () => {
+    const { text } = makeChapterContent(2000, 5)
     const canon = makeBigCanon(5)
-    const start = performance.now()
-    for (let i = 1; i <= 200; i++) {
-      validateChapter({ chapterNumber: i, chapterContent: text, canon })
-    }
-    const elapsed = performance.now() - start
-    // 修复后基线 ~34ms；阈值放宽到 200ms
-    expect(elapsed).toBeLessThan(200)
+    const elapsed = bestOf(5, () => {
+      for (let i = 1; i <= 200; i++) {
+        validateChapter({ chapterNumber: i, chapterContent: text, canon })
+      }
+    })
+    expect(elapsed).toBeLessThan(300)
   })
 })

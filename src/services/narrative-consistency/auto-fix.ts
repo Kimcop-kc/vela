@@ -194,6 +194,8 @@ export function buildReport(
   autoFixResult: AutoFixResult,
   _originalContent: string,
 ): ConsistencyReport {
+  // 保留参数以兼容现有调用契约；报告只从自动修复结果生成。
+  void _originalContent
   const allIssues = [...autoFixResult.fixedIssues.map(i => ({ ...i, severity: 'info' as const, message: `[已自动修复] ${i.message}` })), ...autoFixResult.remainingIssues]
   return {
     issues: allIssues,

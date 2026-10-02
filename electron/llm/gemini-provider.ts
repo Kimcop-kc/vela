@@ -134,7 +134,7 @@ export class GeminiProvider implements ILLMProvider {
 
       // SSE 事件可能跨越网络分片边界，跨块保留未完整行，避免事件被丢弃
       let buffer = ''
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read()
         if (done) break
 

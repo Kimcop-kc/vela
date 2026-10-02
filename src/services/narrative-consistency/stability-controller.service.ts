@@ -43,6 +43,7 @@ function computeContextDrift(
   characterStates: CharacterStateSnapshot[],
   _recentSummaries: ChapterSummary[],
 ): number {
+  void _recentSummaries
   if (characterStates.length === 0) return 0
 
   // 统计最近 N 章中每个角色 location 变化的频率
@@ -227,6 +228,7 @@ export async function generateCanonSnapshot(
     canonStore.getFacts(),
     canonStore.getPlotLines(),
   ])
+  void _summaries
 
   // 压缩角色状态
   const compressedCharacters = characterStates
@@ -307,6 +309,7 @@ export function stabilizeOutput(
   content: string,
   _characterStates: CharacterStateSnapshot[],
 ): StabilizeResult {
+  void _characterStates
   let working = content
   const fixes: string[] = []
 
