@@ -214,6 +214,12 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
   },
 
   startWorkflow: async (definition, stepByStep = false) => {
+    const [{ useProjectStore }, { ensurePromptsLoaded }] = await Promise.all([
+      import('./project-store'),
+      import('../services/prompt-templates'),
+    ])
+    await ensurePromptsLoaded(useProjectStore.getState().currentProject?.path)
+
     const run: WorkflowRun = {
       id: randomUUID(),
       type: definition.type,

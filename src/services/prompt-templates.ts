@@ -3068,37 +3068,58 @@ Output the complete revised chapter as plain text only. No commentary, no diff, 
 
 /** 全局自定义覆盖 Prompt 缓存（~/.vela/prompts/） */
 const customPrompts: Map<string, PromptTemplate> = new Map()
+let globalPromptsLoadPromise: Promise<void> | null = null
 
 /** 项目级自定义覆盖 Prompt 缓存（{project}/.vela/prompts/） */
 const projectCustomPrompts: Map<string, PromptTemplate> = new Map()
+let projectPromptsLoadPromise: Promise<void> | null = null
+let loadedProjectPromptPath: string | null = null
 
 /** 加载全局自定义 Prompt 覆盖（从 ~/.vela/prompts/ 目录） */
-export async function loadCustomPrompts(): Promise<void> {
-  try {
-    const { ipc } = await import('./ipc-client')
-    if (!ipc.isElectron) return
+export function loadCustomPrompts(): Promise<void> {
+  if (!globalPromptsLoadPromise) {
+    globalPromptsLoadPromise = (async () => {
+      try {
+        const { ipc } = await import('./ipc-client')
+        if (!ipc.isElectron) return
 
-    const velaHome = await ipc.invoke('config:get-vela-home')
-    const promptsDir = `${velaHome}/prompts`
+        const velaHome = await ipc.invoke('config:get-vela-home')
+        const promptsDir = `${velaHome}/prompts`
 
-    await _loadPromptsFromDir(promptsDir, customPrompts)
-    console.log(`[Vela Prompts] 已加载 ${customPrompts.size} 个全局自定义覆盖`)
-  } catch {
-    // prompts 目录可能不存在，忽略
+        await _loadPromptsFromDir(promptsDir, customPrompts)
+        console.log(`[Vela Prompts] 已加载 ${customPrompts.size} 个全局自定义覆盖`)
+      } catch {
+        // prompts 目录可能不存在，忽略
+      }
+    })()
   }
+  return globalPromptsLoadPromise
 }
 
 /** 加载项目级自定义 Prompt 覆盖（从 {projectPath}/.vela/prompts/ 目录） */
-export async function loadProjectCustomPrompts(projectPath: string): Promise<void> {
-  try {
-    projectCustomPrompts.clear()
-    const promptsDir = `${projectPath}/.vela/prompts`
-
-    await _loadPromptsFromDir(promptsDir, projectCustomPrompts)
-    console.log(`[Vela Prompts] 已加载 ${projectCustomPrompts.size} 个项目级自定义覆盖`)
-  } catch {
-    // 目录不存在时忽略
+export function loadProjectCustomPrompts(projectPath: string): Promise<void> {
+  if (loadedProjectPromptPath === projectPath && projectPromptsLoadPromise) {
+    return projectPromptsLoadPromise
   }
+  loadedProjectPromptPath = projectPath
+  projectPromptsLoadPromise = (async () => {
+    try {
+      projectCustomPrompts.clear()
+      const promptsDir = `${projectPath}/.vela/prompts`
+
+      await _loadPromptsFromDir(promptsDir, projectCustomPrompts)
+      console.log(`[Vela Prompts] 已加载 ${projectCustomPrompts.size} 个项目级自定义覆盖`)
+    } catch {
+      // 目录不存在时忽略
+    }
+  })()
+  return projectPromptsLoadPromise
+}
+
+/** 确保全局和项目级自定义提示词都已加载；供工作流启动前调用。 */
+export async function ensurePromptsLoaded(projectPath?: string): Promise<void> {
+  await loadCustomPrompts()
+  if (projectPath) await loadProjectCustomPrompts(projectPath)
 }
 
 /** 内部工具：从目录加载 JSON 覆盖到指定 Map */

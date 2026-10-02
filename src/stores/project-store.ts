@@ -124,6 +124,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         const { useLayoutStore } = await import('./layout-store')
         useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project' })
         // 统一初始化 Layer 2 Store（角色卡、草稿等）
+        const { ensurePromptsLoaded } = await import('../services/prompt-templates')
+        await ensurePromptsLoaded(projectPath)
         await callProjectOpened()
         return true
       }

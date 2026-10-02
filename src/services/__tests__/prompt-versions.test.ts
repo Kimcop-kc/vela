@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ipc } from '../ipc-client'
 import {
   BUILTIN_PROMPTS,
+  ensurePromptsLoaded,
   getPromptTemplate,
   listPromptVersions,
   restorePromptVersion,
@@ -66,5 +67,13 @@ describe('prompt version history', () => {
     const restored = await restorePromptVersion(base.key, versions[0].id, 'global')
     expect(restored).toBe(true)
     expect(getPromptTemplate(base.key)?.content).toBe('version one')
+
+    files.set(
+      `C:/project/.vela/prompts/${base.key}.json`,
+      JSON.stringify({ ...base, content: 'project override', contentLocalized: undefined }),
+    )
+    dirs.add('C:/project/.vela/prompts')
+    await ensurePromptsLoaded('C:/project')
+    expect(getPromptTemplate(base.key)?.content).toBe('project override')
   })
 })
