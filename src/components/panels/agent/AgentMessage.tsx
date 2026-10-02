@@ -12,7 +12,7 @@ import ToolCallBlock from './ToolCallBlock'
 import ConfirmCard from './ConfirmCard'
 import ArtifactCard from './ArtifactCard'
 import '../../../styles/agent-tools.css'
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -29,7 +29,7 @@ function PendingReply({ startedAt }: { startedAt: number }) {
   return <p role="status" className="mt-3 text-xs text-[var(--color-text-muted)]">{t('storyRevision.processing', { seconds })}</p>
 }
 
-export default function AgentMessage({ message }: Props) {
+function AgentMessage({ message }: Props) {
   const { role, content, streaming, toolCalls, artifacts } = message
 
   if (role === 'user') {
@@ -91,3 +91,5 @@ export default function AgentMessage({ message }: Props) {
     </div>
   )
 }
+
+export default memo(AgentMessage)

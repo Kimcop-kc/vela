@@ -250,8 +250,6 @@ function ActiveRunPanel({
   const nextStepName = run.steps[waitingAfterStepIndex + 1]?.name
   const isActive = run.status === 'running' || run.status === 'waiting'
 
-  console.log('[BottomPanel] ActiveRunPanel render: run.status=', run.status, 'steps=', run.steps.map(s => s.status).join(','))
-
   return (
     <div>
       {/* ── 状态条（始终可见，点击折叠/展开） ── */}

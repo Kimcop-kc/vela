@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useAgentStore } from '../../../stores/agent-store'
+import { useAgentStore, type AgentMessage as AgentMessageType } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import { formatRelativeTime } from '../../../utils/time'
 import { useProjectStore } from '../../../stores/project-store'
+
+const EMPTY_MESSAGES: AgentMessageType[] = []
 
 /**
  * 对话区域主组件
@@ -14,9 +16,11 @@ import { useProjectStore } from '../../../stores/project-store'
  * - 有会话：消息列表 + 底部固定输入框
  */
 export default function AgentConversation() {
-  useProjectStore(s => s.currentProject?.path)
-  const { getActiveConversation, showHistory } = useAgentStore()
-  const activeConv = getActiveConversation()
+  const projectPath = useProjectStore(s => s.currentProject?.path)
+  const showHistory = useAgentStore(s => s.showHistory)
+  const activeMessageCount = useAgentStore(s => (
+    s.conversations.find(c => c.id === s.activeConversationId && c.projectPath === projectPath)?.messages.length ?? 0
+  ))
 
   // 历史面板模式
   if (showHistory) {
@@ -24,7 +28,7 @@ export default function AgentConversation() {
   }
 
   // 空状态（无活跃会话）
-  if (!activeConv || activeConv.messages.length === 0) {
+  if (activeMessageCount === 0) {
     return <EmptyState />
   }
 
@@ -107,10 +111,15 @@ function EmptyState() {
 
 function ActiveConversation() {
   const { t } = useTranslation('panels')
-  const { getActiveConversation, generating } = useAgentStore()
-  const activeConv = getActiveConversation()
+  const projectPath = useProjectStore(s => s.currentProject?.path)
+  const activeConversationId = useAgentStore(s => s.activeConversationId)
+  const messages = useAgentStore(s => (
+    s.conversations.find(c => c.id === s.activeConversationId && c.projectPath === projectPath)?.messages ?? EMPTY_MESSAGES
+  ))
+  const generating = useAgentStore(s => s.generating)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const visibleMessages = useMemo(() => messages.filter(m => m.role !== 'system'), [messages])
 
   // 消息变化时自动滚动到底部
   useEffect(() => {
@@ -120,7 +129,7 @@ function ActiveConversation() {
         behavior: 'smooth',
       })
     }
-  }, [activeConv?.messages, generating, isAtBottom])
+  }, [messages, generating, isAtBottom])
 
   // 监听滚动位置判断是否在底部
   const handleScroll = () => {
@@ -138,7 +147,7 @@ function ActiveConversation() {
     })
   }
 
-  if (!activeConv) return null
+  if (!activeConversationId) return null
 
   return (
     <div className="flex flex-col h-full relative">
@@ -149,11 +158,9 @@ function ActiveConversation() {
         className="flex-1 overflow-y-auto px-4 py-4"
       >
         <div className="flex flex-col">
-          {activeConv.messages
-            .filter(m => m.role !== 'system')
-            .map(msg => (
-              <AgentMessage key={msg.id} message={msg} />
-            ))}
+          {visibleMessages.map(msg => (
+            <AgentMessage key={msg.id} message={msg} />
+          ))}
         </div>
         {/* 底部空间 */}
         <div className="h-4" />

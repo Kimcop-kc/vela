@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
+import { useProjectStore } from '../../../stores/project-store'
 import type { ModelProfile } from '../../../shared/ipc-channels'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import SlashCommandMenu from './SlashCommandMenu'
@@ -28,16 +29,25 @@ export default function AgentInputBox() {
   const { t } = useTranslation('panels')
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { generating, sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId } = useAgentStore()
+  const projectPath = useProjectStore(s => s.currentProject?.path)
+  const generating = useAgentStore(s => s.generating)
+  const sendMessage = useAgentStore(s => s.sendMessage)
+  const cancelGeneration = useAgentStore(s => s.cancelGeneration)
+  const setMode = useAgentStore(s => s.setMode)
+  const setModelId = useAgentStore(s => s.setModelId)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
 
   // 过滤出非仅限 embedding 专用的模型
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
-  const activeConv = getActiveConversation()
-  const currentMode = activeConv?.mode ?? 'planning'
-  const currentModelId = activeConv?.modelId ?? defaultModelId
+  const currentMode = useAgentStore(s => (
+    s.conversations.find(c => c.id === s.activeConversationId && c.projectPath === projectPath)?.mode ?? s.defaultMode
+  ))
+  const conversationModelId = useAgentStore(s => (
+    s.conversations.find(c => c.id === s.activeConversationId && c.projectPath === projectPath)?.modelId ?? null
+  ))
+  const currentModelId = conversationModelId ?? defaultModelId
 
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId)

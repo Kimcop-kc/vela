@@ -26,7 +26,9 @@ export default function AgentHeader() {
   const projectPath = useProjectStore(s => s.currentProject?.path)
   const showStoryHistory = useAgentStore(s => s.showStoryHistory)
   const setShowStoryHistory = useAgentStore(s => s.setShowStoryHistory)
-  const { createConversation, toggleHistory, showHistory, getActiveConversation } = useAgentStore()
+  const createConversation = useAgentStore(s => s.createConversation)
+  const toggleHistory = useAgentStore(s => s.toggleHistory)
+  const showHistory = useAgentStore(s => s.showHistory)
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const [showMore, setShowMore] = useState(false)
   const [subView, setSubView] = useState<'main' | 'mcp' | 'skills'>('main')
@@ -41,7 +43,8 @@ export default function AgentHeader() {
   useOutsideClick(moreRef, () => { setShowMore(false); setSubView('main') }, showMore)
 
   // MCP 状态
-  const { servers: mcpServers, tools: mcpTools } = useMCPStore()
+  const mcpServers = useMCPStore(s => s.servers)
+  const mcpTools = useMCPStore(s => s.tools)
   const connectedCount = mcpServers.filter(s => s.status === 'connected').length
 
   // Skill 列表（订阅注册中心变更：启用/停用或改动磁盘后自动刷新）
@@ -65,9 +68,11 @@ export default function AgentHeader() {
     toggleAIPanel()
   }
 
-  // 当前会话为空（无消息）时禁止新建
-  const activeConv = getActiveConversation()
-  const isCurrentEmpty = !activeConv || activeConv.messages.filter(m => m.role !== 'system').length === 0
+  // 当前会话为空时禁止重复新建。消息数量只在新增消息时变化，不会随流式正文更新。
+  const isCurrentEmpty = useAgentStore(s => {
+    const activeConv = s.conversations.find(c => c.id === s.activeConversationId && c.projectPath === projectPath)
+    return !activeConv || activeConv.messages.length === 0
+  })
 
   return (
     <div

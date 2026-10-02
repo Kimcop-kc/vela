@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
+import { persist, type PersistStorage } from 'zustand/middleware'
 import { useProjectStore } from './project-store'
 import { assertStoryProject } from '../services/agent/story-revision-service'
 import { ipc } from '../services/ipc-client'
@@ -97,6 +97,104 @@ interface AgentState {
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean) => void
+}
+
+type PersistedAgentState = Pick<AgentState, 'conversations' | 'activeConversationId' | 'defaultMode'>
+
+const AGENT_PERSIST_DELAY_MS = 600
+let flushAgentPersistenceNow: (() => Promise<void>) | null = null
+
+function createAgentPersistStorage(): PersistStorage<PersistedAgentState> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let pending: { state: PersistedAgentState; version?: number } | null = null
+  let writing = false
+  let flushAfterWrite = false
+
+  function schedule() {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      timer = null
+      void flush()
+    }, AGENT_PERSIST_DELAY_MS)
+  }
+
+  async function flush(force = false) {
+    if (writing) {
+      if (force) flushAfterWrite = true
+      else schedule()
+      return
+    }
+    if (!pending) return
+
+    const value = pending
+    pending = null
+    writing = true
+    try {
+      const sanitized = {
+        ...value,
+        state: {
+          ...value.state,
+          conversations: value.state.conversations.map(c => ({
+            ...c,
+            messages: c.messages.map(m => ({
+              ...m,
+              streaming: false,
+              toolCalls: m.toolCalls?.map(tc => (
+                ['pending', 'running', 'waiting_confirm'].includes(tc.status)
+                  ? { ...tc, status: 'failed' as const, error: '应用重开，未完成的操作已停止。' }
+                  : tc
+              )),
+            })),
+          })),
+        },
+      }
+      await ipc.invoke('agent:state-write', JSON.stringify(sanitized))
+    } catch {
+      globalEventBus.emit('SYSTEM_NOTICE', {
+        level: 'warn',
+        message: '对话记录未能保存到本机；作品内容与剧情调整记录独立保存。',
+      })
+    } finally {
+      writing = false
+      if (pending) {
+        if (flushAfterWrite) {
+          flushAfterWrite = false
+          void flush(true)
+        } else {
+          schedule()
+        }
+      }
+    }
+  }
+
+  flushAgentPersistenceNow = () => flush(true)
+
+  return {
+    getItem: async () => {
+      const raw = await ipc.invoke('agent:state-read') as string | null
+      if (!raw) return null
+      try {
+        return JSON.parse(raw) as { state: PersistedAgentState; version?: number }
+      } catch {
+        return null
+      }
+    },
+    setItem: (_name, value) => {
+      pending = value
+      schedule()
+    },
+    removeItem: async () => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      pending = null
+      await ipc.invoke('agent:state-write', JSON.stringify({
+        state: { conversations: [], activeConversationId: null, defaultMode: 'planning' },
+        version: 0,
+      }))
+    },
+  }
 }
 
 // ===== 工具函数 =====
@@ -375,6 +473,39 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
       }))
     }
 
+    // 流式 token 可能非常密集。先合并到一个短时间窗口，再统一更新界面，
+    // 避免每个 token 都触发整棵消息列表和 Markdown 重渲染。
+    let pendingAssistantText = ''
+    let assistantTextTimer: ReturnType<typeof setTimeout> | null = null
+    let streamFinished = false
+    let requestController: AbortController | null = null
+
+    const stopAssistantTextTimer = () => {
+      if (assistantTextTimer) {
+        clearTimeout(assistantTextTimer)
+        assistantTextTimer = null
+      }
+    }
+
+    const flushAssistantText = () => {
+      stopAssistantTextTimer()
+      if (streamFinished || requestController?.signal.aborted) {
+        pendingAssistantText = ''
+        return
+      }
+      if (!pendingAssistantText) return
+      const text = pendingAssistantText
+      pendingAssistantText = ''
+      updateAssistantMsg(m => ({ ...m, content: m.content + text }))
+    }
+
+    const queueAssistantText = (text: string) => {
+      pendingAssistantText += text
+      if (!assistantTextTimer) {
+        assistantTextTimer = setTimeout(flushAssistantText, 40)
+      }
+    }
+
     try {
       const llmStore = useLLMStore.getState()
       const currentConv = get().conversations.find(c => c.id === convId)!
@@ -442,6 +573,7 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
 
       // AbortController 用于取消（P1-7: 提升到模块级变量以便 cancelGeneration 访问）
       const abortController = new AbortController()
+      requestController = abortController
       activeAbortController = abortController
       set({ activeRequestId: assistantMsg.id })
 
@@ -461,10 +593,7 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
               .replace(/<\/?tool_result[^>]*>/g, '')
               .trim()
             if (!cleaned) return
-            updateAssistantMsg(m => ({
-              ...m,
-              content: m.content + cleaned,
-            }))
+            queueAssistantText(cleaned)
           },
           onToolCallStart: (toolCall) => {
             updateAssistantMsg(m => ({
@@ -494,6 +623,9 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
           },
           onDone: (fullText, toolCalls, artifacts) => {
             if (abortController.signal.aborted) return
+            streamFinished = true
+            stopAssistantTextTimer()
+            pendingAssistantText = ''
             // 最终文本全量清洗，去除所有形式的 tool_call / tool_result 标签
             const cleanedText = fullText
               .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
@@ -516,15 +648,21 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
                 c.id === convId ? { ...c, updatedAt: Date.now() } : c
               ),
             }))
+            activeAbortController = null
+            void flushAgentPersistenceNow?.()
           },
           onError: (error) => {
             if (abortController.signal.aborted) return
+            flushAssistantText()
+            streamFinished = true
             updateAssistantMsg(m => ({
               ...m,
               content: [m.content, i18n.t('agent.generationFailed', { ns: 'panels', error })].filter(Boolean).join('\n\n'),
               streaming: false,
             }))
             set({ generating: false, activeRequestId: null })
+            activeAbortController = null
+            void flushAgentPersistenceNow?.()
           },
         },
         abortController.signal,
@@ -532,12 +670,21 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
         true,
       )
     } catch (error) {
+      if (requestController?.signal.aborted) {
+        stopAssistantTextTimer()
+        pendingAssistantText = ''
+      } else {
+        flushAssistantText()
+      }
+      streamFinished = true
       updateAssistantMsg(m => ({
         ...m,
         content: i18n.t('agent.generationError', { ns: 'panels', error: String(error) }),
         streaming: false,
       }))
       set({ generating: false, activeRequestId: null })
+      activeAbortController = null
+      void flushAgentPersistenceNow?.()
     }
   },
 
@@ -571,6 +718,7 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
         ),
       })),
     }))
+    void flushAgentPersistenceNow?.()
   },
 
   resolveToolConfirmation: (toolCallId, confirmed) => {
@@ -582,16 +730,9 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
   },
 }), {
   name: 'vela-author-conversations-v1',
-  storage: createJSONStorage(() => ({
-    getItem: () => ipc.invoke('agent:state-read'),
-    setItem: async (_name, value) => {
-      try { await ipc.invoke('agent:state-write', value) }
-      catch { globalEventBus.emit('SYSTEM_NOTICE', { level: 'warn', message: '对话记录未能保存到本机；作品内容与剧情调整记录独立保存。' }) }
-    },
-    removeItem: async () => { await ipc.invoke('agent:state-write', JSON.stringify({ state: { conversations: [], activeConversationId: null }, version: 0 })) },
-  })),
+  storage: createAgentPersistStorage(),
   partialize: state => ({
-    conversations: state.conversations.map(c => ({ ...c, messages: c.messages.map(m => ({ ...m, streaming: false, toolCalls: m.toolCalls?.map(tc => ['pending', 'running', 'waiting_confirm'].includes(tc.status) ? { ...tc, status: 'failed' as const, error: '应用重开，未完成的操作已停止。' } : tc) })) })),
+    conversations: state.conversations,
     activeConversationId: state.activeConversationId,
     defaultMode: state.defaultMode,
   }),

@@ -142,21 +142,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   saveProject: async () => {
     const project = get().currentProject
-    console.log('[project-store.saveProject] 开始保存，项目ID:', project?.id)
     if (!project) {
-      console.log('[project-store.saveProject] 项目为空，跳过保存')
       return false
     }
     try {
       // 提取纯净数据，防止 structured clone 序列化异常属性
       const plainData = toPlainProjectData(project)
-      console.log('[project-store.saveProject] 准备调用 IPC，数据大小:', JSON.stringify(plainData).length)
       const result = await withTimeout(
         ipc.invoke('project:save', plainData.id, plainData),
         15_000,
         'project:save',
       )
-      console.log('[project-store.saveProject] IPC 调用完成，结果:', result)
       return result.success
     } catch (err) {
       console.error('[project-store.saveProject] 保存失败:', err)
