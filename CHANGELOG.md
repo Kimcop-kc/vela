@@ -8,6 +8,12 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 ## [Unreleased]
 
+暂无。
+
+---
+
+## [0.2.3] — 2026-10-02
+
 ### 构建
 
 - 发布流程改为仅响应 `v*` 版本标签；普通分支构建只上传 Actions Artifact，不再覆盖已有 Release。
@@ -134,7 +140,8 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 ---
 
-[Unreleased]: https://github.com/Kimcop-kc/vela/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Kimcop-kc/vela/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Kimcop-kc/vela/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Kimcop-kc/vela/releases
