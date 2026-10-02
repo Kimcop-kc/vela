@@ -14,6 +14,7 @@ export interface ProjectSnapshotInfo {
   size: number
   hasDatabase: boolean
   hasPrompts: boolean
+  hasPromptHistory: boolean
   hasBooks: boolean
   hasVectors: boolean
   appVersion: string
@@ -115,6 +116,7 @@ export async function createProjectSnapshot(
     await db.backup(databasePath)
 
     const hasPrompts = await copyIfExists(path.join(projectPath, '.vela', 'prompts'), path.join(temporary, 'prompts'))
+    const hasPromptHistory = await copyIfExists(path.join(projectPath, '.vela', 'prompt-history'), path.join(temporary, 'prompt-history'))
     const hasBooks = await copyIfExists(path.join(projectPath, '.vela', 'books'), path.join(temporary, 'books'))
 
     closeConnection(projectPath)
@@ -129,6 +131,7 @@ export async function createProjectSnapshot(
       size: 0,
       hasDatabase: true,
       hasPrompts,
+      hasPromptHistory,
       hasBooks,
       hasVectors: hasVectors || hasLegacyVectors,
       appVersion: process.env.npm_package_version ?? '',
@@ -168,6 +171,10 @@ export async function restoreProjectSnapshot(projectPath: string, id: string): P
   if (manifest.hasPrompts) {
     await removeIfExists(path.join(velaDir, 'prompts'))
     await copyIfExists(path.join(source, 'prompts'), path.join(velaDir, 'prompts'))
+  }
+  if (manifest.hasPromptHistory) {
+    await removeIfExists(path.join(velaDir, 'prompt-history'))
+    await copyIfExists(path.join(source, 'prompt-history'), path.join(velaDir, 'prompt-history'))
   }
   if (manifest.hasBooks) {
     await removeIfExists(path.join(velaDir, 'books'))

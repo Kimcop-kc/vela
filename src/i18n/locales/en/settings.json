@@ -136,6 +136,19 @@
     "resetDone": "Restored to built-in default",
     "availableVariables": "Available variables (click to insert at cursor position)",
     "missingVariablesWarning": "The following variables are used in the original template but not found in the current content: {{vars}}. This may result in unreplaced placeholders during rendering.",
+    "versionHistory": "Version history",
+    "versionCount": "{{count}} saved versions",
+    "noVersions": "No saved versions yet",
+    "restoreVersion": "Restore this version",
+    "deleteVersion": "Delete this version",
+    "restoredVersion": "Prompt version restored",
+    "versionRestoreFailed": "Failed to restore version: {{error}}",
+    "versionDeleted": "Saved version deleted",
+    "versionDeleteFailed": "Failed to delete version: {{error}}",
+    "versionReason": {
+      "save": "Before overwrite",
+      "reset": "Before reset"
+    },
     "description": "Custom prompts only modify AI's creative guidance strategy. Output format constraints (e.g., JSON schema) are automatically appended and not affected by customization. Supports two-level overrides: <strong>Global</strong> (applies to all novels) and <strong>Project</strong> (applies only to current novel)."
   },
   "language": {

@@ -136,6 +136,19 @@
     "resetDone": "已恢复为内置默认",
     "availableVariables": "可用变量（点击插入到光标位置）",
     "missingVariablesWarning": "以下变量在原模板中使用但在当前内容中未找到：{{vars}}，可能导致渲染时出现未替换的占位符。",
+    "versionHistory": "版本历史",
+    "versionCount": "{{count}} 个历史版本",
+    "noVersions": "还没有历史版本",
+    "restoreVersion": "恢复此版本",
+    "deleteVersion": "删除此版本",
+    "restoredVersion": "提示词版本已恢复",
+    "versionRestoreFailed": "恢复版本失败：{{error}}",
+    "versionDeleted": "历史版本已删除",
+    "versionDeleteFailed": "删除版本失败：{{error}}",
+    "versionReason": {
+      "save": "覆盖保存前",
+      "reset": "恢复默认前"
+    },
     "description": "自定义提示词仅修改 AI 的创作指导策略，输出格式约束（如 JSON schema）会自动追加，不受自定义影响。支持两级覆盖：<strong>全局</strong>（所有小说生效）和<strong>项目</strong>（仅当前小说生效）。"
   },
   "language": {

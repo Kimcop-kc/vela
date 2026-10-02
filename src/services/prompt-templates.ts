@@ -3068,7 +3068,6 @@ Output the complete revised chapter as plain text only. No commentary, no diff, 
 
 /** 全局自定义覆盖 Prompt 缓存（~/.vela/prompts/） */
 const customPrompts: Map<string, PromptTemplate> = new Map()
-let customPromptsLoaded = false
 
 /** 项目级自定义覆盖 Prompt 缓存（{project}/.vela/prompts/） */
 const projectCustomPrompts: Map<string, PromptTemplate> = new Map()
@@ -3083,11 +3082,9 @@ export async function loadCustomPrompts(): Promise<void> {
     const promptsDir = `${velaHome}/prompts`
 
     await _loadPromptsFromDir(promptsDir, customPrompts)
-    customPromptsLoaded = true
     console.log(`[Vela Prompts] 已加载 ${customPrompts.size} 个全局自定义覆盖`)
   } catch {
     // prompts 目录可能不存在，忽略
-    customPromptsLoaded = true
   }
 }
 
@@ -3133,10 +3130,8 @@ export function getPromptTemplate(key: string): PromptTemplate | undefined {
   if (projectCustom) return projectCustom
 
   // 优先级 2：全局自定义覆盖
-  if (customPromptsLoaded) {
-    const globalCustom = customPrompts.get(key)
-    if (globalCustom) return globalCustom
-  }
+  const globalCustom = customPrompts.get(key)
+  if (globalCustom) return globalCustom
 
   // 优先级 3：内置默认
   return BUILTIN_PROMPTS.find((p) => p.key === key)
@@ -3145,7 +3140,7 @@ export function getPromptTemplate(key: string): PromptTemplate | undefined {
 /** 获取指定模板当前生效的来源 */
 export function getPromptSource(key: string): 'builtin' | 'global' | 'project' {
   if (projectCustomPrompts.has(key)) return 'project'
-  if (customPromptsLoaded && customPrompts.has(key)) return 'global'
+  if (customPrompts.has(key)) return 'global'
   return 'builtin'
 }
 
@@ -3173,6 +3168,152 @@ export function getAllPromptTemplates(): PromptTemplate[] {
   return all
 }
 
+export type PromptVersionScope = 'global' | 'project'
+
+export interface PromptVersionInfo {
+  id: string
+  key: string
+  scope: PromptVersionScope
+  createdAt: string
+  reason: string
+  preview: string
+}
+
+interface PromptVersionRecord extends PromptVersionInfo {
+  template: PromptTemplate
+}
+
+async function promptHistoryDir(
+  key: string,
+  scope: PromptVersionScope,
+  projectPath?: string,
+): Promise<string> {
+  const { ipc } = await import('./ipc-client')
+  if (scope === 'project') {
+    if (!projectPath) throw new Error('缺少项目路径')
+    return `${projectPath}/.vela/prompt-history/${key}`
+  }
+  const velaHome = await ipc.invoke('config:get-vela-home')
+  return `${velaHome}/prompt-history/${key}`
+}
+
+async function archivePromptVersion(
+  filePath: string,
+  key: string,
+  scope: PromptVersionScope,
+  reason: string,
+  projectPath?: string,
+): Promise<void> {
+  try {
+    const { ipc } = await import('./ipc-client')
+    const exists = await ipc.invoke('fs:check-exists', filePath)
+    if (!exists) return
+    const current = await ipc.invoke('fs:read-file', filePath)
+    if (!current.success || !current.content.trim()) return
+    const template = JSON.parse(current.content) as PromptTemplate
+    if (!template.key) return
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const createdAt = new Date().toISOString()
+    const record: PromptVersionRecord = {
+      id,
+      key,
+      scope,
+      createdAt,
+      reason,
+      preview: getLocalizedContent(template).slice(0, 180),
+      template,
+    }
+    const dir = await promptHistoryDir(key, scope, projectPath)
+    await ipc.invoke('fs:write-file', `${dir}/${id}.json`, JSON.stringify(record, null, 2))
+
+    const files = await ipc.invoke('fs:list-dir', dir)
+    const versions = files.filter(file => !file.isDir && file.name.endsWith('.json')).sort((a, b) => b.name.localeCompare(a.name))
+    for (const old of versions.slice(30)) {
+      await ipc.invoke('fs:write-file', old.path, '')
+    }
+  } catch {
+    // 版本留档失败不应阻塞当前保存；原文件保持不变。
+  }
+}
+
+export async function listPromptVersions(
+  key: string,
+  scope: PromptVersionScope,
+  projectPath?: string,
+): Promise<PromptVersionInfo[]> {
+  try {
+    const { ipc } = await import('./ipc-client')
+    const dir = await promptHistoryDir(key, scope, projectPath)
+    const files = await ipc.invoke('fs:list-dir', dir)
+    const versions: PromptVersionInfo[] = []
+    for (const file of files.filter(file => !file.isDir && file.name.endsWith('.json'))) {
+      const result = await ipc.invoke('fs:read-file', file.path)
+      if (!result.success || !result.content.trim()) continue
+      try {
+        const record = JSON.parse(result.content) as PromptVersionRecord
+        if (!record.id || !record.template) continue
+        versions.push({
+          id: record.id,
+          key: record.key,
+          scope: record.scope,
+          createdAt: record.createdAt,
+          reason: record.reason,
+          preview: record.preview,
+        })
+      } catch {
+        // 忽略单个损坏版本
+      }
+    }
+    return versions.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  } catch {
+    return []
+  }
+}
+
+async function readPromptVersion(
+  key: string,
+  id: string,
+  scope: PromptVersionScope,
+  projectPath?: string,
+): Promise<PromptTemplate> {
+  const { ipc } = await import('./ipc-client')
+  const dir = await promptHistoryDir(key, scope, projectPath)
+  const result = await ipc.invoke('fs:read-file', `${dir}/${id}.json`)
+  if (!result.success || !result.content.trim()) throw new Error('提示词版本不存在')
+  const record = JSON.parse(result.content) as PromptVersionRecord
+  if (!record.template?.key) throw new Error('提示词版本已损坏')
+  return record.template
+}
+
+export async function restorePromptVersion(
+  key: string,
+  id: string,
+  scope: PromptVersionScope,
+  projectPath?: string,
+): Promise<boolean> {
+  const template = await readPromptVersion(key, id, scope, projectPath)
+  return scope === 'project'
+    ? saveProjectCustomPrompt(projectPath!, template)
+    : saveCustomPrompt(template)
+}
+
+export async function deletePromptVersion(
+  key: string,
+  id: string,
+  scope: PromptVersionScope,
+  projectPath?: string,
+): Promise<boolean> {
+  try {
+    const { ipc } = await import('./ipc-client')
+    const dir = await promptHistoryDir(key, scope, projectPath)
+    await ipc.invoke('fs:write-file', `${dir}/${id}.json`, '')
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** 保存全局自定义 Prompt 到 ~/.vela/prompts/ */
 export async function saveCustomPrompt(template: PromptTemplate): Promise<boolean> {
   try {
@@ -3184,6 +3325,7 @@ export async function saveCustomPrompt(template: PromptTemplate): Promise<boolea
     if (!exists) await ipc.invoke('fs:mkdir', dirPath)
     const filePath = `${dirPath}/${template.key}.json`
 
+    await archivePromptVersion(filePath, template.key, 'global', 'save')
     await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
     customPrompts.set(template.key, template)
     return true
@@ -3205,6 +3347,7 @@ export async function saveProjectCustomPrompt(projectPath: string, template: Pro
     }
     const filePath = `${dirPath}/${template.key}.json`
 
+    await archivePromptVersion(filePath, template.key, 'project', 'save', projectPath)
     await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
     projectCustomPrompts.set(template.key, template)
     return true
@@ -3220,7 +3363,10 @@ export async function deleteCustomPrompt(key: string): Promise<boolean> {
     const velaHome = await ipc.invoke('config:get-vela-home')
     const filePath = `${velaHome}/prompts/${key}.json`
     const exists = await ipc.invoke('fs:check-exists', filePath)
-    if (exists) await ipc.invoke('fs:write-file', filePath, '')
+    if (exists) {
+      await archivePromptVersion(filePath, key, 'global', 'reset')
+      await ipc.invoke('fs:write-file', filePath, '')
+    }
     customPrompts.delete(key)
     return true
   } catch {
@@ -3234,7 +3380,10 @@ export async function deleteProjectCustomPrompt(projectPath: string, key: string
     const { ipc } = await import('./ipc-client')
     const filePath = `${projectPath}/.vela/prompts/${key}.json`
     const exists = await ipc.invoke('fs:check-exists', filePath)
-    if (exists) await ipc.invoke('fs:write-file', filePath, '')
+    if (exists) {
+      await archivePromptVersion(filePath, key, 'project', 'reset', projectPath)
+      await ipc.invoke('fs:write-file', filePath, '')
+    }
     projectCustomPrompts.delete(key)
     return true
   } catch {

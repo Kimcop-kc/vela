@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle, Check, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle, Check, X, History, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
 import {
@@ -15,11 +15,17 @@ import {
   deleteCustomPrompt,
   deleteProjectCustomPrompt,
   loadProjectCustomPrompts,
+  listPromptVersions,
+  restorePromptVersion,
+  deletePromptVersion,
   type PromptTemplate,
+  type PromptVersionInfo,
 } from '../../services/prompt-templates'
 import { useProjectStore } from '../../stores/project-store'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
+import { confirm } from '../ui/Confirm'
+import { toast } from '../ui/Toast'
 
 /** Получить переведённое описание переменной */
 function getVariableDesc(varName: string, fallback: string): string {
@@ -118,6 +124,10 @@ function TemplateItem({
   const [editContent, setEditContent] = useState(() => getLocalizedContent(currentTemplate))
   const [saving, setSaving] = useState(false)
   const [saveResult, setSaveResult] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [showVersions, setShowVersions] = useState(false)
+  const [versions, setVersions] = useState<PromptVersionInfo[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [busyVersionId, setBusyVersionId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const localizedContent = getLocalizedContent(currentTemplate)
@@ -203,6 +213,58 @@ function TemplateItem({
     setSaveResult({ type: 'success', msg: t('prompts.resetDone') })
     onSaved()
     setTimeout(() => setSaveResult(null), 3000)
+  }
+
+  const loadVersions = useCallback(async () => {
+    setLoadingVersions(true)
+    try {
+      const globalVersions = await listPromptVersions(builtinTemplate.key, 'global')
+      const projectVersions = projectPath
+        ? await listPromptVersions(builtinTemplate.key, 'project', projectPath)
+        : []
+      setVersions([...globalVersions, ...projectVersions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
+    } finally {
+      setLoadingVersions(false)
+    }
+  }, [builtinTemplate.key, projectPath])
+
+  const handleToggleVersions = async () => {
+    const next = !showVersions
+    setShowVersions(next)
+    if (next) await loadVersions()
+  }
+
+  const handleRestoreVersion = async (version: PromptVersionInfo) => {
+    const ok = await confirm(t('prompts.restoreVersion'), {
+      title: t('prompts.versionHistory'),
+      confirmText: t('prompts.restoreVersion'),
+    })
+    if (!ok) return
+    setBusyVersionId(version.id)
+    try {
+      const restored = await restorePromptVersion(version.key, version.id, version.scope, projectPath ?? undefined)
+      if (!restored) throw new Error(t('prompts.saveFailed'))
+      toast.success(t('prompts.restoredVersion'))
+      onSaved()
+    } catch (error) {
+      toast.error(t('prompts.versionRestoreFailed', { error: String(error) }))
+    } finally {
+      setBusyVersionId(null)
+    }
+  }
+
+  const handleDeleteVersion = async (version: PromptVersionInfo) => {
+    setBusyVersionId(version.id)
+    try {
+      const ok = await deletePromptVersion(version.key, version.id, version.scope, projectPath ?? undefined)
+      if (!ok) throw new Error(t('prompts.saveFailed'))
+      setVersions(previous => previous.filter(item => item.id !== version.id))
+      toast.success(t('prompts.versionDeleted'))
+    } catch (error) {
+      toast.error(t('prompts.versionDeleteFailed', { error: String(error) }))
+    } finally {
+      setBusyVersionId(null)
+    }
   }
 
   return (
@@ -339,7 +401,82 @@ function TemplateItem({
               <RotateCcw size={12} />
               {t('prompts.resetDefault')}
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleToggleVersions()}
+            >
+              <History size={12} />
+              {t('prompts.versionHistory')}
+            </Button>
           </div>
+
+          {showVersions && (
+            <div
+              className="rounded-lg p-3 space-y-2"
+              style={{ backgroundColor: 'var(--color-hover)', border: '1px solid var(--color-border)' }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
+                  {t('prompts.versionCount', { count: versions.length })}
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => void loadVersions()} disabled={loadingVersions}>
+                  <RotateCcw size={11} className={loadingVersions ? 'animate-spin' : ''} />
+                  {t('prompts.versionHistory')}
+                </Button>
+              </div>
+              {loadingVersions ? (
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
+              ) : versions.length === 0 ? (
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{t('prompts.noVersions')}</p>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {versions.map(version => (
+                    <div
+                      key={`${version.scope}-${version.id}`}
+                      className="flex items-start gap-2 rounded-md p-2"
+                      style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-border)' }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs" style={{ color: 'var(--color-text)' }}>
+                            {new Date(version.createdAt).toLocaleString()}
+                          </span>
+                          <span className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+                            {t(version.scope === 'project' ? 'prompts.project' : 'prompts.global')}
+                          </span>
+                          <span className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+                            {t(`prompts.versionReason.${version.reason}`, { defaultValue: version.reason })}
+                          </span>
+                        </div>
+                        <p className="text-[0.68rem] mt-1 line-clamp-2" style={{ color: 'var(--color-text-muted)' }}>
+                          {version.preview}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busyVersionId === version.id}
+                        onClick={() => void handleRestoreVersion(version)}
+                      >
+                        <RotateCcw size={11} />
+                        {t('prompts.restoreVersion')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={busyVersionId === version.id}
+                        title={t('prompts.deleteVersion')}
+                        onClick={() => void handleDeleteVersion(version)}
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 保存结果反馈 */}
           {saveResult && (

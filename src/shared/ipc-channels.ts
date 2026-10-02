@@ -723,6 +723,7 @@ export interface ProjectSnapshotInfo {
   size: number
   hasDatabase: boolean
   hasPrompts: boolean
+  hasPromptHistory: boolean
   hasBooks: boolean
   hasVectors: boolean
   appVersion: string
