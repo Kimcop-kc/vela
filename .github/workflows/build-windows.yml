@@ -78,20 +78,20 @@ jobs:
           - os: windows-2022
             label: Windows x64
             artifact: Vela-Windows-x64
-            build_args: "-- --win --x64"
+            build_args: "-- --win --x64 --publish never"
             files: |
               release/**/*.exe
               !release/**/win-unpacked/**
           - os: macos-15-intel      # Intel 机器，直接在 x64 上编，避免交叉编译原生依赖
             label: macOS x64 (Intel)
             artifact: Vela-macOS-x64
-            build_args: "-- --mac --x64"
+            build_args: "-- --mac --x64 --publish never"
             files: |
               release/**/*.dmg
           - os: macos-15            # Apple Silicon 机器，编 arm64
             label: macOS arm64 (Apple Silicon)
             artifact: Vela-macOS-arm64
-            build_args: "-- --mac --arm64"
+            build_args: "-- --mac --arm64 --publish never"
             files: |
               release/**/*.dmg
 

@@ -19,6 +19,7 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 - 发布流程改为仅响应 `v*` 版本标签；普通分支构建只上传 Actions Artifact，不再覆盖已有 Release。
 - 发布前强制校验标签版本与 `package.json` 一致，并新增类型检查、单元测试和 ESLint 质量关卡。
 - 性能基准测试与常规测试分离，避免共享 CI 机器的负载抖动造成误报；本地可用 `npm run test:perf` 单独运行。
+- 标签构建显式禁用 electron-builder 隐式发布，正式 Release 统一由独立发布任务创建。
 
 ### 修复
 
