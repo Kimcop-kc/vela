@@ -1,5 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
+import { fetchWithRetry, formatFetchError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
 
 export class GeminiProvider implements ILLMProvider {
   private toGeminiContents(messages: Array<{ role: string; content: string }>) {
@@ -35,7 +36,7 @@ export class GeminiProvider implements ILLMProvider {
       body.systemInstruction = { parts: [{ text: systemInstruction }] }
     }
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -65,7 +66,10 @@ export class GeminiProvider implements ILLMProvider {
   }
 
   async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
-    try {
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let emittedAny = false
+      try {
       const baseUrl = model.baseUrl.replace(/\/$/, '')
       const url = `${baseUrl}/v1beta/models/${model.modelName}:streamGenerateContent?alt=sse`
 
@@ -82,7 +86,7 @@ export class GeminiProvider implements ILLMProvider {
         body.systemInstruction = { parts: [{ text: systemInstruction }] }
       }
 
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -90,7 +94,7 @@ export class GeminiProvider implements ILLMProvider {
         },
         body: JSON.stringify(body),
         signal: opts.signal,
-      })
+      }, { maxAttempts: 2, signal: opts.signal })
 
       if (!res.ok) {
         const text = await res.text()
@@ -117,6 +121,7 @@ export class GeminiProvider implements ILLMProvider {
           }
           const chunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text
           if (chunk) {
+            emittedAny = true
             fullText += chunk
             opts.onChunk(chunk)
           }
@@ -159,14 +164,20 @@ export class GeminiProvider implements ILLMProvider {
       }
 
       opts.onDone(fullText, usage)
+      return
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         opts.onError('已取消生成')
-      } else {
-        const cause = (error as { cause?: { message?: string; code?: string } }).cause
-        const causeText = cause && (cause.message || cause.code) ? `（底层原因: ${cause.message || cause.code}）` : ''
-        opts.onError(String(error) + causeText)
+        return
       }
+      if (!emittedAny && attempt < maxAttempts && isRetryableNetworkError(error)) {
+        console.warn(`[Gemini] 网络连接中断，正在重试 (${attempt}/${maxAttempts}):`, formatFetchError(error))
+        await sleepWithSignal(700 * (2 ** (attempt - 1)), opts.signal)
+        continue
+      }
+      opts.onError(formatFetchError(error))
+      return
+    }
     }
   }
 }

@@ -83,13 +83,21 @@ export const globalEventBus = new EventBus()
 
 // ===== 便捷日志工具 =====
 
+import { appLogger } from '../services/app-logger'
+
 export const AppLogger = {
-  info: (msg: string) => globalEventBus.emit('SYSTEM_NOTICE', { level: 'info', message: msg }),
-  warn: (msg: string) => globalEventBus.emit('SYSTEM_NOTICE', { level: 'warn', message: msg }),
+  info: (msg: string) => {
+    appLogger.info('event', msg)
+    globalEventBus.emit('SYSTEM_NOTICE', { level: 'info', message: msg })
+  },
+  warn: (msg: string) => {
+    appLogger.warn('event', msg)
+    globalEventBus.emit('SYSTEM_NOTICE', { level: 'warn', message: msg })
+  },
   error: (title: string, err: unknown) => {
     const message = err instanceof Error ? err.message : String(err)
     const stack = err instanceof Error ? err.stack : undefined
-    console.error(`[AppLogger] ${title}:`, err)
+    appLogger.error('event', `${title}: ${message}`, err)
     globalEventBus.emit('WORKFLOW_ERROR', { title, error: message, stack })
     globalEventBus.emit('SYSTEM_NOTICE', { level: 'error', message: `${title}: ${message}` })
   }

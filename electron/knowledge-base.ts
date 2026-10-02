@@ -13,7 +13,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import * as lancedb from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
-import { chunkText, generateEmbeddings, joinChunkTexts } from './embedding'
+import { chunkText, generateEmbeddings } from './embedding'
 import {
   addChunks,
   removeDocument as removeDocFromStore,
@@ -22,7 +22,7 @@ import {
   getStats as storeGetStats,
   migrateFromJSON,
   getChunksWithoutVectors as storeGetChunksWithoutVectors,
-  getChunksByDoc as storeGetChunksByDoc,
+  getDocumentTextPage as storeGetDocumentTextPage,
 } from './vector-store'
 
 // ===== 迁移状态跟踪 =====
@@ -425,18 +425,62 @@ export async function getDocumentText(
 ): Promise<{ success: boolean; text?: string; fileName?: string; chunkCount?: number; error?: string }> {
   try {
     await ensureMigration(projectPath)
-    const chunks = await storeGetChunksByDoc(projectPath, docId)
-    if (chunks.length === 0) {
+    const parts: string[] = []
+    let chunkStart = 0
+    let fileName = ''
+    let totalChunks = 0
+    let done = false
+
+    while (!done) {
+      const page = await storeGetDocumentTextPage(projectPath, docId, chunkStart, 100)
+      if (page.fileName) fileName = page.fileName
+      totalChunks = page.totalChunks
+      if (page.text) parts.push(page.text)
+      done = page.done
+      if (done) break
+      chunkStart = page.nextChunkIndex
+    }
+
+    if (parts.length === 0) {
       return { success: false, error: '未在知识库中找到该文档' }
     }
     return {
       success: true,
-      text: joinChunkTexts(chunks.map(c => c.text)),
-      fileName: chunks[0].fileName,
-      chunkCount: chunks.length,
+      text: parts.join(''),
+      fileName,
+      chunkCount: totalChunks,
     }
   } catch (error) {
     console.error('[Vela KB] 读取文档正文失败:', error)
+    return { success: false, error: String(error) }
+  }
+}
+
+/** 按块分页读取文档正文，避免大章节一次性阻塞界面。 */
+export async function getDocumentTextPage(
+  docId: string,
+  projectPath: string,
+  chunkStart = 0,
+  maxChunks = 32,
+): Promise<{
+  success: boolean
+  text?: string
+  fileName?: string
+  chunkStart?: number
+  nextChunkIndex?: number
+  done?: boolean
+  totalChunks?: number
+  error?: string
+}> {
+  try {
+    await ensureMigration(projectPath)
+    const page = await storeGetDocumentTextPage(projectPath, docId, chunkStart, maxChunks)
+    if (!page.fileName) {
+      return { success: false, error: '未在知识库中找到该文档' }
+    }
+    return { success: true, ...page }
+  } catch (error) {
+    console.error('[Vela KB] 分页读取文档正文失败:', error)
     return { success: false, error: String(error) }
   }
 }

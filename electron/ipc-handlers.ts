@@ -10,6 +10,7 @@ import { registerImportController } from './controllers/import-controller'
 import { registerSkillController } from './controllers/skill-controller'
 import { registerExportController } from './controllers/export-controller'
 import { registerBackupController } from './controllers/backup-controller'
+import { registerLogController } from './controllers/log-controller'
 
 /**
  * 注册所有 IPC 通道 — 在主进程启动时调用
@@ -30,6 +31,7 @@ export function registerIPCHandlers() {
   registerSkillController()
   registerExportController()
   registerBackupController()
+  registerLogController()
 
   console.log(`[Vela IPC] 所有 Controller 已注册完成 | 全局工作区: ${VELA_HOME}`)
 }

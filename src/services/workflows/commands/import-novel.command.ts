@@ -15,6 +15,7 @@ import { ipc } from '../../ipc-client'
 import i18n from '../../../i18n'
 import { useLLMStore } from '../../../stores/llm-store'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
+import { normalizeChapterRole } from '../../../shared/chapter-roles'
 import {
   buildSegmentDirective,
   callSegmentWithShrink,
@@ -526,7 +527,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
         const finalBlueprint = {
           chapterNumber: ch.number,
           title: (blueprint.title as string) || ch.title,
-          role: (blueprint.role as string) || '发展',
+          role: normalizeChapterRole(blueprint.role) || '发展',
           purpose: (blueprint.purpose as string) || '',
           keyEvents: (blueprint.keyEvents as string) || '',
           characters: Array.isArray(blueprint.characters) ? blueprint.characters as string[] : [],

@@ -14,8 +14,10 @@ import { IconBtn } from '../ui/IconBtn'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { globalEventBus } from '../../shared/event-bus'
+import { ipc } from '../../services/ipc-client'
 import {
   deconstructBook, listBooks, removeBook, selectBookFiles, type BookRecord,
+  type BookImportProgress,
 } from '../../services/book-service'
 
 export default function BooksPanel() {
@@ -25,6 +27,7 @@ export default function BooksPanel() {
   const setSelectedBookId = useLayoutStore(s => s.setSelectedBookId)
   const [books, setBooks] = useState<BookRecord[]>([])
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<BookImportProgress | null>(null)
   const projectPath = currentProject?.path ?? null
 
   const reload = useCallback(async () => {
@@ -49,6 +52,8 @@ export default function BooksPanel() {
     return unsubscribe
   }, [reload])
 
+  useEffect(() => ipc.on('kb:deconstruct-progress', setImportProgress), [])
+
   /** 导入参考小说并拆书入库 */
   const handleImport = async () => {
     if (!projectPath) {
@@ -59,6 +64,7 @@ export default function BooksPanel() {
     if (!files || files.length === 0) return
 
     setImporting(true)
+    setImportProgress(null)
     try {
       let okCount = 0
       let lastBookId: string | null = null
@@ -83,8 +89,21 @@ export default function BooksPanel() {
       }
     } finally {
       setImporting(false)
+      setImportProgress(null)
     }
   }
+
+  const importLabel = (() => {
+    if (!importing) return t('books.import')
+    if (!importProgress) return t('books.importing')
+    switch (importProgress.phase) {
+      case 'reading': return t('books.importReading', { lines: importProgress.current })
+      case 'chunking': return t('books.importChunking', { current: importProgress.current, total: importProgress.total })
+      case 'embedding': return t('books.importEmbedding', { current: importProgress.current, total: importProgress.total })
+      case 'indexing': return t('books.importIndexing', { current: importProgress.current, total: importProgress.total })
+      case 'saving': return t('books.importSaving')
+    }
+  })()
 
   /** 删除一本拆书 */
   const handleRemove = async (book: BookRecord) => {
@@ -111,7 +130,7 @@ export default function BooksPanel() {
         disabled={importing || !currentProject}
       >
         <Upload size={11} />
-        {importing ? t('books.importing') : t('books.import')}
+        {importLabel}
       </Button>
 
       <p className="mt-1.5 text-[0.68rem] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>

@@ -462,6 +462,13 @@ export class CanonRepository {
     return row ? rowToSummary(row) : null
   }
 
+  /** 删除某章摘要（用于将章节回滚到未生成状态）。 */
+  static clearChapterSummary(chapterNumber: number): void {
+    const db = getProjectDb()
+    if (!db) return
+    db.prepare(`DELETE FROM canon_chapter_summaries WHERE chapter_number = ?`).run(chapterNumber)
+  }
+
   static upsertSummary(summary: ChapterSummary): void {
     const db = getProjectDb()
     if (!db) throw new Error('[CanonRepository] 数据库未连接')

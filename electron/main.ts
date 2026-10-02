@@ -4,7 +4,18 @@ import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { appLogger, installMainConsoleCapture } from './app-logger'
 
+installMainConsoleCapture()
+
+process.on('uncaughtException', error => {
+  appLogger.error('process', '未捕获异常', error)
+  if (app.isReady()) app.exit(1)
+})
+
+process.on('unhandledRejection', reason => {
+  appLogger.warn('process', '未处理的 Promise 拒绝', reason)
+})
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -73,7 +84,20 @@ app.on('activate', () => {
   }
 })
 
+app.on('render-process-gone', (_event, _webContents, details) => {
+  appLogger.error('electron', '渲染进程异常退出', details)
+})
+
+app.on('child-process-gone', (_event, details) => {
+  appLogger.error('electron', '子进程异常退出', details)
+})
+
 app.whenReady().then(() => {
+  appLogger.info('app', 'Vela 启动', {
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+  })
   registerIPCHandlers()
   registerMCPHandlers()
   createWindow()

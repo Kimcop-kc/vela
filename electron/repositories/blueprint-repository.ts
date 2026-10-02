@@ -178,4 +178,15 @@ export class BlueprintRepository {
       WHERE chapter_number = ?
     `).run(notes, chapterNumber)
     }
+
+    /** 清除定稿后自动生成的章节要点，保留作者手写的蓝图为其他字段。 */
+    static clearGeneratedNotes(chapterNumber: number): void {
+        const db = getProjectDb()
+        if (!db) return
+        db.prepare(`
+      UPDATE blueprints
+      SET notes = '', notes_updated_at = '', updated_at = datetime('now')
+      WHERE chapter_number = ?
+    `).run(chapterNumber)
+    }
 }

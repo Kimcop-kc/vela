@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { randomUUID } from '../utils/id'
 import i18n from '../i18n'
+import { appLogger } from '../services/app-logger'
 
 // ===== 工作流数据模型 =====
 
@@ -423,6 +424,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     set((s) => ({
       globalLogs: [...s.globalLogs, entry].slice(-500), // 保留最近 500 条
     }))
+    appLogger[level]('workflow', message.trimStart())
   },
 
   clearLogs: () => set({ globalLogs: [] }),

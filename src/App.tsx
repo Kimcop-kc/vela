@@ -7,6 +7,7 @@ import { useLLMStore } from './stores/llm-store'
 import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
+import { useLogStore, disposeLogStore } from './stores/log-store'
 import { ipc } from './services/ipc-client'
 import TitleBar from './components/layout/TitleBar'
 import StatusBar from './components/layout/StatusBar'
@@ -58,6 +59,7 @@ export default function App() {
   useEffect(() => {
     initTheme()
     initLLM()
+    useLogStore.getState().init()
     loadRecentProjects()
     // 加载全局自定义提示词覆盖（此前 loadCustomPrompts 从未被调用，导致全局覆盖重启即失效）
     import('./services/prompt-templates').then(({ ensurePromptsLoaded }) => ensurePromptsLoaded()).catch(e => console.warn('[Prompts] 加载全局覆盖失败:', e))
@@ -90,6 +92,7 @@ export default function App() {
         disposeProjectService()
       }).catch(() => {})
       unsubActionToast()
+      disposeLogStore()
     }
   }, [initTheme, initLLM, loadRecentProjects, t])
 

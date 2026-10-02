@@ -22,6 +22,45 @@ export interface ConfigChannels {
 /** 可以单独绑定模型的用途类别（多模型管理） */
 export type LLMPurposeCategory = 'generation' | 'refinement' | 'summary' | 'embedding'
 
+export type AppLogLevel = 'debug' | 'info' | 'warn' | 'error'
+export type AppLogProcess = 'main' | 'renderer'
+
+export interface AppLogEntry {
+  id: string
+  timestamp: string
+  level: AppLogLevel
+  scope: string
+  message: string
+  process: AppLogProcess
+  sessionId: string
+  details?: unknown
+}
+
+export interface AppLogQuery {
+  level?: AppLogLevel
+  search?: string
+  limit?: number
+}
+
+export interface AppLogInput {
+  level: AppLogLevel
+  scope?: string
+  message: string
+  details?: unknown
+}
+
+export interface LogChannels {
+  'logs:list': { args: [query?: AppLogQuery]; return: AppLogEntry[] }
+  'logs:write': { args: [input: AppLogInput]; return: { success: boolean; error?: string } }
+  'logs:clear': { args: []; return: { success: boolean } }
+  'logs:open-folder': { args: []; return: { success: boolean; error?: string } }
+  'logs:export': { args: []; return: { success: boolean; path?: string; canceled?: boolean; error?: string } }
+}
+
+export interface LogEvents {
+  'logs:appended': AppLogEntry
+}
+
 /** 用途类别 → 模型 id 的绑定表 */
 export type PurposeModelBindings = Partial<Record<LLMPurposeCategory, string | null>>
 
@@ -355,6 +394,10 @@ export interface DatabaseChannels {
   'db:draft-next-version': { args: [chapterNumber: number]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
   'db:draft-update-content': { args: [id: number, content: string, wordCount: number]; return: { success: boolean; error?: string } }
+  'db:draft-unfinalize': { args: [id: number]; return: { success: boolean; draft?: DraftMeta; warning?: string; error?: string } }
+  'db:draft-delete': { args: [id: number]; return: { success: boolean; error?: string } }
+  'db:draft-reset-chapter': { args: [chapterNumber: number]; return: { success: boolean; deletedDrafts?: number; deletedRevisions?: number; deletedReviews?: number; warning?: string; error?: string } }
+  'db:chapter-rollback-capture': { args: [chapterNumber: number]; return: { success: boolean; size?: number; error?: string } }
 
   // 5. revisions
   'db:revision-create': { args: [params: { baseDraftId: number; revisionIndex: number; revisionType: 'refine' | 'review-fix' | 'deai'; userPrompt?: string; reviewSourceId?: number; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
@@ -567,6 +610,16 @@ export interface BookRecord {
   chapters: BookChapterEntry[]
 }
 
+export interface BookImportProgress {
+  phase: 'reading' | 'chunking' | 'embedding' | 'indexing' | 'saving'
+  current: number
+  total: number
+}
+
+export interface KnowledgeBaseEvents {
+  'kb:deconstruct-progress': BookImportProgress
+}
+
 export interface KnowledgeBaseChannels {
   'kb:import-document': { args: [filePath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string } }
   'kb:import-folder': { args: [folderPath: string]; return: { success: boolean; importedCount: number; failedFiles: string[]; error?: string } }
@@ -583,6 +636,7 @@ export interface KnowledgeBaseChannels {
   'kb:deconstruct-book': { args: [filePath: string]; return: { success: boolean; book?: BookRecord; error?: string } }
   'kb:list-books': { args: []; return: BookRecord[] }
   'kb:get-document-text': { args: [docId: string]; return: { success: boolean; text?: string; fileName?: string; chunkCount?: number; error?: string } }
+  'kb:get-document-text-page': { args: [docId: string, chunkStart?: number, maxChunks?: number]; return: { success: boolean; text?: string; fileName?: string; chunkStart?: number; nextChunkIndex?: number; done?: boolean; totalChunks?: number; error?: string } }
   'kb:remove-book': { args: [bookId: string]; return: { success: boolean; removedChapters: number; error?: string } }
 }
 
@@ -753,8 +807,8 @@ export interface BackupChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels & BackupChannels
-export type AllEventChannels = LLMStreamEvents
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & LogChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels & BackupChannels
+export type AllEventChannels = LLMStreamEvents & KnowledgeBaseEvents & LogEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels

@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import readline from 'node:readline'
 
 // ===== 拆章正则池 =====
 
@@ -155,6 +156,101 @@ export function hasChapterHeadings(content: string): boolean {
   return lines.some(line => isChapterHeading(line))
 }
 
+function normalizeChapters(chapters: ParsedChapter[]): ParsedChapter[] {
+  const chapterMap = new Map<number, ParsedChapter>()
+  for (const chapter of chapters) chapterMap.set(chapter.number, chapter)
+  return Array.from(chapterMap.values())
+    .sort((a, b) => a.number - b.number)
+    .map((chapter, index) => ({ ...chapter, number: index + 1 }))
+}
+
+/**
+ * 流式读取单个文件并拆章。
+ *
+ * 大文件导入时不阻塞主进程事件循环；每处理一批文本主动让出一次，
+ * 窗口仍可响应，进度也可以正常刷新。
+ */
+export async function splitFileIntoChaptersAsync(
+  filePath: string,
+  onProgress?: (linesProcessed: number) => void,
+): Promise<ParsedChapter[]> {
+  const chapters: ParsedChapter[] = []
+  let currentHeaderLine: string | null = null
+  let currentLines: string[] = []
+  const preHeadingLines: string[] = []
+  let sawHeading = false
+  let autoNumber = 0
+  let linesProcessed = 0
+
+  const appendChapter = (headerLine: string, lines: string[]) => {
+    autoNumber++
+    const number = extractChapterNumber(headerLine) || autoNumber
+    const content = lines.join('\n').trim()
+    if (content.length > 0) {
+      chapters.push({
+        number,
+        title: extractTitle(headerLine),
+        content,
+        wordCount: content.length,
+      })
+    }
+  }
+
+  const flushCurrent = () => {
+    if (currentHeaderLine === null) return
+    appendChapter(currentHeaderLine, currentLines)
+    currentHeaderLine = null
+    currentLines = []
+  }
+
+  const input = fs.createReadStream(filePath, { encoding: 'utf8' })
+  const reader = readline.createInterface({ input, crlfDelay: Infinity })
+  try {
+    for await (const rawLine of reader) {
+      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+      if (isChapterHeading(line)) {
+        if (!sawHeading) {
+          sawHeading = true
+          if (preHeadingLines.length > 0) {
+            appendChapter(preHeadingLines[0], preHeadingLines.slice(1))
+          }
+        } else {
+          flushCurrent()
+        }
+        currentHeaderLine = line
+      } else if (!sawHeading) {
+        preHeadingLines.push(line)
+      } else {
+        currentLines.push(line)
+      }
+
+      linesProcessed++
+      if (linesProcessed % 5000 === 0) {
+        onProgress?.(linesProcessed)
+        await new Promise<void>(resolve => setImmediate(resolve))
+      }
+    }
+    if (sawHeading) {
+      flushCurrent()
+    } else if (preHeadingLines.length > 0) {
+      const content = preHeadingLines.join('\n').trim()
+      if (content.length > 0) {
+        chapters.push({
+          number: 1,
+          title: path.basename(filePath, path.extname(filePath)),
+          content,
+          wordCount: content.length,
+        })
+      }
+    }
+    onProgress?.(linesProcessed)
+    return normalizeChapters(chapters)
+  } finally {
+    reader.close()
+    input.destroy()
+  }
+}
+
 /** 读取若干文件并按章号排序、重新连续编号 */
 export function splitFilePathsIntoChapters(filePaths: string[]): {
   success: boolean
@@ -214,14 +310,8 @@ export function splitFilePathsIntoChapters(filePaths: string[]): {
     }
 
     // 去重排序：按章节号排序，重复章号保留后者
-    const chapterMap = new Map<number, ParsedChapter>()
-    for (const ch of allChapters) {
-      chapterMap.set(ch.number, ch)
-    }
-    const finalChapters = Array.from(chapterMap.values()).sort((a, b) => a.number - b.number)
-
-    // 重新编号（确保从1开始连续）
-    const renumbered = finalChapters.map((ch, idx) => ({ ...ch, number: idx + 1 }))
+    // 去重排序并重新编号（确保从1开始连续）
+    const renumbered = normalizeChapters(allChapters)
     const totalWords = renumbered.reduce((sum, ch) => sum + ch.wordCount, 0)
 
     return { success: true, chapters: renumbered, totalWords }

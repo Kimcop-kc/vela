@@ -20,4 +20,11 @@ export class SummaryRepository {
     ).get() as { characterStates: string; chapterNumber: number } | undefined
     return row ?? null
   }
+
+  /** 删除某章保存的角色状态快照（用于章节回滚）。 */
+  static clearChapter(chapterNumber: number): void {
+    const db = getProjectDb()
+    if (!db) return
+    db.prepare('DELETE FROM summary_snapshots WHERE chapter_number = ?').run(chapterNumber)
+  }
 }

@@ -5,6 +5,7 @@ import {
   listDocuments, removeDocument, getKnowledgeStats,
   getVectorlessCount, backfillVectors,
   getDocumentText,
+  getDocumentTextPage,
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { deconstructBook, listBooks, removeBook } from '../book-deconstruct'
@@ -122,13 +123,15 @@ export function registerKBController() {
   // ===== 拆书知识库 =====
 
   /** 拆书：把参考小说按章拆开并写入本地知识库，同时留一份拆书档案 */
-  ipcMain.handle('kb:deconstruct-book', async (_event, filePath: string) => {
+  ipcMain.handle('kb:deconstruct-book', async (event, filePath: string) => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, error: '未打开项目' }
     const embConfig = getEmbeddingConfig()
     const protocol = embConfig?.protocol ?? 'openai'
     const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
-    return deconstructBook(filePath, projectPath, protocol, model)
+    return deconstructBook(filePath, projectPath, protocol, model, progress => {
+      event.sender.send('kb:deconstruct-progress', progress)
+    })
   })
 
   /** 列出本项目已有的拆书档案 */
@@ -143,6 +146,12 @@ export function registerKBController() {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, error: '未打开项目' }
     return getDocumentText(docId, projectPath)
+  })
+
+  ipcMain.handle('kb:get-document-text-page', async (_event, docId: string, chunkStart?: number, maxChunks?: number) => {
+    const projectPath = getCurrentProjectPath()
+    if (!projectPath) return { success: false, error: '未打开项目' }
+    return getDocumentTextPage(docId, projectPath, chunkStart, maxChunks)
   })
 
   /** 移除一本拆书（档案 + 知识库中的章节） */

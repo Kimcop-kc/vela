@@ -4,7 +4,7 @@
  * 展示选中的拆书：章节清单 + 「本书范围内」检索。
  * 拆书内容与普通知识库共用 LanceDB，检索结果按书名前缀过滤即为本书范围。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { BookMarked, ChevronRight, Copy, Loader2, Search, ScrollText, Trash2, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../ui/Button'
@@ -16,10 +16,22 @@ import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
+import { ipc } from '../../services/ipc-client'
 import {
   bookFileNamePrefix, deconstructBook, listBooks, removeBook, searchKnowledgeBase,
-  getChapterText, selectBookFiles, type BookChapterEntry, type BookRecord,
+  getChapterTextPage, selectBookFiles, type BookChapterEntry, type BookRecord,
+  type BookImportProgress,
 } from '../../services/book-service'
+
+const PREVIEW_CHUNKS = 32
+const FULL_READ_CHUNKS = 100
+
+interface ChapterPageState {
+  text: string
+  nextChunkIndex: number
+  done: boolean
+  totalChunks: number
+}
 
 export default function BooksOverview() {
   const { t } = useTranslation('pages', { keyPrefix: 'booksOverview' })
@@ -32,13 +44,15 @@ export default function BooksOverview() {
 
   const [books, setBooks] = useState<BookRecord[]>([])
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<BookImportProgress | null>(null)
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<Array<{ text: string; score: number; fileName: string }>>([])
   // 章节正文懒加载：展开时按 docId 取回整章内容
   const [openChapterId, setOpenChapterId] = useState<string | null>(null)
-  const [chapterTexts, setChapterTexts] = useState<Record<string, string>>({})
+  const [chapterPages, setChapterPages] = useState<Record<string, ChapterPageState>>({})
   const [loadingChapterId, setLoadingChapterId] = useState<string | null>(null)
+  const fullTextCacheRef = useRef<Record<string, string>>({})
   const projectPath = currentProject?.path ?? null
 
   const book = books.find(b => b.id === selectedBookId) ?? null
@@ -69,6 +83,8 @@ export default function BooksOverview() {
     return unsubscribe
   }, [reload])
 
+  useEffect(() => ipc.on('kb:deconstruct-progress', setImportProgress), [])
+
   // 在本书范围内检索
   const handleSearch = async () => {
     if (!book || !query.trim()) return
@@ -89,6 +105,7 @@ export default function BooksOverview() {
     const files = await selectBookFiles()
     if (!files || files.length === 0) return
     setImporting(true)
+    setImportProgress(null)
     try {
       for (const file of files) {
         const result = await deconstructBook(file)
@@ -103,8 +120,21 @@ export default function BooksOverview() {
       globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
     } finally {
       setImporting(false)
+      setImportProgress(null)
     }
   }
+
+  const importLabel = (() => {
+    if (!importing) return t('import')
+    if (!importProgress) return t('importing')
+    switch (importProgress.phase) {
+      case 'reading': return t('importReading', { lines: importProgress.current })
+      case 'chunking': return t('importChunking', { current: importProgress.current, total: importProgress.total })
+      case 'embedding': return t('importEmbedding', { current: importProgress.current, total: importProgress.total })
+      case 'indexing': return t('importIndexing', { current: importProgress.current, total: importProgress.total })
+      case 'saving': return t('importSaving')
+    }
+  })()
 
   const handleRemove = async () => {
     if (!book) return
@@ -119,21 +149,31 @@ export default function BooksOverview() {
     setSelectedBookId(null)
     setResults([])
     setOpenChapterId(null)
-    setChapterTexts({})
+    setChapterPages({})
+    fullTextCacheRef.current = {}
     await reload()
     globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
   }
 
-  /** 取回章节正文；已读过的直接走缓存 */
-  const ensureChapterText = useCallback(async (chapter: BookChapterEntry): Promise<string | null> => {
-    const cached = chapterTexts[chapter.docId]
-    if (cached !== undefined) return cached
+  /** 读取预览块；默认只加载少量内容，避免整章一次性进入界面 */
+  const loadChapterPage = useCallback(async (chapter: BookChapterEntry, append = false): Promise<string | null> => {
+    const cached = chapterPages[chapter.docId]
+    if (append && cached?.done) return cached.text
+    if (!append && cached?.text !== undefined) return cached.text
+
     setLoadingChapterId(chapter.docId)
     try {
-      const result = await getChapterText(chapter.docId)
-      if (result.success && result.text) {
-        setChapterTexts(prev => ({ ...prev, [chapter.docId]: result.text as string }))
-        return result.text
+      const start = append ? (cached?.nextChunkIndex ?? 0) : 0
+      const result = await getChapterTextPage(chapter.docId, start, PREVIEW_CHUNKS)
+      if (result.success && result.text !== undefined) {
+        const nextPage: ChapterPageState = {
+          text: append ? `${cached?.text ?? ''}${result.text}` : result.text,
+          nextChunkIndex: result.nextChunkIndex ?? start,
+          done: result.done ?? true,
+          totalChunks: result.totalChunks ?? 0,
+        }
+        setChapterPages(prev => ({ ...prev, [chapter.docId]: nextPage }))
+        return nextPage.text
       }
       toast.error(t('loadChapterFailed', { error: result.error ?? '' }))
       return null
@@ -143,7 +183,45 @@ export default function BooksOverview() {
     } finally {
       setLoadingChapterId(null)
     }
-  }, [chapterTexts, t])
+  }, [chapterPages, t])
+
+  /** 完整正文只在复制或送入文风分析时按块读取；每页之间让出事件循环。 */
+  const loadFullChapterText = useCallback(async (chapter: BookChapterEntry): Promise<string | null> => {
+    const cachedFull = fullTextCacheRef.current[chapter.docId]
+    if (cachedFull !== undefined) return cachedFull
+
+    const preview = chapterPages[chapter.docId]
+    let text = preview?.text ?? ''
+    let start = preview?.nextChunkIndex ?? 0
+    if (preview?.done) {
+      fullTextCacheRef.current[chapter.docId] = text
+      return text
+    }
+
+    setLoadingChapterId(chapter.docId)
+    try {
+      let done = false
+      while (!done) {
+        const result = await getChapterTextPage(chapter.docId, start, FULL_READ_CHUNKS)
+        if (!result.success || result.text === undefined) {
+          toast.error(t('loadChapterFailed', { error: result.error ?? '' }))
+          return null
+        }
+        text += result.text
+        done = result.done ?? true
+        if (done) break
+        start = result.nextChunkIndex ?? start + FULL_READ_CHUNKS
+        await new Promise(resolve => setTimeout(resolve, 0))
+      }
+      fullTextCacheRef.current[chapter.docId] = text
+      return text
+    } catch (error) {
+      toast.error(t('loadChapterFailed', { error: String(error) }))
+      return null
+    } finally {
+      setLoadingChapterId(null)
+    }
+  }, [chapterPages, t])
 
   const handleToggleChapter = async (chapter: BookChapterEntry) => {
     if (openChapterId === chapter.docId) {
@@ -151,11 +229,11 @@ export default function BooksOverview() {
       return
     }
     setOpenChapterId(chapter.docId)
-    if (chapterTexts[chapter.docId] === undefined) await ensureChapterText(chapter)
+    if (chapterPages[chapter.docId] === undefined) await loadChapterPage(chapter)
   }
 
   const handleCopyChapter = async (chapter: BookChapterEntry) => {
-    const text = await ensureChapterText(chapter)
+    const text = await loadFullChapterText(chapter)
     if (!text) return
     try {
       await navigator.clipboard.writeText(text)
@@ -168,7 +246,7 @@ export default function BooksOverview() {
   /** 把这一章送去文风分析：切到项目视图 → 打开小说配置 → 预填文风指南弹框 */
   const handleUseAsStyleReference = async (chapter: BookChapterEntry) => {
     if (!book) return
-    const text = await ensureChapterText(chapter)
+    const text = await loadFullChapterText(chapter)
     if (!text) return
     await useEditorStore.getState().openFile({
       id: 'config',
@@ -207,7 +285,7 @@ export default function BooksOverview() {
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <Button variant="ghost" size="sm" onClick={() => { void handleImport() }} disabled={importing}>
             <Upload size={11} />
-            {importing ? t('importing') : t('import')}
+            {importLabel}
           </Button>
           {book && (
             <Button
@@ -304,7 +382,8 @@ export default function BooksOverview() {
                 {book.chapters.map((chapter, index) => {
                   const expanded = openChapterId === chapter.docId
                   const loading = loadingChapterId === chapter.docId
-                  const text = chapterTexts[chapter.docId]
+                  const page = chapterPages[chapter.docId]
+                  const text = page?.text
                   return (
                     <div key={chapter.docId} style={{ borderTop: index === 0 ? 'none' : '1px solid var(--color-border)' }}>
                       <button
@@ -348,14 +427,31 @@ export default function BooksOverview() {
                               color: 'var(--color-text)',
                             }}
                           >
-                            {loading
+                            {loading && text === undefined
                               ? (
                                 <span className="inline-flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
                                   <Loader2 size={11} className="animate-spin" />
                                   {t('loadingChapter')}
                                 </span>
                               )
-                              : (text ?? '')}
+                              : (
+                                <>
+                                  <div>{text ?? ''}</div>
+                                  {page && !page.done && (
+                                    <div className="mt-3 flex justify-center">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={loading}
+                                        onClick={() => { void loadChapterPage(chapter, true) }}
+                                      >
+                                        {loading ? <Loader2 size={11} className="animate-spin" /> : null}
+                                        {loading ? t('loadingChapter') : t('loadMoreChapter')}
+                                      </Button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
                           </div>
                         </div>
                       )}

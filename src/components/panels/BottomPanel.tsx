@@ -1,13 +1,16 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Trash2, ChevronsDown, Loader2, CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap, RefreshCw,
-  PanelLeft, PanelRight, PanelBottom,
+  PanelLeft, PanelRight, PanelBottom, Download, FolderOpen, Search,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useLayoutStore, type BottomDock } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
+import { useLogStore } from '../../stores/log-store'
 import { Button } from '../ui/Button'
+import { toast } from '../ui/Toast'
+import type { AppLogLevel } from '../../shared/ipc-channels'
 
 /** 底部工具窗口的停靠位置选项（图标 + i18n key） */
 const DOCK_OPTIONS: Array<{ id: BottomDock; icon: typeof PanelLeft; key: string }> = [
@@ -516,49 +519,157 @@ function StepStatusIcon({ status }: { status: WorkflowStep['status'] }) {
 
 function LogsView() {
   const { t } = useTranslation('panels')
-  const globalLogs = useWorkflowStore(s => s.globalLogs)
-  const clearLogs = useWorkflowStore(s => s.clearLogs)
+  const entries = useLogStore(s => s.entries)
+  const loading = useLogStore(s => s.loading)
+  const loadLogs = useLogStore(s => s.load)
+  const clearLogs = useLogStore(s => s.clear)
+  const exportLogs = useLogStore(s => s.exportLogs)
+  const openFolder = useLogStore(s => s.openFolder)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const [level, setLevel] = useState<'all' | AppLogLevel>('all')
+  const [query, setQuery] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const filteredLogs = useMemo(() => {
+    const search = query.trim().toLowerCase()
+    return entries.filter(entry => {
+      if (level !== 'all' && entry.level !== level) return false
+      if (!search) return true
+      return `${entry.scope} ${entry.message}`.toLowerCase().includes(search)
+    })
+  }, [entries, level, query])
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [globalLogs.length, autoScroll])
+  }, [filteredLogs.length, autoScroll])
 
   const levelColor = (level: string) => {
     switch (level) {
+      case 'debug': return 'var(--color-text-muted)'
       case 'error': return 'var(--color-error)'
       case 'warn':  return 'var(--color-warning)'
       default:      return 'var(--color-text-secondary)'
     }
   }
 
+  const handleExport = async () => {
+    const result = await exportLogs()
+    if (result.canceled) return
+    if (!result.success) {
+      toast.error(t('logsPanel.exportFailed', { error: result.error ?? '' }))
+      return
+    }
+    toast.success(t('logsPanel.exportDone', { path: result.path ?? '' }))
+  }
+
+  const handleClear = async () => {
+    await clearLogs()
+    setExpandedId(null)
+  }
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-end gap-1 px-2 py-1 flex-shrink-0">
-        <Button
-          variant="ghost" size="icon"
-          onClick={() => setAutoScroll(!autoScroll)}
-          title={autoScroll ? t('common.autoScrollOn') : t('common.autoScrollOff')}
-          className={autoScroll ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
-        >
-          <ChevronsDown size={13} />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={clearLogs} title={t('common.clearLogs')}>
-          <Trash2 size={13} />
-        </Button>
+      <div
+        className="px-2 py-1.5 flex-shrink-0 space-y-1"
+        style={{ borderBottom: '1px solid var(--color-border)' }}
+      >
+        <div className="flex items-center gap-1.5">
+          <select
+            value={level}
+            onChange={event => setLevel(event.target.value as 'all' | AppLogLevel)}
+            className="h-6 rounded px-1.5 text-[0.68rem] outline-none flex-shrink-0"
+            style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+            title={t('logsPanel.level')}
+          >
+            <option value="all">{t('logsPanel.levelAll')}</option>
+            <option value="debug">DEBUG</option>
+            <option value="info">INFO</option>
+            <option value="warn">WARN</option>
+            <option value="error">ERROR</option>
+          </select>
+          <div
+            className="flex items-center gap-1 flex-1 min-w-0 h-6 px-2 rounded"
+            style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
+          >
+            <Search size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder={t('logsPanel.searchPlaceholder')}
+              className="w-full min-w-0 text-[0.7rem] bg-transparent outline-none"
+              style={{ color: 'var(--color-text)' }}
+            />
+          </div>
+          <span className="text-[0.65rem] tabular-nums flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {filteredLogs.length}/{entries.length}
+          </span>
+        </div>
+        <div className="flex items-center justify-end gap-0.5">
+          <Button variant="ghost" size="icon" onClick={() => void loadLogs()} title={t('common.refresh')}>
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </Button>
+          <Button
+            variant="ghost" size="icon"
+            onClick={() => setAutoScroll(!autoScroll)}
+            title={autoScroll ? t('common.autoScrollOn') : t('common.autoScrollOff')}
+            className={autoScroll ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
+          >
+            <ChevronsDown size={13} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => void handleExport()} title={t('logsPanel.export')}>
+            <Download size={12} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => void openFolder()} title={t('logsPanel.openFolder')}>
+            <FolderOpen size={12} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => void handleClear()} title={t('common.clearLogs')}>
+            <Trash2 size={13} />
+          </Button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-2 font-mono text-xs leading-5">
-        {globalLogs.length === 0 && (
+        {filteredLogs.length === 0 && (
           <div className="text-center py-8 opacity-30">{t('common.noLogs')}</div>
         )}
-        {globalLogs.map((log, i) => (
-          <div key={i} className="flex gap-2">
-            <span style={{ color: 'var(--color-text-muted)' }}>{log.time}</span>
-            <span style={{ color: levelColor(log.level) }}>{log.message}</span>
+        {filteredLogs.map((entry) => (
+          <div
+            key={entry.id}
+            className="py-0.5 cursor-pointer"
+            onClick={() => setExpandedId(current => current === entry.id ? null : entry.id)}
+            title={entry.details ? t('logsPanel.clickForDetails') : undefined}
+          >
+            <div className="flex items-start gap-2">
+              <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+                {new Date(entry.timestamp).toLocaleTimeString(undefined, { hour12: false })}
+              </span>
+              <span className="w-10 flex-shrink-0 font-semibold" style={{ color: levelColor(entry.level) }}>
+                {entry.level.toUpperCase()}
+              </span>
+              <span className="w-20 flex-shrink-0 truncate" style={{ color: 'var(--color-accent)' }}>
+                {entry.scope}
+              </span>
+              <span className="flex-1 min-w-0 whitespace-pre-wrap break-words" style={{ color: levelColor(entry.level) }}>
+                {entry.message}
+              </span>
+            </div>
+            {expandedId === entry.id && entry.details !== undefined && (
+              <pre
+                className="mt-1 mb-2 p-2 rounded overflow-auto max-h-40 text-[0.65rem]"
+                style={{
+                  backgroundColor: 'var(--color-surface-sunken)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-secondary)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {JSON.stringify(entry.details, null, 2)}
+              </pre>
+            )}
           </div>
         ))}
       </div>

@@ -1,5 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
+import { fetchWithRetry, formatFetchError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
 
 export class OpenAIProvider implements ILLMProvider {
   private supportsResponseFormat(model: ModelProfile): boolean {
@@ -62,7 +63,7 @@ export class OpenAIProvider implements ILLMProvider {
 
     if (opts.responseFormat && this.supportsResponseFormat(model)) body.response_format = opts.responseFormat
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -115,7 +116,10 @@ export class OpenAIProvider implements ILLMProvider {
   }
 
   async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
-    try {
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let emittedAny = false
+      try {
       const url = this.buildUrl(model.baseUrl)
 
       const body: Record<string, unknown> = {
@@ -139,7 +143,7 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (opts.responseFormat && this.supportsResponseFormat(model)) body.response_format = opts.responseFormat
 
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,7 +151,7 @@ export class OpenAIProvider implements ILLMProvider {
         },
         body: JSON.stringify(body),
         signal: opts.signal,
-      })
+      }, { maxAttempts: 2, signal: opts.signal })
 
       if (!res.ok) {
         const text = await res.text()
@@ -212,6 +216,7 @@ export class OpenAIProvider implements ILLMProvider {
           }
 
           if (emitChunk) {
+            emittedAny = true
             fullText += emitChunk
             opts.onChunk(emitChunk)
           }
@@ -271,14 +276,20 @@ export class OpenAIProvider implements ILLMProvider {
       } else {
         opts.onDone(cleanedText)
       }
+      return
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         opts.onError('已取消生成')
-      } else {
-        const cause = (error as { cause?: { message?: string; code?: string } }).cause
-        const causeText = cause && (cause.message || cause.code) ? `（底层原因: ${cause.message || cause.code}）` : ''
-        opts.onError(String(error) + causeText)
+        return
       }
+      if (!emittedAny && attempt < maxAttempts && isRetryableNetworkError(error)) {
+        console.warn(`[LLM] 网络连接中断，正在重试 (${attempt}/${maxAttempts}):`, formatFetchError(error))
+        await sleepWithSignal(700 * (2 ** (attempt - 1)), opts.signal)
+        continue
+      }
+      opts.onError(formatFetchError(error))
+      return
+    }
     }
   }
 }

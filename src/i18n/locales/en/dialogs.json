@@ -47,8 +47,8 @@
     "targetWords": "Target Word Count",
     "chapterRole": "Chapter Role",
     "roles": {
-      "opening": "Opening",
       "setup": "Setup",
+      "setupAlt": "Setup",
       "development": "Development",
       "conflict": "Conflict",
       "climax": "Climax",

@@ -193,21 +193,168 @@ export class DraftRepository {
     `).run(wordCount, id)
     }
 
-    /** 删除草稿（级联删除 revisions/reviews，但 contents 需手动清理） */
+    /**
+     * 解除定稿。
+     *
+     * 只允许从最后一章定稿开始倒序解除，避免较早正文恢复可编辑后，
+     * 后续章节仍基于旧内容继续演进，造成剧情和上下文链不一致。
+     */
+    static assertCanUnfinalize(id: number): DraftMeta {
+        const db = getProjectDb()
+        if (!db) throw new Error('[DraftRepository] 数据库未连接')
+
+        const meta = DraftRepository.getMeta(id)
+        if (!meta) throw new Error('草稿不存在或已被删除。')
+        if (meta.status !== 'finalized') throw new Error('只有已定稿草稿可以解除定稿。')
+
+        const later = db.prepare(`
+            SELECT chapter_number, version
+            FROM drafts
+            WHERE status = 'finalized'
+              AND (
+                chapter_number > ?
+                OR (chapter_number = ? AND version > ?)
+              )
+            ORDER BY chapter_number ASC, version ASC
+            LIMIT 1
+        `).get(meta.chapterNumber, meta.chapterNumber, meta.version) as
+            | { chapter_number: number; version: number }
+            | undefined
+
+        if (later) {
+            throw new Error(
+                `不能解除第 ${meta.chapterNumber} 章定稿：第 ${later.chapter_number} 章仍有后续定稿。` +
+                '请从最后一章开始按倒序解除。'
+            )
+        }
+        return meta
+    }
+
+    static unfinalize(id: number): DraftMeta {
+        const db = getProjectDb()
+        if (!db) throw new Error('[DraftRepository] 数据库未连接')
+
+        const meta = DraftRepository.assertCanUnfinalize(id)
+        db.prepare(`
+            UPDATE drafts
+            SET status = 'draft', updated_at = datetime('now')
+            WHERE id = ?
+        `).run(id)
+
+        const updated = DraftRepository.getMeta(id)
+        if (!updated) throw new Error('解除定稿失败：草稿状态未更新。')
+        return { ...updated, chapterNumber: meta.chapterNumber }
+    }
+
+    /** 永久删除草稿（级联删除 revisions/reviews，并清理关联 contents） */
     static delete(id: number): void {
         const db = getProjectDb()
-        if (!db) return
+        if (!db) throw new Error('[DraftRepository] 数据库未连接')
 
-        // 先获取 contentId 以便清理
-        const meta = DraftRepository.getMeta(id)
-        db.prepare('DELETE FROM drafts WHERE id = ?').run(id)
+        const tx = db.transaction(() => {
+            const meta = DraftRepository.getMeta(id)
+            if (!meta) throw new Error('草稿不存在或已被删除。')
+            if (meta.status === 'finalized') {
+                throw new Error('已定稿草稿不能直接删除，请先解除定稿。')
+            }
 
-        // 清理孤立的 content 记录
-        if (meta) {
-            // 【DB 迁移备注】：如果 contents。id 仍被 revision 或 review 引用，
-            // SQLite外键约束会阻止删除（抛出异常）。捕获并吞掉异常是预期的，
-            // 这会导致少量不再被草稿引用的内容记录残留，但长期风险极低。
-            try { ContentRepository.delete(meta.contentId) } catch { /* 被外键保护 */ }
+            const revisionContentIds = db.prepare(`
+                SELECT content_id FROM revisions WHERE base_draft_id = ?
+            `).all(id) as Array<{ content_id: number }>
+            const reviewContentIds = db.prepare(`
+                SELECT content_id FROM reviews WHERE base_draft_id = ?
+            `).all(id) as Array<{ content_id: number }>
+
+            // drafts 删除会级联清理 revisions / reviews。
+            db.prepare('DELETE FROM drafts WHERE id = ?').run(id)
+
+            const contentIds = new Set<number>([
+                meta.contentId,
+                ...revisionContentIds.map(row => row.content_id),
+                ...reviewContentIds.map(row => row.content_id),
+            ])
+            const deleteContent = db.prepare('DELETE FROM contents WHERE id = ?')
+            for (const contentId of contentIds) deleteContent.run(contentId)
+        })
+
+        tx()
+    }
+
+    /**
+     * 将一章整体回滚到“尚未生成草稿”的状态。
+     *
+     * 只允许重置最后一个已有草稿的章节；保留章节蓝图，但删除该章所有
+     * 草稿、修稿、审稿及对应正文池记录，避免旧版本在后续生成时继续混入。
+     */
+    static assertCanResetChapter(chapterNumber: number): void {
+        const db = getProjectDb()
+        if (!db) throw new Error('[DraftRepository] 数据库未连接')
+
+        const draft = db.prepare(
+            'SELECT id FROM drafts WHERE chapter_number = ? LIMIT 1'
+        ).get(chapterNumber)
+        if (!draft) throw new Error('该章节还没有可重置的草稿。')
+
+        const later = db.prepare(`
+            SELECT chapter_number
+            FROM drafts
+            WHERE chapter_number > ?
+            ORDER BY chapter_number ASC
+            LIMIT 1
+        `).get(chapterNumber) as { chapter_number: number } | undefined
+        if (later) {
+            throw new Error(
+                `不能重置第 ${chapterNumber} 章：第 ${later.chapter_number} 章已有草稿。` +
+                '请先处理后续章节，再从最后一章开始倒序重置。'
+            )
         }
+    }
+
+    static resetChapter(chapterNumber: number): {
+        deletedDrafts: number
+        deletedRevisions: number
+        deletedReviews: number
+    } {
+        const db = getProjectDb()
+        if (!db) throw new Error('[DraftRepository] 数据库未连接')
+
+        const tx = db.transaction(() => {
+            DraftRepository.assertCanResetChapter(chapterNumber)
+            const draftIds = db.prepare(`
+                SELECT id FROM drafts WHERE chapter_number = ? ORDER BY version ASC
+            `).all(chapterNumber) as Array<{ id: number }>
+
+            const deletedRevisions = db.prepare(`
+                SELECT COUNT(*) AS count
+                FROM revisions
+                WHERE base_draft_id IN (SELECT id FROM drafts WHERE chapter_number = ?)
+            `).get(chapterNumber) as { count: number }
+            const deletedReviews = db.prepare(`
+                SELECT COUNT(*) AS count
+                FROM reviews
+                WHERE base_draft_id IN (SELECT id FROM drafts WHERE chapter_number = ?)
+            `).get(chapterNumber) as { count: number }
+            const contentIds = db.prepare(`
+                SELECT content_id FROM drafts WHERE chapter_number = ?
+                UNION
+                SELECT content_id FROM revisions
+                WHERE base_draft_id IN (SELECT id FROM drafts WHERE chapter_number = ?)
+                UNION
+                SELECT content_id FROM reviews
+                WHERE base_draft_id IN (SELECT id FROM drafts WHERE chapter_number = ?)
+            `).all(chapterNumber, chapterNumber, chapterNumber) as Array<{ content_id: number }>
+
+            db.prepare('DELETE FROM drafts WHERE chapter_number = ?').run(chapterNumber)
+            const deleteContent = db.prepare('DELETE FROM contents WHERE id = ?')
+            for (const row of contentIds) deleteContent.run(row.content_id)
+
+            return {
+                deletedDrafts: draftIds.length,
+                deletedRevisions: deletedRevisions.count,
+                deletedReviews: deletedReviews.count,
+            }
+        })
+
+        return tx()
     }
 }

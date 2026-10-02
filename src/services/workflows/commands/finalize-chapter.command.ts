@@ -563,6 +563,12 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
       throw new Error(t('finalize.gateExecutionFailed', { error: String(e) }))
     }
 
+    // 先保存定稿前动态设定；后续解除定稿或重置章节时按此快照恢复。
+    const rollbackSnapshot = await ipc.invoke('db:chapter-rollback-capture', this.params.chapterNumber)
+    if (!rollbackSnapshot.success) {
+      throw new Error(`无法创建定稿回滚快照：${rollbackSnapshot.error || '未知错误'}`)
+    }
+
     await ipc.invoke('db:draft-update-content', dbDraft.id, gatedContent, gatedContent.length)
     await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', gatedContent.length)
 
