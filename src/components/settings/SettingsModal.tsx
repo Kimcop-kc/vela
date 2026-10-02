@@ -72,8 +72,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="relative flex w-full max-w-[880px] max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl"
+        className="relative flex rounded-2xl overflow-hidden shadow-2xl"
         style={{
+          width: 'min(880px, calc(100vw - 32px))',
+          height: 'min(800px, calc(100vh - 48px))',
           backgroundColor: 'var(--color-editor-bg)',
           border: '1px solid var(--color-border)',
         }}
