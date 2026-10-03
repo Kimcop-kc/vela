@@ -61,6 +61,7 @@
     "testing": "Проверка...",
     "connectionSuccess": "✅ Соединение успешно!",
     "connectionFailed": "❌ Ошибка соединения: {{error}}",
+    "visionEmbeddingUnsupported": "Визуальные/мультимодальные embedding-модели не поддерживаются текстовым API векторов. Используйте bge-m3, qwen3-embedding или text-embedding-3-small.",
     "setDefault": "Сделать по умолчанию",
     "default": "По умолчанию",
     "defaultModel": "Модель по умолчанию",

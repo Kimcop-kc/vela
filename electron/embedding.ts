@@ -16,6 +16,9 @@ export async function embedOpenAI(
   model: { baseUrl: string; apiKey: string; modelName?: string },
 ): Promise<number[][]> {
   const embeddingModel = model.modelName || 'text-embedding-3-small'
+  if (/vision/i.test(embeddingModel)) {
+    throw new Error(`模型 ${embeddingModel} 是多模态/视觉 Embedding，不支持当前文本向量接口。`)
+  }
   // 智能构建 embedding URL，兼容多种 baseUrl 格式
   const base = model.baseUrl.replace(/\/$/, '')
   let url: string

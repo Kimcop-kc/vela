@@ -521,6 +521,7 @@ function ModelForm({
   const presetModels: import('../../shared/provider-presets').ModelPreset[] = isEmbedding
     ? (preset?.embeddingModels ?? []).map((name) => ({ name, maxTokens: 0 }))
     : (preset?.models ?? [])
+  const unsupportedVisionEmbedding = !!isEmbedding && /vision/i.test(model.modelName)
 
   /** 更新单个字段 */
   const up = <K extends keyof ModelProfile>(key: K, val: ModelProfile[K]) =>
@@ -682,6 +683,20 @@ function ModelForm({
         )}
       </div>}
 
+      {unsupportedVisionEmbedding && (
+        <p
+          role="alert"
+          className="text-xs px-3 py-2 rounded-lg"
+          style={{
+            color: 'var(--color-error)',
+            backgroundColor: 'color-mix(in srgb, var(--color-error) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-error) 25%, transparent)',
+          }}
+        >
+          {t('models.visionEmbeddingUnsupported')}
+        </p>
+      )}
+
       {/* API 地址 */}
       <div>
         <Label>{t('models.baseUrl')}</Label>
@@ -785,7 +800,7 @@ function ModelForm({
         <Button
           variant="outline"
           onClick={handleTest}
-          disabled={testing || !model.baseUrl || (!model.apiKey && model.provider !== 'ollama')}
+          disabled={testing || unsupportedVisionEmbedding || !model.baseUrl || (!model.apiKey && model.provider !== 'ollama')}
         >
           <Zap size={13} />
           {testing ? t('models.testing') : t('models.testConnection')}
@@ -793,7 +808,7 @@ function ModelForm({
         <Button
           className="flex-1"
           onClick={onSave}
-          disabled={saving || !model.name.trim() || !model.modelName.trim() || !model.baseUrl.trim() || (!model.apiKey && model.provider !== 'ollama')}
+          disabled={saving || unsupportedVisionEmbedding || !model.name.trim() || !model.modelName.trim() || !model.baseUrl.trim() || (!model.apiKey && model.provider !== 'ollama')}
         >
           <Save size={13} />
           {saving ? t('models.saving') : t('models.saveConfig')}

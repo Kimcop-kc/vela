@@ -61,6 +61,7 @@
     "testing": "Testing...",
     "connectionSuccess": "✅ Connection successful!",
     "connectionFailed": "❌ Connection failed: {{error}}",
+    "visionEmbeddingUnsupported": "Vision/multimodal embedding models are not supported by the text embedding API. Use a text model such as bge-m3, qwen3-embedding, or text-embedding-3-small.",
     "setDefault": "Set as Default",
     "default": "Default",
     "defaultModel": "Default Model",

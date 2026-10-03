@@ -61,6 +61,7 @@
     "testing": "测试中...",
     "connectionSuccess": "✅ 连接成功！",
     "connectionFailed": "❌ 连接失败: {{error}}",
+    "visionEmbeddingUnsupported": "视觉/多模态 Embedding 模型不支持当前文本向量接口。请改用文本 Embedding 模型，例如 bge-m3、qwen3-embedding 或 text-embedding-3-small。",
     "setDefault": "设为默认",
     "default": "默认",
     "defaultModel": "默认模型",
