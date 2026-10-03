@@ -2,6 +2,18 @@ import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from 
 import { ModelProfile } from '../../src/shared/ipc-channels'
 import { fetchWithRetry, formatFetchError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
 
+/**
+ * 计算要发送给 OpenAI 兼容端点的 max_tokens。
+ * 调用方未显式指定时返回 undefined（不发送该字段，交给服务端默认值），
+ * 避免把模型配置里的上下文窗口误当成输出上限，触发 max_tokens 越界。
+ */
+function resolveMaxTokens(maxTokens: number | undefined): number | undefined {
+  if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens) || maxTokens <= 0) {
+    return undefined
+  }
+  return Math.min(maxTokens, 32768)
+}
+
 export class OpenAIProvider implements ILLMProvider {
   private supportsResponseFormat(model: ModelProfile): boolean {
     // Ollama Cloud does not support constrained structured output. Keep the
@@ -48,9 +60,10 @@ export class OpenAIProvider implements ILLMProvider {
     const body: Record<string, unknown> = {
       model: model.modelName,
       messages,
-      max_tokens: opts.maxTokens ?? model.maxTokens,
       stream: false,
     }
+    const maxTokens = resolveMaxTokens(opts.maxTokens)
+    if (maxTokens !== undefined) body.max_tokens = maxTokens
 
     // 思考模式下 temperature/top_p 等参数不生效（DeepSeek 会静默忽略），仅在非思考模式下传递
     if (opts.thinking) {
@@ -125,9 +138,10 @@ export class OpenAIProvider implements ILLMProvider {
       const body: Record<string, unknown> = {
         model: model.modelName,
         messages,
-        max_tokens: opts.maxTokens ?? model.maxTokens,
         stream: true,
       }
+      const maxTokens = resolveMaxTokens(opts.maxTokens)
+      if (maxTokens !== undefined) body.max_tokens = maxTokens
 
       // 让 OpenAI 兼容端点把 usage 放在流的最后一个 chunk 里，否则统计面板永远是空的
       if (this.supportsStreamUsage(model)) {

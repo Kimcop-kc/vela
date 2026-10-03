@@ -2,6 +2,17 @@ import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from 
 import { ModelProfile } from '../../src/shared/ipc-channels'
 import { fetchWithRetry, formatFetchError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
 
+/**
+ * 计算 Gemini maxOutputTokens：未显式指定时不发送，交给服务端默认值；
+ * 显式指定时夹到安全上限，避免把上下文窗口误当输出上限。
+ */
+function resolveMaxOutputTokens(maxTokens: number | undefined): number | undefined {
+  if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens) || maxTokens <= 0) {
+    return undefined
+  }
+  return Math.min(maxTokens, 32768)
+}
+
 export class GeminiProvider implements ILLMProvider {
   private toGeminiContents(messages: Array<{ role: string; content: string }>) {
     let systemInstruction: string | undefined
@@ -29,8 +40,12 @@ export class GeminiProvider implements ILLMProvider {
       contents,
       generationConfig: {
         temperature: opts.temperature ?? model.temperature,
-        maxOutputTokens: opts.maxTokens ?? model.maxTokens,
       },
+    }
+    const maxOutputTokens = resolveMaxOutputTokens(opts.maxTokens)
+    if (maxOutputTokens !== undefined) {
+      const generationConfig = body.generationConfig as Record<string, unknown>
+      generationConfig.maxOutputTokens = maxOutputTokens
     }
     if (systemInstruction) {
       body.systemInstruction = { parts: [{ text: systemInstruction }] }
@@ -79,8 +94,12 @@ export class GeminiProvider implements ILLMProvider {
         contents,
         generationConfig: {
           temperature: opts.temperature ?? model.temperature,
-          maxOutputTokens: opts.maxTokens ?? model.maxTokens,
         },
+      }
+      const maxOutputTokens = resolveMaxOutputTokens(opts.maxTokens)
+      if (maxOutputTokens !== undefined) {
+        const generationConfig = body.generationConfig as Record<string, unknown>
+        generationConfig.maxOutputTokens = maxOutputTokens
       }
       if (systemInstruction) {
         body.systemInstruction = { parts: [{ text: systemInstruction }] }
