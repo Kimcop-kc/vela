@@ -36,6 +36,8 @@ export interface QualitativeReviewParams {
   draftContent: string
   /** 本次审稿的侧重点（可选） */
   reviewFocus?: string
+  /** full = 保留完整历史事实；fast = 最近窗口提速 */
+  contextMode?: 'full' | 'fast'
 }
 
 export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeReview> {
@@ -53,6 +55,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('qualitative_review')
     const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
+    const contextMode = this.params.contextMode ?? 'full'
 
     // ── 既有事实基线：观察必须对照 Canon，才能发现「角色记忆 / 物资」类问题 ──
     let canonContext = ''
@@ -76,6 +79,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
         })
         .sort((a, b) => rolePriority(String(a.role ?? '')) - rolePriority(String(b.role ?? '')))
         .slice(0, 24)
+      const contextCharacters = contextMode === 'fast' ? relevantCharacters : (allCharacters || [])
       const canon = await buildCanonContext({
         chapterNumber: this.params.chapterNumber,
         architecture: {
@@ -84,7 +88,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
           worldbuilding: core?.worldbuilding || '',
           synopsis: core?.synopsis || '',
         },
-        characters: relevantCharacters.map(item => ({
+        characters: contextCharacters.map(item => ({
           name: String(item.name ?? ''),
           role: String(item.role ?? ''),
           currentState: item.currentState as { location?: string; powerLevel?: string; physicalState?: string; mentalState?: string; keyItems?: string; recentEvents?: string; updatedAtChapter?: number } | undefined,
@@ -96,27 +100,31 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
         globalGuidance: project.novelConfig.globalGuidance || '',
         // Qualitative review only needs the recent continuity window, not all
         // historical events since chapter one.
-        timelineWindow: Math.max(1, this.params.chapterNumber - 8),
-        recentSummaryCount: 4,
+        timelineWindow: contextMode === 'fast' ? Math.max(1, this.params.chapterNumber - 8) : undefined,
+        recentSummaryCount: contextMode === 'fast' ? 4 : 5,
       })
-      canon.timeline = canon.timeline.slice(-60)
-      canon.characterStates = canon.characterStates
-        .filter(state => mentionedSet.has(state.character) || relevantCharacters.some(card => String(card.name ?? '') === state.character))
-        .slice(0, 24)
-      canon.openPlotLines = canon.openPlotLines
-        .filter(line => line.characters.some(name => mentionedSet.has(name)) || line.characters.length === 0)
-        .slice(0, 12)
-      canon.knownFacts = canon.knownFacts
-        .filter(fact => fact.introducedAt >= this.params.chapterNumber - 8 || fact.characters.some(name => mentionedSet.has(name)))
-        .slice(-24)
+      if (contextMode === 'fast') {
+        canon.timeline = canon.timeline.slice(-60)
+        canon.characterStates = canon.characterStates
+          .filter(state => mentionedSet.has(state.character) || relevantCharacters.some(card => String(card.name ?? '') === state.character))
+          .slice(0, 24)
+        canon.openPlotLines = canon.openPlotLines
+          .filter(line => line.characters.some(name => mentionedSet.has(name)) || line.characters.length === 0)
+          .slice(0, 12)
+        canon.knownFacts = canon.knownFacts
+          .filter(fact => fact.introducedAt >= this.params.chapterNumber - 8 || fact.characters.some(name => mentionedSet.has(name)))
+          .slice(-24)
 
-      const reviewCanonBudget = Math.max(2200, Math.floor(budgets.inputTokens * 0.42))
-      const renderedCanon = renderCanonContext({ ...canon, hardConstraints: '' })
-      canonContext = [
-        clampToTokenBudget(renderedCanon, reviewCanonBudget),
-        '【硬性约束（必须严格遵守）】',
-        HARD_CONSTRAINTS,
-      ].filter(Boolean).join('\n\n---\n\n')
+        const reviewCanonBudget = Math.max(2200, Math.floor(budgets.inputTokens * 0.42))
+        const renderedCanon = renderCanonContext({ ...canon, hardConstraints: '' })
+        canonContext = [
+          clampToTokenBudget(renderedCanon, reviewCanonBudget),
+          '【硬性约束（必须严格遵守）】',
+          HARD_CONSTRAINTS,
+        ].filter(Boolean).join('\n\n---\n\n')
+      } else {
+        canonContext = renderCanonContext(canon)
+      }
       canonSize = {
         timelineEvents: canon.timeline.length,
         characterStates: canon.characterStates.length,
@@ -127,6 +135,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
         timeline: canon.timeline.length,
         characters: canon.characterStates.length,
         plots: canon.openPlotLines.length,
+        mode: contextMode,
       }))
     } catch (e) {
       callbacks.log(t('qualitativeReview.canonFailed', { error: String(e) }))
@@ -136,6 +145,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
       this.params.chapterNumber,
       this.params.chapterTitle,
       this.params.reviewFocus || '',
+      contextMode,
       canonContext,
       draft,
     ].join('\n---REVIEW-CACHE---\n'))

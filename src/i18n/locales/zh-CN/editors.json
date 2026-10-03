@@ -325,6 +325,9 @@
     "qualitativeReviewTooltip": "记录角色记忆、物资连续性、伏笔回收、大纲偏离、叙事节奏、情感弧线等维度的观察，并标出可修订的 AI 痕迹位置",
     "qualitativeReviewDialogTitle": "定性审稿",
     "qualitativeReviewDescription": "只记录可追溯的创作观察与 AI 痕迹标记，不做通过/失败判定，也不会自动改稿；需要修订时可在审稿报告里显式选择条目。",
+    "reviewScopeTitle": "审稿范围",
+    "reviewScopeFull": "完整（保留全书事实）",
+    "reviewScopeFast": "快速（近期上下文）",
     "qualitativeReviewStartFailed": "定性审稿启动失败：{{error}}"
   },
   "versionHistory": {
