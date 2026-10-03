@@ -182,9 +182,11 @@ jobs:
           fi
 
           while IFS= read -r file; do
-            renamed="${file//$PACKAGE_VERSION/$TAG_VERSION}"
-            if [ "$file" != "$renamed" ]; then
-              mv "$file" "$renamed"
+            directory=$(dirname "$file")
+            filename=$(basename "$file")
+            renamed_filename="${filename//$PACKAGE_VERSION/$TAG_VERSION}"
+            if [ "$filename" != "$renamed_filename" ]; then
+              mv "$file" "$directory/$renamed_filename"
             fi
           done <<< "$FILES"
           FILES=$(find release-assets -type f \( -name '*.exe' -o -name '*.dmg' \) | sort)
