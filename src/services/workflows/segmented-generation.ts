@@ -35,7 +35,10 @@ function clampNumber(value: number, min: number, max: number): number {
  * 模型未配置时回退到 4096，保持与既有行为一致。
  */
 export function resolveGenerationBudgets(modelMaxTokens?: number): GenerationBudgets {
-  const outputTokens = clampNumber(Math.floor(modelMaxTokens || 4096), 512, 65536)
+  // 注意：模型配置里的 maxTokens 往往是「上下文窗口」而不是「单次输出上限」，
+  // 部分服务商（如智谱/火山）单次输出只接受 ≤32768，这里统一收敛到安全上限，
+  // 与 provider 侧的 max_tokens 钳制保持一致。
+  const outputTokens = clampNumber(Math.floor(modelMaxTokens || 4096), 512, 32768)
   // 真实上下文窗口一般远大于输出上限，这里按 2.5 倍保守估算，并夹在 [4000, 48000]
   const inputTokens = clampNumber(Math.round(outputTokens * 2.5), 4000, 48000)
   return { outputTokens, inputTokens }

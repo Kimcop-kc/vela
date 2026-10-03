@@ -175,6 +175,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
     const effectiveChunks = chunks.length > 0 ? chunks : [draft]
     const llmObservations: ReviewObservation[] = []
     let llmFailed = false
+    let failedSegments = 0
 
     const segmentResults = await mapWithConcurrency(
       effectiveChunks,
@@ -219,10 +220,17 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
             knownCharacterNames,
             rawLlmResult: raw,
           })
-          return parsed.observations.filter(item => item.origin === 'llm')
+          const segmentObservations = parsed.observations.filter(item => item.origin === 'llm')
+          callbacks.log(t('qualitativeReview.segmentDone', {
+            index: index + 1,
+            total: effectiveChunks.length,
+            count: segmentObservations.length,
+          }))
+          return segmentObservations
         } catch (e) {
           // 审稿失败不应该变成「判定失败」：记录日志，继续用本地确定性检测保住大部分反馈
           llmFailed = true
+          failedSegments++
           callbacks.log(t('qualitativeReview.segmentFailed', {
             index: index + 1,
             error: e instanceof Error ? e.message : String(e),
@@ -235,6 +243,12 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
 
     if (effectiveChunks.length > 1) {
       callbacks.log(t('segmented.chunkDoneLog', { total: effectiveChunks.length }))
+    }
+    if (failedSegments > 0) {
+      callbacks.log(t('qualitativeReview.segmentsFailedSummary', {
+        failed: failedSegments,
+        total: effectiveChunks.length,
+      }))
     }
 
     // ── 合并：模型观察 + 本地规则观察 + AI 痕迹检测（确定性，始终可用）──

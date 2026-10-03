@@ -156,6 +156,7 @@ function extractCharacterDeltas(
         keyItems: before.keyItems,
       },
       after: {
+        character: char.name,
         location: newLocation,
         physicalState: newPhysical,
         keyItems: newKeyItems,

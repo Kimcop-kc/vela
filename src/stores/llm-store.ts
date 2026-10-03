@@ -16,6 +16,9 @@ import i18n from '../i18n'
 /** 调用用途：用于统计面板里区分「这次 token 花在哪」 */
 export type LLMCallPurpose = string
 
+/** 流式请求的空闲超时：超过该时长没有任何 chunk 就判定为断流并中断。 */
+const STREAM_IDLE_TIMEOUT_MS = 180_000
+
 // 调用统计统一由主进程记录（electron/llm/call-log.ts）：Agent 循环、写作工具、
 // 章节彩排等不经过本 store 的调用也会被计入，这里不再重复写库。
 
@@ -211,9 +214,29 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
     const requestId = crypto.randomUUID()
 
+    // 空闲看门狗：服务商长时间不返回任何数据（断网/挂起）时主动中断，
+    // 避免工作流永久卡在「调用 AI」状态。
+    let idleTimer: ReturnType<typeof setTimeout> | null = null
+    const clearIdle = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer)
+        idleTimer = null
+      }
+    }
+    const armIdle = () => {
+      clearIdle()
+      idleTimer = setTimeout(() => {
+        idleTimer = null
+        callbacks.onError?.(i18n.t('llm.streamTimeout', { ns: 'stores' }))
+        ipc.invoke('llm:cancel', requestId).catch(() => undefined)
+        cleanup()
+      }, STREAM_IDLE_TIMEOUT_MS)
+    }
+
     // 注册流式事件监听
     const unsubChunk = ipc.on('llm:stream-chunk', (data) => {
       if (data.requestId === requestId) {
+        armIdle()
         callbacks.onChunk?.(data.chunk)
       }
     })
@@ -246,6 +269,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     })
 
     const cleanup = () => {
+      clearIdle()
       unsubChunk()
       unsubDone()
       unsubTruncated()
@@ -261,6 +285,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     set({ activeRequests: reqs })
 
     // 发起流式请求
+    armIdle()
     const startRes = (await ipc.invoke('llm:generate-stream', requestId, {
       modelId: mid,
       messages,

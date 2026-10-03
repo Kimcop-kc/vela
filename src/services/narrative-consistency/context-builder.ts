@@ -72,6 +72,102 @@ export const HARD_CONSTRAINTS = `【硬性叙事一致性约束（违反任何�
 10. 如确需闪回，必须显式以"回忆"、"十年前"、"脑海中浮现"等词语标记，并在结束时回到当前时间。`
 
 /**
+ * 架构字段的注入上限（字符数）。
+ *
+ * 为什么需要：全书梗概/世界观可能是数万字的长文（实测有项目 synopsis 达到 5.7 万字），
+ * 直接整段注入会让单次提示词从数千 token 膨胀到十几万 token，导致生成极慢甚至卡死。
+ * 这里按字段裁剪，只保留开头最关键的部分。
+ */
+export const ARCHITECTURE_FIELD_LIMITS = {
+  premise: 1500,
+  worldbuilding: 2500,
+  charactersArch: 3500,
+  synopsis: 4000,
+} as const
+
+/** 把长文本裁剪到字符上限，并在末尾标注已截断。 */
+export function clampArchitectureField(value: string | undefined, limit: number): string {
+  if (!value) return ''
+  const text = value.trim()
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit)}\n……（内容过长，已按上下文预算截断）`
+}
+
+/** 把「十二 / 一百零五 / 三百一十」这类中文数字转成整数；无法识别返回 NaN。 */
+function chineseNumeralToInt(value: string): number {
+  if (/^\d+$/.test(value)) return Number(value)
+  const digits: Record<string, number> = {
+    零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4,
+    五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+  }
+  const units: Record<string, number> = { 十: 10, 百: 100, 千: 1000, 万: 10000 }
+  let total = 0
+  let current = 0
+  for (const ch of value) {
+    const digit = digits[ch]
+    if (digit !== undefined) {
+      current = digit
+      continue
+    }
+    const unit = units[ch]
+    if (unit !== undefined) {
+      if (unit === 10000) {
+        total = (total + current) * unit
+      } else {
+        total += (current || 1) * unit
+      }
+      current = 0
+    }
+  }
+  total += current
+  return total > 0 ? total : Number.NaN
+}
+
+/**
+ * 全书梗概按「当前章节」取相关窗口。
+ *
+ * 梗概常常是整本大纲（实测 5.7 万字），只取开头会让写到中后期时完全看不到后续走向。
+ * 如果梗概里有「第N章/卷」标记，就取离当前章最近的一段；没有标记则保留开头 + 结尾，
+ * 至少同时覆盖开局设定与后续走向。
+ */
+export function clampSynopsisForChapter(
+  value: string | undefined,
+  chapterNumber: number,
+  limit: number,
+): string {
+  if (!value) return ''
+  const text = value.trim()
+  if (text.length <= limit) return text
+
+  const marker = /第\s*([0-9一二三四五六七八九十百千万零〇两]{1,8})\s*[章卷]/g
+  let match: RegExpExecArray | null
+  let bestPos = -1
+  let bestDistance = Number.POSITIVE_INFINITY
+  while ((match = marker.exec(text)) !== null) {
+    const num = chineseNumeralToInt(match[1])
+    if (!Number.isFinite(num)) continue
+    const distance = Math.abs(num - chapterNumber)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestPos = match.index
+    }
+  }
+
+  if (bestPos >= 0) {
+    const half = Math.floor(limit / 2)
+    const start = Math.max(0, bestPos - half)
+    const end = Math.min(text.length, start + limit)
+    const head = start > 0 ? '……' : ''
+    const tail = end < text.length ? '……' : ''
+    return `${head}${text.slice(start, end)}${tail}\n（已按当前章节截取梗概相关片段）`
+  }
+
+  const headLength = Math.floor(limit * 0.6)
+  const tailLength = limit - headLength
+  return `${text.slice(0, headLength)}\n……（中略）……\n${text.slice(-tailLength)}`
+}
+
+/**
  * 转义 LLM 写入字段中的模板变量（{{xxx}}），防止 prompt 注入。
  * 把 {{ 转义为 ⦃⦃，}} 转义为 ⦄⦄ — LLM 仍可读但 prompt-builder.replaceAll 不命中。
  * 同时截断到 500 字以防超长字段撑爆 prompt。
@@ -166,13 +262,13 @@ export async function buildCanonContext(params: BuildCanonContextParams): Promis
 
   // 拼装 world rules = premise + worldbuilding + charactersArch + synopsis
   const worldRules = [
-    params.architecture.premise?.trim(),
-    params.architecture.worldbuilding?.trim(),
+    clampArchitectureField(params.architecture.premise, ARCHITECTURE_FIELD_LIMITS.premise),
+    clampArchitectureField(params.architecture.worldbuilding, ARCHITECTURE_FIELD_LIMITS.worldbuilding),
   ].filter(Boolean).join('\n\n---\n\n')
 
   const characterArch = [
-    params.architecture.charactersArch?.trim(),
-    params.architecture.synopsis?.trim(),
+    clampArchitectureField(params.architecture.charactersArch, ARCHITECTURE_FIELD_LIMITS.charactersArch),
+    clampSynopsisForChapter(params.architecture.synopsis, params.chapterNumber, ARCHITECTURE_FIELD_LIMITS.synopsis),
   ].filter(Boolean).join('\n\n---\n\n')
 
   return {
@@ -185,9 +281,9 @@ export async function buildCanonContext(params: BuildCanonContextParams): Promis
     chapterGoal: params.chapterGoal || '（无本章目标）',
     knownFacts: facts,
     previousEnding: params.previousEnding || '（无上一章结尾）',
-    ragContext: params.ragContext || '（无 RAG 检索结果）',
+    ragContext: clampArchitectureField(params.ragContext, 4000) || '（无 RAG 检索结果）',
     writingStyle: params.writingStyle || '（无风格要求）',
-    globalGuidance: params.globalGuidance || '（无全局行文指导）',
+    globalGuidance: clampArchitectureField(params.globalGuidance, 2500) || '（无全局行文指导）',
     hardConstraints: HARD_CONSTRAINTS,
     meta: {
       chapterNumber: params.chapterNumber,

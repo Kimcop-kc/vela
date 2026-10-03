@@ -32,7 +32,7 @@ import {
 } from '../workflow-utils'
 import type { ChapterInfo } from '../chapter-workflow'
 import type { StepCallbacks } from '../../../stores/workflow-store'
-import { extractAndWriteback, runConsistencyGate, buildCanonContext } from '../../narrative-consistency'
+import { extractAndWriteback, runConsistencyGate, buildCanonContext, isTemporaryDescriptorName } from '../../narrative-consistency'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -444,8 +444,14 @@ export function buildFinalizePostProcessSteps(
 
         if (cardUpdates.newCharacters && Array.isArray(cardUpdates.newCharacters)) {
           let newCharCount = 0
+          let skippedCount = 0
           for (const newChar of cardUpdates.newCharacters) {
             if (allChars.some((c) => c.name === newChar.name)) continue
+            // 「青斑汉子」「瘦高汉子」这类只是描述性泛称，不该登记成正式角色卡。
+            if (isTemporaryDescriptorName(String(newChar.name ?? ''))) {
+              skippedCount++
+              continue
+            }
             newCharCount++
             const cs = newChar.currentState || {}
             await ipc.invoke('db:character-upsert', {
@@ -466,6 +472,9 @@ export function buildFinalizePostProcessSteps(
           }
           if (newCharCount > 0) {
             callbacks.log(t('finalize.newCharsRegistered', { count: newCharCount }))
+          }
+          if (skippedCount > 0) {
+            callbacks.log(t('finalize.tempNamesSkipped', { count: skippedCount }))
           }
         }
       },

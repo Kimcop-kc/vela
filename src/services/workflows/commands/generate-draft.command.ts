@@ -11,6 +11,9 @@ import {
   buildCanonContext,
   renderCanonContext,
   runConsistencyGate,
+  clampArchitectureField,
+  clampSynopsisForChapter,
+  ARCHITECTURE_FIELD_LIMITS,
 } from '../../narrative-consistency'
 import i18n from '../../../i18n'
 
@@ -26,7 +29,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
     callbacks.log(i18n.t('generateDraft.assemblingContext', { ns: 'commands' }))
 
-    const architecture = await this.readArchitecture(project.path)
+    const architecture = await this.readArchitecture(project.path, this.chapterInfo.chapterNumber)
     const projectPrompts = await this.readProjectPrompts(project.path)
     const mergedGuidance = [project.novelConfig.globalGuidance || '', projectPrompts].filter(Boolean).join('\n\n')
 
@@ -72,7 +75,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         writingStyle: project.novelConfig.writingStyle || '',
         globalGuidance: mergedGuidance,
       })
-      canonRendered = renderCanonContext(canonForValidation)
+      // 提示词里已经有一段独立的「故事架构」，Canon 段就不再重复静态架构，
+      // 只保留角色状态 / 时间线 / 剧情线 / 事实等动态内容（canonForValidation 仍保留完整架构供一致性 Gate 使用）。
+      canonRendered = renderCanonContext(this.buildPromptCanon(canonForValidation, this.chapterInfo, allCharacters))
       callbacks.log(i18n.t('generateDraft.canonContextInjected', { ns: 'commands', timeline: canonForValidation.timeline.length, characters: canonForValidation.characterStates.length, plotLines: canonForValidation.openPlotLines.length }))
     } catch (e) {
       callbacks.log(i18n.t('generateDraft.canonContextFailed', { ns: 'commands', error: String(e) }))
@@ -117,9 +122,11 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           searchQuery += ` ${this.chapterInfo.knowledgeQueryHint.trim()}`
           callbacks.log(i18n.t('generateDraft.addedKeywords', { ns: 'commands', keywords: this.chapterInfo.knowledgeQueryHint.trim() }))
         }
-        const results = await ipc.invoke('kb:search', searchQuery, 5)
+        // 知识库只取最相关的 3 条、每条截到 800 字：RAG 属于最低优先级上下文，
+        // 全文注入既费 token 又容易把真正关键的角色状态挤出去。
+        const results = await ipc.invoke('kb:search', searchQuery, 3)
         filteredContext = results.length > 0
-          ? results.map((r: { fileName: string; score: number; text: string }, i: number) => i18n.t('generateDraft.kbResultLine', { ns: 'commands', index: i + 1, file: r.fileName, score: (r.score * 100).toFixed(0), text: r.text })).join('\n\n')
+          ? results.map((r: { fileName: string; score: number; text: string }, i: number) => i18n.t('generateDraft.kbResultLine', { ns: 'commands', index: i + 1, file: r.fileName, score: (r.score * 100).toFixed(0), text: clampArchitectureField(r.text, 800) })).join('\n\n')
           : i18n.t('generateDraft.kbNoContent', { ns: 'commands' })
       } catch {
         filteredContext = i18n.t('generateDraft.kbUnavailable', { ns: 'commands' })
@@ -141,7 +148,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       if (canonForValidation) {
         canonForValidation.previousEnding = previousEnding || i18n.t('generateDraft.noPreviousEnding', { ns: 'commands' })
         canonForValidation.ragContext = filteredContext || i18n.t('generateDraft.noRagResults', { ns: 'commands' })
-        canonRendered = renderCanonContext(canonForValidation)
+        canonRendered = renderCanonContext(this.buildPromptCanon(canonForValidation, this.chapterInfo, allCharacters))
       }
     }
 
@@ -157,10 +164,23 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     if (estimatedTokens > TOKEN_BUDGET) {
       callbacks.log(i18n.t('generateDraft.tokenBudgetWarning', { ns: 'commands', tokens: estimatedTokens, budget: TOKEN_BUDGET }))
     }
+    callbacks.log(i18n.t('generateDraft.contextBudgetSummary', {
+      ns: 'commands',
+      architecture: architecture.length,
+      canon: canonRendered.length,
+      tokens: estimatedTokens,
+    }))
 
     callbacks.log(i18n.t('generateDraft.callingAI', { ns: 'commands' }))
 
-    const draftText = await this.callLLMWithBuilder(promptBuilder, callbacks)
+    // 正文较长时模型容易撞到输出上限：用续写模式在断点继续，而不是整章判失败。
+    const draftText = await this.callLLMWithContinuation(
+      promptBuilder.build(),
+      promptBuilder.getSystemRole(),
+      callbacks,
+      { purpose: 'generate_draft', maxRounds: 3 },
+      context,
+    )
     const cleanDraftText = this.stripThinkingTags(draftText)
 
     // ==========================================
@@ -241,15 +261,94 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
   }
 
   // --- 抽取自原文件的辅助方法 ---
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private async readArchitecture(_projectPath: string): Promise<string> {
+  private async readArchitecture(_projectPath: string, chapterNumber: number): Promise<string> {
     const core = await ipc.invoke('db:project-core-get')
     const parts: string[] = []
-    if (core?.premise) parts.push(core.premise.trim())
-    if (core?.charactersArch) parts.push(core.charactersArch.trim())
-    if (core?.worldbuilding) parts.push(core.worldbuilding.trim())
-    if (core?.synopsis) parts.push(core.synopsis.trim())
-    return parts.join('\n\n---\n\n')
+    if (core?.premise) parts.push(clampArchitectureField(core.premise, ARCHITECTURE_FIELD_LIMITS.premise))
+    if (core?.charactersArch) parts.push(clampArchitectureField(core.charactersArch, ARCHITECTURE_FIELD_LIMITS.charactersArch))
+    if (core?.worldbuilding) parts.push(clampArchitectureField(core.worldbuilding, ARCHITECTURE_FIELD_LIMITS.worldbuilding))
+    if (core?.synopsis) parts.push(clampSynopsisForChapter(core.synopsis, chapterNumber, ARCHITECTURE_FIELD_LIMITS.synopsis))
+    return parts.filter(Boolean).join('\n\n---\n\n')
+  }
+
+  /**
+   * 构造「正文生成」用的精简版 Canon。
+   *
+   * 后续章节模板没有独立的 {{architecture}} 段，静态架构（世界观/角色/梗概）只能经
+   * Canon 注入，这里必须保留；RAG / 文风 / 全局指导已通过模板的
+   * {{filtered_context}} / {{writing_style}} / {{global_guidance}} 单独注入，这里置空避免重复。
+   * 动态条目则按当前章节聚焦的角色 + 近 5 章窗口过滤：
+   * 长篇作品里几十上百个角色状态、事实、时间线不能每次都全量注入，否则既费 token，
+   * 又会让真正相关的信息被淹没。主角 / 对手以及近 5 章有变动的条目始终保留，保证连贯。
+   */
+  private buildPromptCanon(
+    canon: import('../../narrative-consistency').CanonContext,
+    chapterInfo: ChapterInfo,
+    allCharacters: Array<{ name?: unknown; role?: unknown }>,
+  ): import('../../narrative-consistency').CanonContext {
+    const focus = new Set<string>()
+    for (const name of chapterInfo.characters || []) {
+      const entry = String(name ?? '').trim()
+      if (!entry) continue
+      // 蓝图里可能出现“周德布下的街面眼线”这类描述性短语，而不是干净角色名。
+      // 这里只把能对应到已登记角色名的条目放进聚焦集合，避免把整句短语当名字。
+      if (allCharacters.some(card => String(card.name ?? '') === entry)) {
+        focus.add(entry)
+        continue
+      }
+      for (const card of allCharacters) {
+        const registeredName = String(card.name ?? '')
+        if (registeredName.length >= 2 && entry.includes(registeredName)) {
+          focus.add(registeredName)
+        }
+      }
+    }
+    const focusText = [
+      chapterInfo.title,
+      chapterInfo.keyEvents,
+      chapterInfo.userGuidance,
+      chapterInfo.knowledgeQueryHint,
+    ].filter(Boolean).join(' ')
+    for (const card of allCharacters) {
+      const name = String(card.name ?? '')
+      if (!name) continue
+      const role = String(card.role ?? '')
+      if (role === 'protagonist' || role === 'antagonist') {
+        focus.add(name)
+        continue
+      }
+      if (focusText.includes(name)) focus.add(name)
+    }
+
+    const recentFrom = chapterInfo.chapterNumber - 5
+    const keepAll = focus.size === 0
+    const involves = (names: string[] | undefined) =>
+      keepAll || (names || []).some(name => focus.has(name))
+
+    return {
+      ...canon,
+      ragContext: '',
+      writingStyle: '',
+      globalGuidance: '',
+      characterStates: keepAll
+        ? canon.characterStates
+        : canon.characterStates.filter(state =>
+            focus.has(state.character) || (state.updatedAtChapter || 0) >= recentFrom),
+      knownFacts: keepAll
+        ? canon.knownFacts
+        : canon.knownFacts.filter(fact =>
+            (fact.introducedAt || 0) >= recentFrom || involves(fact.characters)),
+      openPlotLines: keepAll
+        ? canon.openPlotLines
+        : canon.openPlotLines.filter(line =>
+            (line.characters || []).length === 0 ||
+            (line.lastAdvancedAt || 0) >= recentFrom ||
+            involves(line.characters)),
+      timeline: keepAll
+        ? canon.timeline
+        : canon.timeline.filter(event =>
+            (event.chapterNumber || 0) >= recentFrom || involves(event.characters)),
+    }
   }
 
   private async readProjectPrompts(projectPath: string): Promise<string> {

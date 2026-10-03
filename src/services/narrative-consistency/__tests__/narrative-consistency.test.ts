@@ -28,6 +28,8 @@ import {
   tryAutoFix,
   runConsistencyGate,
   renderCanonContext,
+  clampSynopsisForChapter,
+  isTemporaryDescriptorName,
   extractCanonWriteback,
   CanonStore,
   type CanonContext,
@@ -897,5 +899,36 @@ describe('回归测试：审计发现的 bug 修复验证', () => {
     expect(result.modified).toBe(true)
     // 至少一个转场动词被插入
     expect(/林轩(?:来到|抵达|前往|赶往)烈火宗/.test(result.content)).toBe(true)
+  })
+})
+
+describe('提示词上下文防护', () => {
+  it('临时称呼不会登记为角色', () => {
+    expect(isTemporaryDescriptorName('青斑汉子')).toBe(true)
+    expect(isTemporaryDescriptorName('瘦高汉子')).toBe(true)
+    expect(isTemporaryDescriptorName('黑衣男子')).toBe(true)
+    expect(isTemporaryDescriptorName('云玉辞')).toBe(false)
+  })
+
+  it('长梗概按当前章节截取相关窗口', () => {
+    const synopsis = Array.from({ length: 30 }, (_, i) => `第${i + 1}章：第${i + 1}章的事件描述。`).join('\n')
+    const result = clampSynopsisForChapter(synopsis, 12, 60)
+    expect(result).toContain('第12章')
+    expect(result).toContain('相关片段')
+  })
+
+  it('中文数字章节标记也能取到相关窗口', () => {
+    const synopsis = Array.from({ length: 30 }, () => '第十二章：第十二章的事件描述。').join('\n')
+    const result = clampSynopsisForChapter(synopsis, 12, 60)
+    expect(result).toContain('第十二章')
+    expect(result).toContain('相关片段')
+  })
+
+  it('没有章节标记时保留开头与结尾', () => {
+    const synopsis = 'A'.repeat(60) + 'B'.repeat(60)
+    const result = clampSynopsisForChapter(synopsis, 12, 40)
+    expect(result).toContain('中略')
+    expect(result.startsWith('A')).toBe(true)
+    expect(result.endsWith('B')).toBe(true)
   })
 })

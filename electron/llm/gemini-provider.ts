@@ -1,6 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
-import { fetchWithRetry, formatFetchError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
+import { fetchWithRetry, formatApiError, formatFetchError, formatNetworkError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
 
 /**
  * 计算 Gemini maxOutputTokens：未显式指定时不发送，交给服务端默认值；
@@ -51,18 +51,23 @@ export class GeminiProvider implements ILLMProvider {
       body.systemInstruction = { parts: [{ text: systemInstruction }] }
     }
 
-    const res = await fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': model.apiKey,
-      },
-      body: JSON.stringify(body),
-    })
+    let res: Response
+    try {
+      res = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': model.apiKey,
+        },
+        body: JSON.stringify(body),
+      })
+    } catch (error) {
+      return { success: false, content: '', error: formatNetworkError(error) }
+    }
 
     if (!res.ok) {
       const text = await res.text()
-      return { success: false, content: '', error: `Gemini API 调用失败 (${res.status}): ${text}` }
+      return { success: false, content: '', error: formatApiError(res.status, text) }
     }
 
     const data = await res.json() as {
@@ -117,7 +122,7 @@ export class GeminiProvider implements ILLMProvider {
 
       if (!res.ok) {
         const text = await res.text()
-        opts.onError(`Gemini API 调用失败 (${res.status}): ${text}`)
+        opts.onError(formatApiError(res.status, text))
         return
       }
 
@@ -194,7 +199,7 @@ export class GeminiProvider implements ILLMProvider {
         await sleepWithSignal(700 * (2 ** (attempt - 1)), opts.signal)
         continue
       }
-      opts.onError(formatFetchError(error))
+      opts.onError(formatNetworkError(error))
       return
     }
     }

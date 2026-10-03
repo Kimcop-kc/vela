@@ -37,11 +37,11 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     try {
       // 从待审内容中提取前 200 字作为检索 query
       const queryText = draft.slice(0, 200)
-      const results = await ipc.invoke('kb:search', queryText, 5)
+      const results = await ipc.invoke('kb:search', queryText, 3)
       if (results.length > 0) {
         contextSummary = results
           .map((r: { fileName: string; score: number; text: string }, i: number) =>
-            t('generateDraft.kbResultLine', { index: i + 1, file: r.fileName, score: (r.score * 100).toFixed(0), text: r.text }))
+            t('generateDraft.kbResultLine', { index: i + 1, file: r.fileName, score: (r.score * 100).toFixed(0), text: r.text.slice(0, 800) }))
           .join('\n\n')
       }
     } catch {

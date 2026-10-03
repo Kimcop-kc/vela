@@ -138,6 +138,21 @@ describe('validateCanonWritebackPayload 集成校验', () => {
     expect(v.newEvents).toHaveLength(1)
   })
 
+  it('characterDeltas.after 缺少 character 时用 delta 顶层字段兜底', () => {
+    const v = validateCanonWritebackPayload({
+      chapterNumber: 5,
+      newEvents: [],
+      characterDeltas: [{
+        character: '云玉辞',
+        chapterNumber: 5,
+        after: { location: '药王谷', physicalState: '正常' },
+      }],
+      newFacts: [],
+    })
+    expect(v.characterDeltas[0].after.character).toBe('云玉辞')
+    expect(v.characterDeltas[0].after.location).toBe('药王谷')
+  })
+
   it('拒绝超长 newEvents 列表（DoS 防护）', () => {
     const events = Array.from({ length: 1001 }, (_, i) => ({
       chapterNumber: 1, sequence: i + 1, characters: ['X'], location: 'A',

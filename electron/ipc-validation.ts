@@ -253,10 +253,17 @@ export function validateCanonWritebackPayload(v: unknown, path = 'payload') {
       `${path}.characterDeltas`,
       (d, p) => {
         if (!isObject(d)) throw new ValidationError(p, 'expected object')
+        const character = checkStringLength(d.character, `${p}.character`, { min: 1, max: MAX_NAME_LEN })
+        // after 是「部分状态」快照，模型/启发式提取常常不重复写 character。
+        // 这里用 delta 顶层的 character 兜底，避免单条缺失就把整批原子写回打回。
+        const afterRaw: Record<string, unknown> = isObject(d.after) ? { ...d.after } : {}
+        if (afterRaw.character === undefined || afterRaw.character === null || afterRaw.character === '') {
+          afterRaw.character = character
+        }
         return {
-          character: checkStringLength(d.character, `${p}.character`, { min: 1, max: MAX_NAME_LEN }),
+          character,
           chapterNumber: checkNumberRange(d.chapterNumber, `${p}.chapterNumber`, { min: 1, max: 1e9, integer: true }),
-          after: validateCanonCharacterStateSnapshot(d.after, `${p}.after`),
+          after: validateCanonCharacterStateSnapshot(afterRaw, `${p}.after`),
         }
       },
       { maxLength: MAX_OBJECTS_PER_REQUEST },

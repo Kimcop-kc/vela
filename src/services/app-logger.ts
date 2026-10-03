@@ -51,3 +51,24 @@ export function installRendererConsoleCapture(): void {
   console.warn = (...args: unknown[]) => capture('warn', originals.warn, args)
   console.error = (...args: unknown[]) => capture('error', originals.error, args)
 }
+
+/**
+ * 捕获渲染进程里「没被 React 错误边界接住」的异常与 Promise 拒绝，落盘到应用日志。
+ * 这类错误之前在界面上会直接消失，无法定位偶发崩溃。
+ */
+export function installRendererErrorCapture(): void {
+  if (typeof window === 'undefined') return
+  window.addEventListener('error', event => {
+    const error = event.error instanceof Error ? event.error : undefined
+    appLogger.error('ui', '未捕获的界面异常', {
+      message: event.message,
+      source: event.filename,
+      line: event.lineno,
+      column: event.colno,
+      stack: error?.stack,
+    })
+  })
+  window.addEventListener('unhandledrejection', event => {
+    appLogger.error('ui', '未处理的 Promise 拒绝', stringify(event.reason))
+  })
+}

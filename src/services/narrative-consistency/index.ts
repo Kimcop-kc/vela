@@ -15,6 +15,9 @@ export {
   buildCanonContext,
   renderCanonContext,
   HARD_CONSTRAINTS,
+  ARCHITECTURE_FIELD_LIMITS,
+  clampArchitectureField,
+  clampSynopsisForChapter,
   type BuildCanonContextParams,
 } from './context-builder'
 export {
@@ -42,3 +45,7 @@ export {
 
 
 export { extractCanonWriteback, extractAndWriteback, type ExtractParams } from './fact-extractor'
+export {
+  isTemporaryDescriptorName,
+  filterTemporaryDescriptorNames,
+} from './character-name-filter'

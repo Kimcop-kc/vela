@@ -23,7 +23,8 @@
     "modelNotFound": "Model not found or not configured, please check model settings",
     "connectionFailed": "Connection failed",
     "purposeDefault": "Unlabeled call",
-    "outputTruncated": "The model hit its output length limit and returned an incomplete result. Nothing has been committed; split the work or raise the output limit."
+    "outputTruncated": "The model hit its output length limit and returned an incomplete result. Nothing has been committed; split the work or raise the output limit.",
+    "streamTimeout": "The model stopped responding (no data for a long time). This request was aborted; check your network or provider status and retry."
   },
   "agentEngine": {
     "timeout": "Tool execution timed out ({{seconds}}s)",

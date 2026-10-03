@@ -23,7 +23,8 @@
     "modelNotFound": "模型不存在或未配置，请检查模型设置",
     "connectionFailed": "连接失败",
     "purposeDefault": "未标注用途",
-    "outputTruncated": "模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。"
+    "outputTruncated": "模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。",
+    "streamTimeout": "模型响应超时（长时间没有数据返回），已中断本次请求。请检查网络或服务商状态后重试。"
   },
   "agentEngine": {
     "timeout": "工具执行超时（{{seconds}}s）",

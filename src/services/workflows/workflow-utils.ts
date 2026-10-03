@@ -29,6 +29,18 @@ export function stripThinkingTags(text: string): string {
 // ===== 通用重试包装器 =====
 
 /**
+ * 判断错误是否值得重试。
+ * 4xx 客户端错误（参数非法、鉴权失败、模型不存在、余额不足）重试多少次都不会成功，
+ * 只会让用户白等，所以直接放弃；其余（网络抖动、5xx、超时）才重试。
+ */
+export function isRetryableError(message: string): boolean {
+  const text = (message || '').toLowerCase()
+  if (/余额不足|无可用资源包|欠费|insufficient|quota/.test(text)) return false
+  if (/\b(400|401|403|404|422)\b/.test(text)) return false
+  return true
+}
+
+/**
  * 带重试的异步操作包装器
  * @param fn 要执行的异步函数
  * @param maxRetries 最大重试次数（不含首次执行）
@@ -48,7 +60,7 @@ export async function withRetry(
       return { ok: true, attempts: attempt + 1 }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
-      if (attempt < maxRetries) {
+      if (attempt < maxRetries && isRetryableError(errMsg)) {
         callbacks.log(t('pipeline.retryFailed', { label, attempt: attempt + 1, error: errMsg }))
       } else {
         return { ok: false, error: errMsg, attempts: attempt + 1 }

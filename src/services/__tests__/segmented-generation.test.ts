@@ -38,6 +38,11 @@ describe('生成预算与 token 估算', () => {
     expect(budgets.inputTokens).toBeLessThanOrEqual(48000)
   })
 
+  it('把超大的上下文窗口收敛为安全的输出上限', () => {
+    expect(resolveGenerationBudgets(65536).outputTokens).toBe(32768)
+    expect(resolveGenerationBudgets(131072).outputTokens).toBe(32768)
+  })
+
   it('按中文字符 1 token、英文约 0.25 token 估算', () => {
     expect(estimateTokens('中文四字')).toBe(4)
     expect(estimateTokens('abcde')).toBeGreaterThan(0)

@@ -1,6 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
-import { fetchWithRetry, formatFetchError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
+import { fetchWithRetry, formatApiError, formatFetchError, formatNetworkError, isRetryableNetworkError, sleepWithSignal } from './fetch-retry'
 
 /**
  * 计算要发送给 OpenAI 兼容端点的 max_tokens。
@@ -76,18 +76,23 @@ export class OpenAIProvider implements ILLMProvider {
 
     if (opts.responseFormat && this.supportsResponseFormat(model)) body.response_format = opts.responseFormat
 
-    const res = await fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${model.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    })
+    let res: Response
+    try {
+      res = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${model.apiKey}`,
+        },
+        body: JSON.stringify(body),
+      })
+    } catch (error) {
+      return { success: false, content: '', error: formatNetworkError(error) }
+    }
 
     if (!res.ok) {
       const text = await res.text()
-      return { success: false, content: '', error: `API 调用失败 (${res.status}): ${text}` }
+      return { success: false, content: '', error: formatApiError(res.status, text) }
     }
 
     const data = await res.json() as {
@@ -169,7 +174,7 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (!res.ok) {
         const text = await res.text()
-        opts.onError(`API 调用失败 (${res.status}): ${text}`)
+        opts.onError(formatApiError(res.status, text))
         return
       }
 
@@ -301,7 +306,7 @@ export class OpenAIProvider implements ILLMProvider {
         await sleepWithSignal(700 * (2 ** (attempt - 1)), opts.signal)
         continue
       }
-      opts.onError(formatFetchError(error))
+      opts.onError(formatNetworkError(error))
       return
     }
     }
