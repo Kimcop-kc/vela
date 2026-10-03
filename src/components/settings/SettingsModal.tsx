@@ -3,7 +3,7 @@ import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
   Languages, Heart, Coffee, Handshake, Bot, Waves, Sparkles, Boxes,
-  Brain, Wrench, Archive,
+  Brain, Wrench, Archive, Pencil,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
@@ -402,13 +402,19 @@ function ModelCard({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-xl group transition-colors',
+        'flex items-center gap-3 px-4 py-3 rounded-xl group transition-colors cursor-pointer',
         isDefault
           ? 'border border-[var(--color-accent)]'
           : 'border border-[var(--color-border)] hover:border-[var(--color-accent)]',
         !isEnabled && 'opacity-60',
       )}
       style={{ backgroundColor: isDefault ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-panel))' : 'var(--color-panel)' }}
+      onClick={onEdit}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onEdit()
+      }}
     >
       {/* 图标 */}
       <div
@@ -444,17 +450,19 @@ function ModelCard({
       </div>
 
       {/* 启用开关：停用后不再参与用途路由，但配置保留 */}
-      <Switch
-        checked={isEnabled}
-        onCheckedChange={onToggleEnabled}
-        aria-label={isEnabled ? t('models.disableModel') : t('models.enableModel')}
-      />
+      <div onClick={event => event.stopPropagation()}>
+        <Switch
+          checked={isEnabled}
+          onCheckedChange={onToggleEnabled}
+          aria-label={isEnabled ? t('models.disableModel') : t('models.enableModel')}
+        />
+      </div>
 
-      {/* 操作按钮（hover 显示） */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      {/* 操作按钮 */}
+      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
         {!isDefault && (
           <button
-            onClick={onSetDefault}
+            onClick={(event) => { event.stopPropagation(); onSetDefault() }}
             title={t('models.setDefault')}
             className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
           >
@@ -462,14 +470,14 @@ function ModelCard({
           </button>
         )}
         <button
-          onClick={onEdit}
+          onClick={(event) => { event.stopPropagation(); onEdit() }}
           title={t('models.editModel')}
           className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
         >
-          <Settings2 size={14} />
+          <Pencil size={14} />
         </button>
         <button
-          onClick={onDelete}
+          onClick={(event) => { event.stopPropagation(); onDelete() }}
           title={t('models.removeModel')}
           className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-400"
         >
