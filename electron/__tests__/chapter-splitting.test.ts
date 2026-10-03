@@ -24,6 +24,14 @@ function writeTempNovel(content: string): string {
   return filePath
 }
 
+function writeTempNovelBytes(content: Buffer): string {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-chapter-splitting-'))
+  tempFolders.push(folder)
+  const filePath = path.join(folder, 'novel-gbk.txt')
+  fs.writeFileSync(filePath, content)
+  return filePath
+}
+
 describe('chapter splitting', () => {
   it('streams the same chapter structure as the synchronous splitter', async () => {
     const content = [
@@ -51,4 +59,17 @@ describe('chapter splitting', () => {
     expect(chapters).toHaveLength(1)
     expect(chapters[0].content).toContain('正文继续')
   })
+
+  it('decodes GBK/GB18030 novels before splitting chapters', async () => {
+    const gbk = Buffer.from(
+      'b5da31d5c220b2e2cad40ad5fdcec4c4dac8dda1a30ab5da32d5c220bcccd0f80ab5dab6fed5c2d5fdcec4a1a3',
+      'hex',
+    )
+    const chapters = await splitFileIntoChaptersAsync(writeTempNovelBytes(gbk))
+
+    expect(chapters).toHaveLength(2)
+    expect(chapters[0]).toMatchObject({ title: '测试', content: '正文内容。' })
+    expect(chapters[1]).toMatchObject({ title: '继续', content: '第二章正文。' })
+  })
+
 })
