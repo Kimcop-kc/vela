@@ -9,7 +9,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import readline from 'node:readline'
+import { detectFileTextEncoding, readTextFileSync } from './text-encoding'
 
 // ===== 拆章正则池 =====
 
@@ -71,7 +71,10 @@ export function extractChapterNumber(line: string): number {
 /** 检测一行是否是章节标题 */
 export function isChapterHeading(line: string): boolean {
   const trimmed = line.trim()
-  return CHAPTER_PATTERNS.some(re => re.test(trimmed))
+  if (!CHAPTER_PATTERNS.some(re => re.test(trimmed))) return false
+  const title = extractTitle(trimmed)
+  // 正文里也常出现“第二章正文。此类句子；真正的章节标题通常较短且不以句末标点结束。
+  return title.length <= 60 && !/[。！？!?；;]$/.test(title)
 }
 
 /** 从章节标题行提取标题文字（去掉"第X章"前缀） */
@@ -203,33 +206,48 @@ export async function splitFileIntoChaptersAsync(
     currentLines = []
   }
 
-  const input = fs.createReadStream(filePath, { encoding: 'utf8' })
-  const reader = readline.createInterface({ input, crlfDelay: Infinity })
-  try {
-    for await (const rawLine of reader) {
-      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-      if (isChapterHeading(line)) {
-        if (!sawHeading) {
-          sawHeading = true
-          if (preHeadingLines.length > 0) {
-            appendChapter(preHeadingLines[0], preHeadingLines.slice(1))
-          }
-        } else {
-          flushCurrent()
+  const encoding = detectFileTextEncoding(filePath)
+  const input = fs.createReadStream(filePath)
+  const decoder = new TextDecoder(encoding)
+  let pending = ''
+
+  const processLine = (line: string) => {
+    if (isChapterHeading(line)) {
+      if (!sawHeading) {
+        sawHeading = true
+        if (preHeadingLines.length > 0) {
+          appendChapter(preHeadingLines[0], preHeadingLines.slice(1))
         }
-        currentHeaderLine = line
-      } else if (!sawHeading) {
-        preHeadingLines.push(line)
       } else {
-        currentLines.push(line)
+        flushCurrent()
+      }
+      currentHeaderLine = line
+    } else if (!sawHeading) {
+      preHeadingLines.push(line)
+    } else {
+      currentLines.push(line)
+    }
+
+    linesProcessed++
+  }
+
+  try {
+    for await (const chunk of input) {
+      pending += decoder.decode(chunk as Buffer, { stream: true })
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        processLine(line.endsWith('\r') ? line.slice(0, -1) : line)
       }
 
-      linesProcessed++
       if (linesProcessed % 5000 === 0) {
         onProgress?.(linesProcessed)
         await new Promise<void>(resolve => setImmediate(resolve))
       }
     }
+    pending += decoder.decode()
+    if (pending.length > 0) processLine(pending.endsWith('\r') ? pending.slice(0, -1) : pending)
+
     if (sawHeading) {
       flushCurrent()
     } else if (preHeadingLines.length > 0) {
@@ -246,7 +264,6 @@ export async function splitFileIntoChaptersAsync(
     onProgress?.(linesProcessed)
     return normalizeChapters(chapters)
   } finally {
-    reader.close()
     input.destroy()
   }
 }
@@ -264,7 +281,7 @@ export function splitFilePathsIntoChapters(filePaths: string[]): {
     if (filePaths.length === 1) {
       // ===== 单文件模式 =====
       const filePath = filePaths[0]
-      const content = fs.readFileSync(filePath, 'utf-8')
+      const content = readTextFileSync(filePath)
 
       if (hasChapterHeadings(content)) {
         // 文件内含章节标题 → 正则拆章
@@ -288,7 +305,7 @@ export function splitFilePathsIntoChapters(filePaths: string[]): {
       })
 
       for (const filePath of sorted) {
-        const content = fs.readFileSync(filePath, 'utf-8').trim()
+        const content = readTextFileSync(filePath).trim()
         if (!content) continue
 
         // 尝试从文件内容中检测章节标题

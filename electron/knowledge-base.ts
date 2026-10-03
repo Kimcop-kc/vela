@@ -356,8 +356,8 @@ export async function backfillVectors(
 
     // 使用显式 Arrow Schema 确保 vector 列正确持久化
     // LanceDB 自动推断无法正确识别 number[] 为 FixedSizeList 向量类型
-    const VECTOR_DIM = 2048
-    const vectorField = new Field('vector', new ArrowFixedSizeList(VECTOR_DIM, new Field('item', new Float32())), true)
+    const vectorDimension = vectors.find(vector => vector.length > 0)?.length ?? 1
+    const vectorField = new Field('vector', new ArrowFixedSizeList(vectorDimension, new Field('item', new Float32())), true)
     const arrowSchema = new ArrowSchema([
       new Field('id', new Utf8()),
       new Field('docId', new Utf8()),

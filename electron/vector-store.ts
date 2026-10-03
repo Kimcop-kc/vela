@@ -73,6 +73,35 @@ export interface KBStats {
 const TABLE_NAME = 'chunks'
 const DOCS_TABLE_NAME = 'documents'
 
+function vectorLength(value: unknown): number | null {
+  if (!value) return null
+  if (Array.isArray(value)) return value.length || null
+  const candidate = value as { length?: number; toArray?: () => unknown[] }
+  if (typeof candidate.toArray === 'function') return candidate.toArray().length || null
+  return typeof candidate.length === 'number' && candidate.length > 0 ? candidate.length : null
+}
+
+function vectorDimensionFromSchema(schema: ArrowSchema): number | null {
+  const field = schema.fields.find(item => item.name === 'vector')
+  const listSize = (field?.type as { listSize?: number } | undefined)?.listSize
+  return listSize && listSize > 0 ? listSize : null
+}
+
+function createChunkSchema(vectorDimension: number): ArrowSchema {
+  return new ArrowSchema([
+    new Field('id', new Utf8()),
+    new Field('docId', new Utf8()),
+    new Field('fileName', new Utf8()),
+    new Field('chapterNumber', new Int32(), true),
+    new Field('chapterTitle', new Utf8(), true),
+    new Field('text', new Utf8()),
+    new Field('vector', new ArrowFixedSizeList(vectorDimension, new Field('item', new Float32())), true),
+    new Field('chunkIndex', new Int32()),
+    new Field('totalChunks', new Int32()),
+    new Field('importedAt', new Utf8()),
+  ])
+}
+
 // ===== 连接池（按项目路径缓存） =====
 
 const connectionPool = new Map<string, lancedb.Connection>()
@@ -141,30 +170,30 @@ export async function addChunks(
 
     // 写入 chunks 表
     const tableNames = await db.tableNames()
-    const VECTOR_DIM = 2048
-    const vectorField = new Field('vector', new ArrowFixedSizeList(VECTOR_DIM, new Field('item', new Float32())), true)
-    const targetSchema = new ArrowSchema([
-      new Field('id', new Utf8()),
-      new Field('docId', new Utf8()),
-      new Field('fileName', new Utf8()),
-      new Field('chapterNumber', new Int32(), true),
-      new Field('chapterTitle', new Utf8(), true),
-      new Field('text', new Utf8()),
-      vectorField,
-      new Field('chunkIndex', new Int32()),
-      new Field('totalChunks', new Int32()),
-      new Field('importedAt', new Utf8()),
-    ])
+    const incomingDimension = vectors?.map(vectorLength).find((length): length is number => length !== null) ?? null
+    let existingTable: Awaited<ReturnType<typeof db.openTable>> | null = null
+    let existingSchema: ArrowSchema | null = null
+    let existingDimension: number | null = null
 
     if (tableNames.includes(TABLE_NAME)) {
-      const table = await db.openTable(TABLE_NAME)
-      const existingSchema = await table.schema()
+      existingTable = await db.openTable(TABLE_NAME)
+      existingSchema = await existingTable.schema()
+      existingDimension = vectorDimensionFromSchema(existingSchema)
+    }
+
+    const vectorDimension = incomingDimension ?? existingDimension ?? 1
+    const targetSchema = createChunkSchema(vectorDimension)
+
+    if (tableNames.includes(TABLE_NAME)) {
+      const table = existingTable!
+      existingSchema ??= await table.schema()
       const existingFieldNames = existingSchema.fields.map(f => f.name)
       // 检查旧表 schema 是否包含所有必要字段
       const requiredFields = ['id', 'docId', 'fileName', 'text', 'chunkIndex', 'totalChunks', 'importedAt', 'chapterNumber', 'chapterTitle', 'vector']
       const hasAllFields = requiredFields.every(f => existingFieldNames.includes(f))
+      const dimensionMatches = incomingDimension === null || existingDimension === vectorDimension
 
-      if (hasAllFields) {
+      if (hasAllFields && dimensionMatches) {
         await table.add(records)
       } else {
         // schema 不匹配（旧表缺少字段），需要重建表
@@ -176,7 +205,8 @@ export async function addChunks(
             if (k === 'vector' && v) {
               // Arrow Vector → 纯数组
               const vec = v as { toArray?: () => number[] }
-              cleaned[k] = vec.toArray ? vec.toArray() : v
+              const array = vec.toArray ? vec.toArray() : v
+              if (Array.isArray(array) && array.length === vectorDimension) cleaned[k] = array
             } else {
               cleaned[k] = v
             }
@@ -493,7 +523,7 @@ export async function getStats(projectPath: string): Promise<KBStats> {
       const vectorField = schema.fields.find(f => f.name === 'vector')
       if (vectorField) {
         hasVectors = true
-        vectorDimension = 2048 // 向量维度（需与 Embedding 模型输出匹配）
+        vectorDimension = vectorDimensionFromSchema(schema) ?? 0
       }
     } catch { /* 忽略 */ }
 
@@ -602,8 +632,11 @@ export async function updateChunkVectors(
     const table = await db.openTable(TABLE_NAME)
     const schema = await table.schema()
     const hasVectorCol = schema.fields.some(f => f.name === 'vector')
+    const incomingDimension = updates.map(update => update.vector.length).find(length => length > 0) ?? null
+    const existingDimension = vectorDimensionFromSchema(schema)
+    const needsRebuild = !hasVectorCol || (incomingDimension !== null && existingDimension !== incomingDimension)
 
-    if (hasVectorCol) {
+    if (!needsRebuild) {
       // 如果已有 vector 列，直接 update
       for (const update of updates) {
         try {
@@ -619,27 +652,18 @@ export async function updateChunkVectors(
     } else {
       // 没有 vector 列，必须覆写全表以增加列
       const allRecords = await table.query().toArray()
+      const vectorDimension = incomingDimension ?? existingDimension ?? 1
       const newData = allRecords.map((r: { [key: string]: unknown; id: string }) => {
         const up = updates.find(u => u.id === r.id)
         if (up) return { ...r, vector: up.vector }
-        return r
+        if (vectorLength(r.vector) === vectorDimension) return r
+        const next = { ...r }
+        delete next.vector
+        return next
       })
 
       // 使用显式 Schema 确保 vector 列正确持久化
-      const VECTOR_DIM = 2048
-      const vectorField = new Field('vector', new ArrowFixedSizeList(VECTOR_DIM, new Field('item', new Float32())), true)
-      const schema = new ArrowSchema([
-        new Field('id', new Utf8()),
-        new Field('docId', new Utf8()),
-        new Field('fileName', new Utf8()),
-        new Field('chapterNumber', new Int32(), true),
-        new Field('chapterTitle', new Utf8(), true),
-        new Field('text', new Utf8()),
-        vectorField,
-        new Field('chunkIndex', new Int32()),
-        new Field('totalChunks', new Int32()),
-        new Field('importedAt', new Utf8()),
-      ])
+      const schema = createChunkSchema(vectorDimension)
 
       await db.dropTable(TABLE_NAME)
       await db.createTable(TABLE_NAME, newData, { schema })
