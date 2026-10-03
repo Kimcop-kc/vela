@@ -68,6 +68,11 @@ export interface KBStats {
   hasVectors: boolean
 }
 
+export interface LanceRepairResult {
+  repaired: boolean
+  quarantined: string[]
+}
+
 // ===== 常量 =====
 
 const TABLE_NAME = 'chunks'
@@ -126,6 +131,60 @@ export function closeConnection(projectPath: string): void {
   const dbPath = path.join(projectPath, '.vela', 'lancedb')
   connectionPool.get(dbPath)?.close()
   connectionPool.delete(dbPath)
+}
+
+function allFileNames(root: string): Set<string> {
+  const names = new Set<string>()
+  const visit = (directory: string) => {
+    if (!fs.existsSync(directory)) return
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name)
+      if (entry.isDirectory()) visit(target)
+      else names.add(entry.name)
+    }
+  }
+  visit(root)
+  return names
+}
+
+/**
+ * LanceDB can leave an older manifest pointing at a data file that was removed
+ * during an interrupted rebuild. Quarantine only those broken manifests so the
+ * newest readable table version remains available.
+ */
+export function repairLanceStorage(projectPath: string): LanceRepairResult {
+  const lancedbPath = path.join(projectPath, '.vela', 'lancedb')
+  const quarantined: string[] = []
+  closeConnection(projectPath)
+
+  for (const tableName of [TABLE_NAME, DOCS_TABLE_NAME]) {
+    const tableDir = path.join(lancedbPath, `${tableName}.lance`)
+    const versionsDir = path.join(tableDir, '_versions')
+    if (!fs.existsSync(versionsDir)) continue
+    const existingFiles = allFileNames(tableDir)
+
+    for (const entry of fs.readdirSync(versionsDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.manifest')) continue
+      const manifestPath = path.join(versionsDir, entry.name)
+      const raw = fs.readFileSync(manifestPath).toString('utf8')
+      const references = raw.match(/\b[0-9a-f]{20,}\.lance\b/gi) ?? []
+      const broken = references.some(reference => !existingFiles.has(reference))
+      if (!broken) continue
+
+      const backupName = `${entry.name}.corrupt-${Date.now()}`
+      fs.renameSync(manifestPath, path.join(versionsDir, backupName))
+      quarantined.push(path.join(versionsDir, backupName))
+      console.warn(`[Vela VectorStore] 已隔离损坏的 LanceDB 版本清单: ${entry.name}`)
+    }
+  }
+
+  return { repaired: quarantined.length > 0, quarantined }
+}
+
+export function isLanceCorruptionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('Failed to get next batch from stream') ||
+    /Not found: .+\.lance[\\/]data[\\/].+\.lance/i.test(message)
 }
 
 

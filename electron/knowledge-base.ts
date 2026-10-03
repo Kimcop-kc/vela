@@ -23,6 +23,8 @@ import {
   migrateFromJSON,
   getChunksWithoutVectors as storeGetChunksWithoutVectors,
   getDocumentTextPage as storeGetDocumentTextPage,
+  isLanceCorruptionError,
+  repairLanceStorage,
 } from './vector-store'
 
 // ===== 迁移状态跟踪 =====
@@ -432,7 +434,7 @@ export async function getDocumentText(
     let done = false
 
     while (!done) {
-      const page = await storeGetDocumentTextPage(projectPath, docId, chunkStart, 100)
+      const page = await getDocumentTextPageWithRecovery(projectPath, docId, chunkStart, 100)
       if (page.fileName) fileName = page.fileName
       totalChunks = page.totalChunks
       if (page.text) parts.push(page.text)
@@ -456,6 +458,22 @@ export async function getDocumentText(
   }
 }
 
+async function getDocumentTextPageWithRecovery(
+  projectPath: string,
+  docId: string,
+  chunkStart: number,
+  maxChunks: number,
+) {
+  try {
+    return await storeGetDocumentTextPage(projectPath, docId, chunkStart, maxChunks)
+  } catch (error) {
+    if (!isLanceCorruptionError(error)) throw error
+    const repair = repairLanceStorage(projectPath)
+    if (!repair.repaired) throw error
+    return await storeGetDocumentTextPage(projectPath, docId, chunkStart, maxChunks)
+  }
+}
+
 /** 按块分页读取文档正文，避免大章节一次性阻塞界面。 */
 export async function getDocumentTextPage(
   docId: string,
@@ -474,7 +492,7 @@ export async function getDocumentTextPage(
 }> {
   try {
     await ensureMigration(projectPath)
-    const page = await storeGetDocumentTextPage(projectPath, docId, chunkStart, maxChunks)
+    const page = await getDocumentTextPageWithRecovery(projectPath, docId, chunkStart, maxChunks)
     if (!page.fileName) {
       return { success: false, error: '未在知识库中找到该文档' }
     }

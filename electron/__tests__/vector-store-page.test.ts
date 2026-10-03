@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { chunkText } from '../embedding'
-import { addChunks, closeConnection, getDocumentTextPage, getStats } from '../vector-store'
+import { addChunks, closeConnection, getDocumentTextPage, getStats, repairLanceStorage } from '../vector-store'
 
 let projectPath = ''
 
@@ -54,5 +54,20 @@ describe('vector store document pages', () => {
     const stats = await getStats(projectPath)
     expect(stats.vectorDimension).toBe(1024)
     expect(stats.hasVectors).toBe(true)
+  })
+
+  it('quarantines a manifest that references a missing data file', () => {
+    projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-vector-page-'))
+    const versions = path.join(projectPath, '.vela', 'lancedb', 'chunks.lance', '_versions')
+    const data = path.join(projectPath, '.vela', 'lancedb', 'chunks.lance', 'data')
+    fs.mkdirSync(versions, { recursive: true })
+    fs.mkdirSync(data, { recursive: true })
+    fs.writeFileSync(path.join(versions, '18446744073709551613.manifest'), '001001110100100000000111e6dd2349208f14360d86df8ff2.lance')
+
+    const result = repairLanceStorage(projectPath)
+
+    expect(result.repaired).toBe(true)
+    expect(result.quarantined).toHaveLength(1)
+    expect(fs.existsSync(path.join(versions, '18446744073709551613.manifest'))).toBe(false)
   })
 })
