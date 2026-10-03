@@ -129,7 +129,6 @@ export default function DraftEditor({ filePath, content }: Props) {
     Object.fromEntries(REVIEW_DIMS.map(d => [d.key, true]))
   )
   const [charCount, setCharCount] = useState(0)
-  const [qualitativeContextMode, setQualitativeContextMode] = useState<'full' | 'fast'>('full')
   const isDirty = useEditorStore(s => s.tabs.find(t => t.filePath === filePath)?.dirty ?? false)
   const currentBodyRef = useRef(content)
   useEffect(() => { currentBodyRef.current = content }, [content])
@@ -215,7 +214,6 @@ export default function DraftEditor({ filePath, content }: Props) {
         draftPath: filePath,
         draftContent: body,
         reviewFocus: REVIEW_DIMS.filter(d => reviewDims[d.key]).map(d => d.label).join('、') || undefined,
-        contextMode: qualitativeContextMode,
       }), false)
     } catch (e) {
       toast.error(t('draftEditor.qualitativeReviewStartFailed', { error: e }))
@@ -791,35 +789,6 @@ export default function DraftEditor({ filePath, content }: Props) {
                     ))}
                   </div>
                 </div>
-                {confirmAction === 'qualitative' && (
-                  <div className="mt-3">
-                    <div className="text-xs font-medium mb-2" style={{ color: 'var(--color-text)' }}>
-                      {t('draftEditor.reviewScopeTitle')}
-                    </div>
-                    <div
-                      className="inline-flex rounded-md overflow-hidden"
-                      style={{ border: '1px solid var(--color-border)' }}
-                    >
-                      {(['full', 'fast'] as const).map(mode => {
-                        const active = qualitativeContextMode === mode
-                        return (
-                          <button
-                            key={mode}
-                            type="button"
-                            className="px-3 py-1 text-xs transition-colors"
-                            style={{
-                              backgroundColor: active ? 'var(--color-accent)' : 'var(--color-bg-elevated)',
-                              color: active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
-                            }}
-                            onClick={() => setQualitativeContextMode(mode)}
-                          >
-                            {t(mode === 'full' ? 'draftEditor.reviewScopeFull' : 'draftEditor.reviewScopeFast')}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
               </>
             )}
           </div>

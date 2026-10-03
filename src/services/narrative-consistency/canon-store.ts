@@ -170,6 +170,15 @@ export class CanonStore {
     }
   }
 
+  async getSummariesUpTo(maxChapter: number): Promise<ChapterSummary[]> {
+    try {
+      return (await this.ipcClient.invoke('db:canon-summary-list-up-to', maxChapter) as ChapterSummary[]) || []
+    } catch (err) {
+      console.warn('[CanonStore] getSummariesUpTo 失败:', err)
+      return []
+    }
+  }
+
   async getSummary(chapterNumber: number): Promise<ChapterSummary | null> {
     try {
       return await this.ipcClient.invoke('db:canon-summary-get', chapterNumber) as ChapterSummary | null

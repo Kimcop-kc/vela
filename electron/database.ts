@@ -262,6 +262,21 @@ function createTables(db: BetterSqlite3.Database) {
     );
 
     -- ============================================================
+    -- 7.1 chapter_review_digests — 定性审稿摘要（跨次审稿复用的连续性记忆）
+    -- ============================================================
+    CREATE TABLE IF NOT EXISTS chapter_review_digests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chapter_number INTEGER NOT NULL UNIQUE,      -- 摘要覆盖到第几章（即本次审稿章节）
+      chapter_title TEXT DEFAULT '',
+      content TEXT NOT NULL,                       -- 摘要 JSON（时间线摘要/伏笔/未解决观察）
+      canon_fingerprint TEXT NOT NULL,             -- 摘要所依赖的 Canon 指纹，用于失效判断
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_digests_chapter
+      ON chapter_review_digests(chapter_number);
+
+    -- ============================================================
     -- 8. post_process_runs — 后处理跑批实例
     -- ============================================================
     CREATE TABLE IF NOT EXISTS post_process_runs (

@@ -13,6 +13,7 @@
  *   本模块不会自动改写章节，也不按隐藏词表替换文本。
  */
 export * from './types'
+export * from './review-digest'
 export {
   dialogueRatio,
   countMeaningfulChars,

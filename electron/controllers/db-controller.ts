@@ -15,6 +15,7 @@ import { CharacterRepository, CharacterData, CharacterStateData } from '../repos
 import { DraftRepository } from '../repositories/draft-repository'
 import { RevisionRepository } from '../repositories/revision-repository'
 import { ReviewRepository } from '../repositories/review-repository'
+import { ReviewDigestRepository } from '../repositories/review-digest-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
 import { ChapterRollbackRepository } from '../repositories/chapter-rollback-repository'
 
@@ -99,6 +100,8 @@ async function restoreChapterDerivedState(chapterNumber: number, chapterTitle?: 
   }
 
   PostProcessRepository.deleteRunsBySource('chapter_finalize', String(chapterNumber))
+  // 章节回滚会改变此章及之后的 Canon；下游审稿摘要一并失效，下次审稿自动重建。
+  ReviewDigestRepository.deleteFromChapter(chapterNumber)
   const projectionWarning = removeFinalizedProjection(chapterNumber, chapterTitle)
   const knowledgeWarning = await removeChapterKnowledgeDocuments(chapterNumber, chapterTitle)
   warning = warning ?? projectionWarning
@@ -458,6 +461,36 @@ ipcMain.handle('db:revision-create', async (_event, params: {
   })
 
   // ============================================================
+  // 6.1 review_digests — 定性审稿摘要
+  // ============================================================
+  ipcMain.handle('db:review-digest-get-latest-before', async (_event, chapterNumber: number) => {
+    return ReviewDigestRepository.getLatestBefore(chapterNumber)
+  })
+
+  ipcMain.handle('db:review-digest-get', async (_event, chapterNumber: number) => {
+    return ReviewDigestRepository.getByChapter(chapterNumber)
+  })
+
+  ipcMain.handle('db:review-digest-put', async (_event, params: {
+    chapterNumber: number
+    chapterTitle: string
+    content: string
+    canonFingerprint: string
+  }) => {
+    try {
+      const id = ReviewDigestRepository.upsert(params)
+      return { success: true, id }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:review-digest-invalidate-from', async (_event, chapterNumber: number) => {
+    const deleted = ReviewDigestRepository.deleteFromChapter(chapterNumber)
+    return { success: true, deleted }
+  })
+
+  // ============================================================
   // 7. post_process — 后处理跑批
   // ============================================================
   ipcMain.handle('db:post-process-create-run', async (_event, params: {
@@ -626,6 +659,9 @@ ipcMain.handle('db:revision-create', async (_event, params: {
   })
   ipcMain.handle('db:canon-summary-list-recent', async (_event, limit?: number) => {
     return CanonRepository.getRecentSummaries(limit ?? 5)
+  })
+  ipcMain.handle('db:canon-summary-list-up-to', async (_event, maxChapter: number) => {
+    return CanonRepository.getSummariesUpTo(maxChapter)
   })
   ipcMain.handle('db:canon-summary-upsert', async (_event, summary: ChapterSummary) => {
     const v = safeValidate(validateCanonChapterSummary, summary)

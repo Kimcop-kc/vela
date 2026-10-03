@@ -66,7 +66,6 @@ export interface QualitativeReviewOnlyParams {
   draftPath: string
   draftContent: string
   reviewFocus?: string
-  contextMode?: 'full' | 'fast'
 }
 
 /** 去 AI 味修订参数（显式发起） */
@@ -375,7 +374,6 @@ export function createQualitativeReviewWorkflow(params: QualitativeReviewOnlyPar
             draftPath: params.draftPath,
             draftContent: params.draftContent,
             reviewFocus: params.reviewFocus,
-            contextMode: params.contextMode,
           })
           const review = await cmd.execute({ step, context, callbacks })
           context.data.qualitativeReview = review

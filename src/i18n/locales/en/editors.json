@@ -325,9 +325,6 @@
     "qualitativeReviewTooltip": "Records observations on character memory, prop continuity, foreshadowing, outline deviation, pacing and emotional arc, and marks revisable AI traces",
     "qualitativeReviewDialogTitle": "Qualitative Review",
     "qualitativeReviewDescription": "Records traceable creative observations and AI-trace marks only. It renders no pass/fail verdict and never rewrites the draft; pick items explicitly in the report when you want a revision.",
-    "reviewScopeTitle": "Review scope",
-    "reviewScopeFull": "Full (whole-story facts)",
-    "reviewScopeFast": "Fast (recent context)",
     "qualitativeReviewStartFailed": "Failed to start the qualitative review: {{error}}"
   },
   "versionHistory": {

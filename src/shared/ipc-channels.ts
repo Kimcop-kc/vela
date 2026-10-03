@@ -349,6 +349,7 @@ import type { CharacterData, CharacterStateData } from '../../electron/repositor
 import type { DraftMeta, DraftFull } from '../../electron/repositories/draft-repository'
 import type { RevisionMeta, RevisionFull } from '../../electron/repositories/revision-repository'
 import type { ReviewMeta, ReviewFull } from '../../electron/repositories/review-repository'
+import type { ReviewDigestMeta } from '../../electron/repositories/review-digest-repository'
 import type { RehearsalContext } from './story-rehearsal'
 import type { PostProcessRunData, PostProcessStepData } from '../../electron/repositories/post-process-repository'
 
@@ -415,6 +416,12 @@ export interface DatabaseChannels {
   'db:review-get-full': { args: [id: number]; return: ReviewFull | null }
   'db:review-next-index': { args: [baseDraftId: number]; return: number }
 
+  // 6.1 review_digests
+  'db:review-digest-get-latest-before': { args: [chapterNumber: number]; return: ReviewDigestMeta | null }
+  'db:review-digest-get': { args: [chapterNumber: number]; return: ReviewDigestMeta | null }
+  'db:review-digest-put': { args: [params: { chapterNumber: number; chapterTitle: string; content: string; canonFingerprint: string }]; return: { success: boolean; id?: number; error?: string } }
+  'db:review-digest-invalidate-from': { args: [chapterNumber: number]; return: { success: boolean; deleted: number } }
+
   // 7. post_process
   'db:post-process-create-run': { args: [params: { triggerSourceType: string; triggerSourceId: string; sourceLabel: string; steps: Array<{ key: string; label: string; critical: boolean }> }]; return: { success: boolean; id?: string; error?: string } }
   'db:post-process-get-latest-run': { args: [sourceType: string, sourceId: string]; return: PostProcessRunData | null }
@@ -447,6 +454,7 @@ export interface DatabaseChannels {
   'db:canon-fact-clear-chapter': { args: [chapterNumber: number]; return: { success: boolean } }
   'db:canon-summary-get': { args: [chapterNumber: number]; return: CanonChapterSummary | null }
   'db:canon-summary-list-recent': { args: [limit?: number]; return: CanonChapterSummary[] }
+  'db:canon-summary-list-up-to': { args: [maxChapter: number]; return: CanonChapterSummary[] }
   'db:canon-summary-upsert': { args: [summary: CanonChapterSummary]; return: { success: boolean; error?: string } }
 
   // 原子写回（推荐路径：单次事务）

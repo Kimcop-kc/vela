@@ -497,10 +497,11 @@
     "callingModel": "记录观察：第 {{index}}/{{total}} 段…",
     "segmentFailed": "⚠️ 第 {{index}} 段观察失败，已跳过并保留本地检测结果：{{error}}",
     "localOnly": "⚠️ 模型观察不可用，本次只输出本地确定性检测结果（AI 痕迹与规则观察）。",
-    "cacheHit": "正文与审稿上下文未变化，直接复用上一次定性审稿结果。",
     "found": "完成：{{observations}} 条观察，{{traces}} 处 AI 痕迹标记。",
     "saved": "审稿记录已存档（第 {{index}} 版）。",
     "saveFailed": "⚠️ 审稿记录存档失败：{{error}}",
+    "digestSaved": "审稿摘要已持久化（覆盖到第 {{chapter}} 章），下次审稿将增量复用。",
+    "digestSaveFailed": "⚠️ 审稿摘要持久化失败：{{error}}",
     "segmentHint": "这是本章的第 {{index}}/{{total}} 段，只记录本段范围内的观察，不要臆测其他分段的内容。"
   },
   "styleGuide": {

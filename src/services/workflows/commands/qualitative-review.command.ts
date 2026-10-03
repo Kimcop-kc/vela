@@ -12,22 +12,29 @@ import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
-import { buildCanonContext, renderCanonContext, HARD_CONSTRAINTS } from '../../narrative-consistency'
+import { buildCanonContext, renderCanonContext, canonStore } from '../../narrative-consistency'
 import {
   buildSegmentDirective,
-  clampToTokenBudget,
   estimateTokens,
   resolveGenerationBudgets,
   splitTextByTokenBudget,
 } from '../segmented-generation'
-import { observeChapter, type ReviewObservation, type QualitativeReview } from '../../review'
+import {
+  observeChapter,
+  emptyReviewDigest,
+  foldObservationsIntoDigest,
+  buildTimelineDigest,
+  computeCanonFingerprint,
+  renderReviewDigest,
+  type ReviewObservation,
+  type QualitativeReview,
+  type ChapterReviewDigest,
+} from '../../review'
 import i18n from '../../../i18n'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
-const REVIEW_CACHE_LIMIT = 12
 const REVIEW_SEGMENT_CONCURRENCY = 2
-const reviewCache = new Map<string, QualitativeReview>()
 
 export interface QualitativeReviewParams {
   chapterNumber: number
@@ -36,8 +43,6 @@ export interface QualitativeReviewParams {
   draftContent: string
   /** 本次审稿的侧重点（可选） */
   reviewFocus?: string
-  /** full = 保留完整历史事实；fast = 最近窗口提速 */
-  contextMode?: 'full' | 'fast'
 }
 
 export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeReview> {
@@ -55,31 +60,66 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('qualitative_review')
     const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
-    const contextMode = this.params.contextMode ?? 'full'
 
-    // ── 既有事实基线：观察必须对照 Canon，才能发现「角色记忆 / 物资」类问题 ──
-    let canonContext = ''
-    let canonSize = { timelineEvents: 0, characterStates: 0, openPlotLines: 0, knownFacts: 0 }
+    // ── 读取静态架构 + 角色卡 + 既有 Canon ──
+    let core: { premise?: string; charactersArch?: string; worldbuilding?: string; synopsis?: string } | null = null
+    let allCharacters: Array<Record<string, unknown>> = []
     let knownCharacterNames: string[] = []
+    let timeline: Awaited<ReturnType<typeof canonStore.getTimeline>> = []
+    let facts: Awaited<ReturnType<typeof canonStore.getFacts>> = []
+    let summariesUpTo: Awaited<ReturnType<typeof canonStore.getSummariesUpTo>> = []
     try {
-      const [core, allCharacters] = await Promise.all([
+      const [loadedCore, loadedCharacters] = await Promise.all([
         ipc.invoke('db:project-core-get').catch(() => null as null | { premise?: string; charactersArch?: string; worldbuilding?: string; synopsis?: string }),
-        ipc.invoke('db:character-get-all').catch(() => [] as Array<Record<string, unknown>>),
+        (ipc.invoke('db:character-get-all').catch(() => [])) as unknown as Promise<Array<Record<string, unknown>>>,
       ])
+      core = loadedCore
+      allCharacters = loadedCharacters
       knownCharacterNames = (allCharacters || [])
         .map(item => String(item.name ?? ''))
         .filter(Boolean)
-      const mentionedNames = knownCharacterNames.filter(name => draft.includes(name))
-      const mentionedSet = new Set(mentionedNames)
-      const relevantCharacters = (allCharacters || [])
-        .filter(item => {
-          const name = String(item.name ?? '')
-          const role = String(item.role ?? '')
-          return mentionedSet.has(name) || role === 'protagonist' || role === 'antagonist'
-        })
-        .sort((a, b) => rolePriority(String(a.role ?? '')) - rolePriority(String(b.role ?? '')))
-        .slice(0, 24)
-      const contextCharacters = contextMode === 'fast' ? relevantCharacters : (allCharacters || [])
+      const [loadedTimeline, loadedFacts, loadedSummaries] = await Promise.all([
+        canonStore.getTimeline(Math.max(0, this.params.chapterNumber - 1)),
+        canonStore.getFacts(),
+        canonStore.getSummariesUpTo(Math.max(0, this.params.chapterNumber - 1)),
+      ])
+      timeline = loadedTimeline
+      facts = loadedFacts
+      summariesUpTo = loadedSummaries
+    } catch (e) {
+      callbacks.log(t('qualitativeReview.canonFailed', { error: String(e) }))
+    }
+
+    // ── 载入上一章审稿摘要；Canon 指纹不匹配即失效，回退到完整重建 ──
+    let digest: ChapterReviewDigest | null = null
+    try {
+      const record = await ipc.invoke('db:review-digest-get-latest-before', this.params.chapterNumber) as
+        | { content?: string; canonFingerprint?: string }
+        | null
+        | undefined
+      if (record && typeof record.content === 'string' && typeof record.canonFingerprint === 'string') {
+        const parsed = JSON.parse(record.content) as ChapterReviewDigest
+        if (parsed && parsed.version === 1 && typeof parsed.upToChapter === 'number') {
+          const baselineUpTo = parsed.upToChapter - 1
+          const fingerprint = computeCanonFingerprint(
+            timeline.filter(event => event.chapterNumber <= baselineUpTo),
+            facts.filter(fact => fact.introducedAt <= baselineUpTo),
+            summariesUpTo.filter(summary => summary.chapterNumber <= baselineUpTo),
+          )
+          if (fingerprint === record.canonFingerprint) digest = parsed
+        }
+      }
+    } catch {
+      digest = null
+    }
+
+    const fromChapter = digest ? digest.upToChapter : 0
+    const deltaTimeline = timeline.filter(event => event.chapterNumber >= fromChapter)
+
+    // ── 既有事实基线：历史由摘要承载，当前 Canon 只注入摘要之后的增量时间线 ──
+    let canonContext = ''
+    let canonSize = { timelineEvents: 0, characterStates: 0, openPlotLines: 0, knownFacts: 0 }
+    try {
       const canon = await buildCanonContext({
         chapterNumber: this.params.chapterNumber,
         architecture: {
@@ -88,7 +128,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
           worldbuilding: core?.worldbuilding || '',
           synopsis: core?.synopsis || '',
         },
-        characters: contextCharacters.map(item => ({
+        characters: (allCharacters || []).map(item => ({
           name: String(item.name ?? ''),
           role: String(item.role ?? ''),
           currentState: item.currentState as { location?: string; powerLevel?: string; physicalState?: string; mentalState?: string; keyItems?: string; recentEvents?: string; updatedAtChapter?: number } | undefined,
@@ -98,61 +138,25 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
         ragContext: '',
         writingStyle: project.novelConfig.writingStyle || '',
         globalGuidance: project.novelConfig.globalGuidance || '',
-        // Qualitative review only needs the recent continuity window, not all
-        // historical events since chapter one.
-        timelineWindow: contextMode === 'fast' ? Math.max(1, this.params.chapterNumber - 8) : undefined,
-        recentSummaryCount: contextMode === 'fast' ? 4 : 5,
+        timelineWindow: Math.max(0, this.params.chapterNumber - 1),
+        recentSummaryCount: 5,
       })
-      if (contextMode === 'fast') {
-        canon.timeline = canon.timeline.slice(-60)
-        canon.characterStates = canon.characterStates
-          .filter(state => mentionedSet.has(state.character) || relevantCharacters.some(card => String(card.name ?? '') === state.character))
-          .slice(0, 24)
-        canon.openPlotLines = canon.openPlotLines
-          .filter(line => line.characters.some(name => mentionedSet.has(name)) || line.characters.length === 0)
-          .slice(0, 12)
-        canon.knownFacts = canon.knownFacts
-          .filter(fact => fact.introducedAt >= this.params.chapterNumber - 8 || fact.characters.some(name => mentionedSet.has(name)))
-          .slice(-24)
-
-        const reviewCanonBudget = Math.max(2200, Math.floor(budgets.inputTokens * 0.42))
-        const renderedCanon = renderCanonContext({ ...canon, hardConstraints: '' })
-        canonContext = [
-          clampToTokenBudget(renderedCanon, reviewCanonBudget),
-          '【硬性约束（必须严格遵守）】',
-          HARD_CONSTRAINTS,
-        ].filter(Boolean).join('\n\n---\n\n')
-      } else {
-        canonContext = renderCanonContext(canon)
-      }
+      canon.timeline = deltaTimeline
+      const digestText = digest ? renderReviewDigest(digest) : ''
+      canonContext = [digestText, renderCanonContext(canon)].filter(Boolean).join('\n\n---\n\n')
       canonSize = {
-        timelineEvents: canon.timeline.length,
+        timelineEvents: deltaTimeline.length,
         characterStates: canon.characterStates.length,
         openPlotLines: canon.openPlotLines.length,
         knownFacts: canon.knownFacts.length,
       }
       callbacks.log(t('qualitativeReview.canonInjected', {
-        timeline: canon.timeline.length,
+        timeline: deltaTimeline.length,
         characters: canon.characterStates.length,
         plots: canon.openPlotLines.length,
-        mode: contextMode,
       }))
     } catch (e) {
       callbacks.log(t('qualitativeReview.canonFailed', { error: String(e) }))
-    }
-
-    const cacheKey = hashString([
-      this.params.chapterNumber,
-      this.params.chapterTitle,
-      this.params.reviewFocus || '',
-      contextMode,
-      canonContext,
-      draft,
-    ].join('\n---REVIEW-CACHE---\n'))
-    const cached = reviewCache.get(cacheKey)
-    if (cached) {
-      callbacks.log(t('qualitativeReview.cacheHit'))
-      return cached
     }
 
     const template = getPromptTemplate('qualitative_review')
@@ -246,11 +250,6 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
       ...review,
       observations: dedupeObservations([...llmObservations, ...review.observations]),
     }
-    reviewCache.set(cacheKey, merged)
-    if (reviewCache.size > REVIEW_CACHE_LIMIT) {
-      const oldest = reviewCache.keys().next().value
-      if (oldest) reviewCache.delete(oldest)
-    }
 
     if (llmFailed) {
       callbacks.log(t('qualitativeReview.localOnly'))
@@ -280,6 +279,34 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
       callbacks.log(t('qualitativeReview.saveFailed', { error: String(e) }))
     }
 
+    // ── 持久化审稿摘要：下一章审稿时增量复用，不必每次重读全书时间线 ──
+    try {
+      const seed = emptyReviewDigest(this.params.chapterNumber, this.params.chapterTitle)
+      const nextDigest = foldObservationsIntoDigest(digest ?? seed, merged.observations)
+      nextDigest.upToChapter = this.params.chapterNumber
+      nextDigest.upToTitle = this.params.chapterTitle
+      nextDigest.timelineDigest = buildTimelineDigest(
+        this.params.chapterNumber - 1,
+        summariesUpTo,
+        timeline,
+      )
+      const baselineUpTo = this.params.chapterNumber - 1
+      const canonFingerprint = computeCanonFingerprint(
+        timeline.filter(event => event.chapterNumber <= baselineUpTo),
+        facts.filter(fact => fact.introducedAt <= baselineUpTo),
+        summariesUpTo.filter(summary => summary.chapterNumber <= baselineUpTo),
+      )
+      await ipc.invoke('db:review-digest-put', {
+        chapterNumber: this.params.chapterNumber,
+        chapterTitle: this.params.chapterTitle,
+        content: JSON.stringify(nextDigest),
+        canonFingerprint,
+      })
+      callbacks.log(t('qualitativeReview.digestSaved', { chapter: this.params.chapterNumber }))
+    } catch (e) {
+      callbacks.log(t('qualitativeReview.digestSaveFailed', { error: String(e) }))
+    }
+
     return merged
   }
 }
@@ -294,23 +321,6 @@ function dedupeObservations(observations: ReviewObservation[]): ReviewObservatio
     }
   }
   return Array.from(byId.values())
-}
-
-function rolePriority(role: string): number {
-  switch (role) {
-    case 'protagonist': return 0
-    case 'antagonist': return 1
-    case 'supporting': return 2
-    default: return 3
-  }
-}
-
-function hashString(value: string): string {
-  let hash = 5381
-  for (let index = 0; index < value.length; index++) {
-    hash = ((hash << 5) + hash + value.charCodeAt(index)) >>> 0
-  }
-  return hash.toString(36)
 }
 
 async function mapWithConcurrency<T, R>(

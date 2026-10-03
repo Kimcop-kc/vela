@@ -453,6 +453,18 @@ export class CanonRepository {
     return rows.map(rowToSummary).reverse()
   }
 
+  /** 获取某章及之前的所有章节摘要（升序），用于拼装审稿摘要的时间线浓缩。 */
+  static getSummariesUpTo(maxChapter: number): ChapterSummary[] {
+    const db = getProjectDb()
+    if (!db) return []
+    const rows = db.prepare(
+      `SELECT * FROM canon_chapter_summaries
+       WHERE chapter_number <= ?
+       ORDER BY chapter_number ASC`
+    ).all(maxChapter) as ChapterSummaryRow[]
+    return rows.map(rowToSummary)
+  }
+
   static getSummary(chapterNumber: number): ChapterSummary | null {
     const db = getProjectDb()
     if (!db) return null

@@ -497,10 +497,11 @@
     "callingModel": "Recording observations: segment {{index}}/{{total}}…",
     "segmentFailed": "⚠️ Segment {{index}} failed; skipped, local detection results kept: {{error}}",
     "localOnly": "⚠️ Model observations unavailable; outputting local deterministic detection only (AI traces and rule-based observations).",
-    "cacheHit": "The prose and review context are unchanged; reusing the previous qualitative review result.",
     "found": "Done: {{observations}} observations, {{traces}} AI trace marks.",
     "saved": "Review record archived (revision {{index}}).",
     "saveFailed": "⚠️ Failed to archive the review record: {{error}}",
+    "digestSaved": "Review digest persisted (covers up to chapter {{chapter}}); the next review will reuse it incrementally.",
+    "digestSaveFailed": "⚠️ Failed to persist the review digest: {{error}}",
     "segmentHint": "This is segment {{index}}/{{total}} of the chapter. Record observations only within this segment; do not speculate about the others."
   },
   "styleGuide": {
