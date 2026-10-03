@@ -3,8 +3,8 @@ import fs from 'node:fs'
 const tag = process.argv[2]
 const outputPath = process.argv[3] ?? 'release-notes.md'
 
-if (!tag || !/^v\d+\.\d+\.\d+$/.test(tag)) {
-  console.error('Usage: node scripts/extract-release-notes.mjs vX.Y.Z [output.md]')
+if (!tag || !/^v\d+\.\d+\.\d+(?:\.\d+)?$/.test(tag)) {
+  console.error('Usage: node scripts/extract-release-notes.mjs vX.Y.Z or vX.Y.Z.N [output.md]')
   process.exit(1)
 }
 
