@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { chunkText } from '../embedding'
-import { addChunks, closeConnection, getDocumentTextPage } from '../vector-store'
+import { addChunks, closeConnection, getDocumentTextPage, getStats } from '../vector-store'
 
 let projectPath = ''
 
@@ -42,5 +42,17 @@ describe('vector store document pages', () => {
     }
 
     expect(restored).toBe(content)
+  })
+
+  it('uses the embedding model dimension instead of a hardcoded 2048', async () => {
+    projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'vela-vector-page-'))
+    const chunks = ['第一段测试', '第二段测试']
+    const vectors = chunks.map((_, index) => Array.from({ length: 1024 }, (_, i) => ((index + i) % 7) / 10))
+    const added = await addChunks(projectPath, 'dimension-test', 'dimension.txt', chunks, vectors)
+    expect(added.success).toBe(true)
+
+    const stats = await getStats(projectPath)
+    expect(stats.vectorDimension).toBe(1024)
+    expect(stats.hasVectors).toBe(true)
   })
 })

@@ -238,7 +238,7 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     protocol: 'openai',
     models: [],
-    embeddingModels: ['doubao-embedding'],
+    embeddingModels: [],
     keyPrefixes: [],
     hosts: ['ark.cn-beijing.volces.com'],
     modelPrefixes: ['doubao'],
