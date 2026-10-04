@@ -221,6 +221,14 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     ])
     await ensurePromptsLoaded(useProjectStore.getState().currentProject?.path)
 
+    // 去重：同一标题的工作流已在运行时不再启动第二份。
+    // 双击按钮 / 重复派发事件时，两个同名工作流会并发跑同一章，各自算出版本号 1 落下重复草稿。
+    const duplicate = get().activeRuns.find(r => r.status === 'running' && r.title === definition.title)
+    if (duplicate) {
+      get().addLog('warn', i18n.t('workflow.duplicateSkipped', { ns: 'stores', title: definition.title }))
+      return duplicate.id
+    }
+
     const run: WorkflowRun = {
       id: randomUUID(),
       type: definition.type,

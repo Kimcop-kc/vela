@@ -154,18 +154,47 @@ export function registerLLMController() {
 
     const abortController = new AbortController()
     activeStreams.set(requestId, abortController)
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const sender = event.sender
+    const win = BrowserWindow.fromWebContents(sender)
+
+    // 渲染窗口关闭 / 渲染进程崩溃后，主进程若继续 webContents.send 就会抛
+    // "Render frame was disposed before WebFrameMain could be accessed" 并刷屏日志。
+    // 这里统一走安全发送：帧已销毁就静默丢弃，同时中止底层请求，避免继续烧 token。
+    const safeSend = (channel: string, payload: unknown) => {
+      try {
+        if (!sender.isDestroyed()) sender.send(channel, payload)
+      } catch {
+        // 渲染帧已销毁，忽略
+      }
+    }
+    let cleanedUp = false
+    function cleanup() {
+      if (cleanedUp) return
+      cleanedUp = true
+      sender.removeListener('destroyed', onRendererGone)
+      sender.removeListener('render-process-gone', onRendererGone)
+      win?.removeListener('closed', onRendererGone)
+      activeStreams.delete(requestId)
+    }
+    function onRendererGone() {
+      try { abortController.abort() } catch { /* 忽略 */ }
+      cleanup()
+    }
+    sender.once('destroyed', onRendererGone)
+    // 渲染进程崩溃时 WebContents 仍可能存在，但帧已销毁；这里也一并中止请求。
+    sender.once('render-process-gone', onRendererGone)
+    win?.once('closed', onRendererGone)
 
     const provider = LLMFactory.getProvider(model)
     
     // We do not await this globally since it's streaming independently
-    provider.generateStream(model, request.messages, {
+    void provider.generateStream(model, request.messages, {
       temperature: request.temperature ?? model.temperature,
       maxTokens: request.maxTokens ?? model.maxTokens,
       responseFormat: request.responseFormat,
       thinking: request.thinking,
       signal: abortController.signal,
-      onChunk: (chunk: string) => win?.webContents.send('llm:stream-chunk', { requestId, chunk }),
+      onChunk: (chunk: string) => safeSend('llm:stream-chunk', { requestId, chunk }),
       onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }, meta?: { truncated?: boolean; finishReason?: string }) => {
         recordLLMCall({
           model,
@@ -177,8 +206,8 @@ export function registerLLMController() {
           startedAt,
           success: true,
         })
-        win?.webContents.send('llm:stream-done', { requestId, fullText, usage, meta })
-        activeStreams.delete(requestId)
+        safeSend('llm:stream-done', { requestId, fullText, usage, meta })
+        cleanup()
       },
       onError: (error: string) => {
         recordLLMCall({
@@ -191,8 +220,8 @@ export function registerLLMController() {
           success: false,
           errorMessage: error,
         })
-        win?.webContents.send('llm:stream-error', { requestId, error })
-        activeStreams.delete(requestId)
+        safeSend('llm:stream-error', { requestId, error })
+        cleanup()
       },
       // 输出被长度上限截断：把已产出的部分内容交给渲染进程，由其决定续写还是报错
       onTruncated: (partialText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }, meta?: { truncated?: boolean; finishReason?: string }) => {
@@ -208,9 +237,12 @@ export function registerLLMController() {
           success: true,
           errorMessage: '输出达到长度上限',
         })
-        win?.webContents.send('llm:stream-truncated', { requestId, partialText, usage, meta })
-        activeStreams.delete(requestId)
+        safeSend('llm:stream-truncated', { requestId, partialText, usage, meta })
+        cleanup()
       },
+    }).catch((error: unknown) => {
+      safeSend('llm:stream-error', { requestId, error: String(error) })
+      cleanup()
     })
 
     return { requestId, started: true }

@@ -1,6 +1,7 @@
 {
   "workflow": {
     "started": "🚀 Пайплайн «{{title}}» запущен",
+    "duplicateSkipped": "⚠️ Пайплайн «{{title}}» уже выполняется; повторный запуск пропущен",
     "cancelled": "⏹ Пайплайн «{{title}}» отменён",
     "stepRunning": "▶ [{{title}}] Выполнение шага: {{step}}",
     "stepComplete": "✅ [{{title}}] Шаг завершён: {{step}}",

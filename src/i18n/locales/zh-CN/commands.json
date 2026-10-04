@@ -143,8 +143,9 @@
     "repairing": "正在根据审稿报告精准修复...",
     "templateNotFound": "未找到审稿修复模板",
     "gateBlocked": "审稿修复结果被叙事一致性 Gate 阻止：{{reasons}}",
-    "tabName": "审稿修复：第{{chapter}}章",
-    "completed": "✅ 审稿修复完成（{{length}} 字），已生成修订稿版本 r{{version}}"
+      "tabName": "审稿修复：第{{chapter}}章",
+      "completed": "✅ 审稿修复完成（{{length}} 字），已生成修订稿版本 r{{version}}",
+      "notesDetached": "已从修订稿中剥离【修复说明】【待作者确认】等元信息（{{length}} 字），说明放在日志里方便查看。"
   },
   "finalize": {
     "kbImport": "📚 导入知识库",

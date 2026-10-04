@@ -1,6 +1,7 @@
 {
   "workflow": {
     "started": "🚀 Workflow \"{{title}}\" started",
+    "duplicateSkipped": "⚠️ Workflow \"{{title}}\" is already running; duplicate start ignored",
     "cancelled": "⏹ Workflow \"{{title}}\" cancelled",
     "stepRunning": "▶ [{{title}}] Running step: {{step}}",
     "stepComplete": "✅ [{{title}}] Step completed: {{step}}",

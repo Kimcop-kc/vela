@@ -1,6 +1,7 @@
 {
   "workflow": {
     "started": "🚀 工作流「{{title}}」已启动",
+    "duplicateSkipped": "⚠️ 工作流「{{title}}」已在运行，已忽略重复启动",
     "cancelled": "⏹ 工作流「{{title}}」已取消",
     "stepRunning": "▶ [{{title}}] 执行步骤: {{step}}",
     "stepComplete": "✅ [{{title}}] 步骤完成: {{step}}",

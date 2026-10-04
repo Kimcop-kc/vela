@@ -143,8 +143,9 @@
     "repairing": "Precisely repairing based on review report...",
     "templateNotFound": "Review refinement template not found",
     "gateBlocked": "Review refinement blocked by narrative consistency gate: {{reasons}}",
-    "tabName": "Review refinement: Ch.{{chapter}}",
-    "completed": "✅ Review refinement complete ({{length}} chars), revision version r{{version}} generated"
+      "tabName": "Review refinement: Ch.{{chapter}}",
+      "completed": "✅ Review refinement complete ({{length}} chars), revision version r{{version}} generated",
+      "notesDetached": "Detached the revision-notes / author-confirmation block ({{length}} chars) from the revised draft; the notes are shown in the log."
   },
   "finalize": {
     "kbImport": "📚 Knowledge Base Import",
