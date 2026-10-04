@@ -626,6 +626,7 @@
     "saveShortcut": "Save (⌘S)",
     "loading": "Loading...",
     "mergeTitle": "Revision Merge",
+    "mergeDescription": "Compare and resolve conflicts section by section, then write the result back to the draft.",
     "diffView": "Diff View",
     "mergeComplete": "✅ Merge complete, draft updated",
     "mergeFailed": "Merge failed: {{error}}",

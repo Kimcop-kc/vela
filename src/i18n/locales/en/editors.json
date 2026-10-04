@@ -288,6 +288,7 @@
     "repairFinalize": "Repair Finalize",
     "repairFinalizeTooltip": "Re-run failed post-processing steps (character cards, knowledge base, etc.)",
     "mergeDialogTitle": "Revision Merge — Ch.{{chapter}} {{title}}",
+    "mergeDialogDescription": "Compare and resolve conflicts section by section, then write the result back to the draft.",
     "refineDialogTitle": "AI Refine Confirmation",
     "reviewDialogTitle": "AI Review Confirmation",
     "dialogTarget": "Target: {{title}} v{{version}}",

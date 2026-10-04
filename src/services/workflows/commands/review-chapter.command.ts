@@ -100,10 +100,19 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     callbacks.log(t('reviewChapter.callingReviewer'))
 
     // 期望 JSON 格式返回
-    const reviewResultRaw = await this.callLLMWithBuilder(
-      promptBuilder,
+    // 审稿是分析任务，关掉思考并压低输出上限，避免模型长时间空转；
+    // 万一 JSON 被截断，用续写把剩余条目补齐。
+    const reviewResultRaw = await this.callLLMWithContinuation(
+      promptBuilder.build(),
+      promptBuilder.getSystemRole(),
       callbacks,
-      { responseFormat: { type: 'json_object' } }
+      {
+        responseFormat: { type: 'json_object' },
+        thinking: false,
+        maxTokens: 8192,
+        maxRounds: 2,
+        purpose: 'review_chapter',
+      },
     )
 
     const reviewResultClean = this.stripThinkingTags(reviewResultRaw)

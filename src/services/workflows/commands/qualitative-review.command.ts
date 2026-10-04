@@ -200,7 +200,8 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
 
         callbacks.log(t('qualitativeReview.callingModel', { index: index + 1, total: effectiveChunks.length }))
         try {
-          const text = await this.callLLM(
+          // 观察属分析任务：关思考、压输出上限以提速；JSON 被截断时自动续写补齐。
+          const text = await this.callLLMWithContinuation(
             prompt,
             builder.getSystemRole(),
             index === 0
@@ -210,7 +211,13 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
                   appendText: () => {},
                   setProgress: () => {},
                 },
-            { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens },
+            {
+              responseFormat: { type: 'json_object' },
+              thinking: false,
+              maxTokens: 8192,
+              maxRounds: 2,
+              purpose: 'qualitative_review',
+            },
           )
           const raw = this.parseJSON<Record<string, unknown>>(text)
           const parsed = observeChapter({

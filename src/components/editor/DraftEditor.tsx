@@ -867,6 +867,9 @@ export default function DraftEditor({ filePath, content }: Props) {
             <DialogTitle className="flex items-center gap-2 text-[0.8rem]">
               {t('draftEditor.mergeDialogTitle', { chapter: meta?.chapterNumber, title: meta?.chapterTitle })}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              {t('draftEditor.mergeDialogDescription')}
+            </DialogDescription>
           </DialogHeader>
           {/* 合并视图主体 */}
           <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>

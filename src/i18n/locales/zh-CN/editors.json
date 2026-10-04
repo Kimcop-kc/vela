@@ -288,6 +288,7 @@
     "repairFinalize": "修复定稿",
     "repairFinalizeTooltip": "重新执行失败的后处理步骤（角色卡、知识库等）",
     "mergeDialogTitle": "修稿合并 — 第{{chapter}}章 {{title}}",
+    "mergeDialogDescription": "在合并视图中逐段对照并解决冲突，确认后写回草稿。",
     "refineDialogTitle": "AI 修稿确认",
     "reviewDialogTitle": "AI 审稿确认",
     "dialogTarget": "对象：{{title}} v{{version}}",

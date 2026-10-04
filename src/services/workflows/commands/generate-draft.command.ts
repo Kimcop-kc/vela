@@ -174,11 +174,17 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     callbacks.log(i18n.t('generateDraft.callingAI', { ns: 'commands' }))
 
     // 正文较长时模型容易撞到输出上限：用续写模式在断点继续，而不是整章判失败。
+    // 但已经写到目标字数就必须收手，否则「截断 → 续写」会把整章拉到目标的两倍长。
+    const targetWords = Number(project.novelConfig.wordsPerChapter) || 3000
     const draftText = await this.callLLMWithContinuation(
       promptBuilder.build(),
       promptBuilder.getSystemRole(),
       callbacks,
-      { purpose: 'generate_draft', maxRounds: 3 },
+      {
+        purpose: 'generate_draft',
+        maxRounds: 3,
+        shouldContinue: accumulated => accumulated.length < targetWords * 0.95,
+      },
       context,
     )
     const cleanDraftText = this.stripThinkingTags(draftText)

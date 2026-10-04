@@ -626,6 +626,7 @@
     "saveShortcut": "保存（⌘S）",
     "loading": "加载中...",
     "mergeTitle": "修稿合并",
+    "mergeDescription": "在合并视图中逐段对照并解决冲突，确认后写回草稿。",
     "diffView": "对比视图",
     "mergeComplete": "✅ 合并完成，草稿已更新",
     "mergeFailed": "合并失败：{{error}}",

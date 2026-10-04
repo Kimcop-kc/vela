@@ -14,6 +14,12 @@ function resolveMaxTokens(maxTokens: number | undefined): number | undefined {
   return Math.min(maxTokens, 32768)
 }
 
+/**
+ * 支持 `thinking: { type: 'enabled' | 'disabled' }` 开关的 OpenAI 兼容服务商。
+ * 审稿这类分析任务显式关闭思考可以显著提速；不在白名单里的服务商不发送该字段，避免 400。
+ */
+const THINKING_TOGGLE_PROVIDERS = new Set(['deepseek', 'bigmodel', 'zhipu', 'doubao'])
+
 export class OpenAIProvider implements ILLMProvider {
   private supportsResponseFormat(model: ModelProfile): boolean {
     // Ollama Cloud does not support constrained structured output. Keep the
@@ -31,7 +37,7 @@ export class OpenAIProvider implements ILLMProvider {
     if (model.provider === 'ollama') {
       // Ollama's OpenAI-compatible endpoint uses reasoning_effort, not its native think field.
       body.reasoning_effort = thinking ? 'high' : 'none'
-    } else if (model.provider === 'deepseek' || thinking) {
+    } else if (THINKING_TOGGLE_PROVIDERS.has(model.provider) || thinking) {
       body.thinking = { type: thinking ? 'enabled' : 'disabled' }
     }
   }

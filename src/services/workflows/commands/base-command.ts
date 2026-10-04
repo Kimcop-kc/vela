@@ -219,7 +219,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     prompt: string,
     systemPrompt: string,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string; maxRounds?: number },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string; maxRounds?: number; shouldContinue?: (accumulated: string, round: number) => boolean },
     context?: WorkflowContext
   ): Promise<string> {
     const purpose = options?.purpose ?? this.constructor.name
@@ -242,6 +242,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       {
         maxRounds: options?.maxRounds,
         isCancelled: () => context?.cancelled === true,
+        shouldContinue: options?.shouldContinue,
         // 结构化输出被截断时，先把断在中间的那半条裁掉再续写：
         // 直接把残片丢给模型，它会先去补半条，往往继续截断；裁到上一条末尾就顺畅得多。
         merge: (accumulated, next) => {

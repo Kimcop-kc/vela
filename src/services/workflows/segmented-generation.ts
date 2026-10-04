@@ -979,6 +979,11 @@ export interface ContinuationOptions {
   onRound?: (info: { round: number; addedChars: number; truncated: boolean }) => void
   /** 返回 true 时立即停止续写（如用户取消） */
   isCancelled?: () => boolean
+  /**
+   * 每轮结束后判断是否还值得续写；返回 false 立即收尾。
+   * 用于「正文写作」这类有目标字数的场景：已经写到目标就不该再来一轮。
+   */
+  shouldContinue?: (accumulated: string, round: number) => boolean
   /** 自定义拼接；默认按尾部重叠去重后拼接 */
   merge?: (accumulated: string, next: string) => string
 }
@@ -1027,6 +1032,7 @@ export async function generateWithContinuation(
     truncated = result.truncated === true
     options.onRound?.({ round: rounds, addedChars: result.text.length, truncated })
     if (!truncated) break
+    if (options.shouldContinue && !options.shouldContinue(accumulated, rounds)) break
   }
 
   return { text: accumulated, rounds, truncated }

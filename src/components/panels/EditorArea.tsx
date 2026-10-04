@@ -705,6 +705,9 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
               <DialogTitle className="flex items-center gap-2 text-[0.8rem]">
                 {t('editorArea.mergeTitle')} · {activeTab?.name ?? t('editorArea.diffView')}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                {t('editorArea.mergeDescription')}
+              </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>
               {activeTab?.type === 'diff' && activeTab.originalContent && activeTab.content && (

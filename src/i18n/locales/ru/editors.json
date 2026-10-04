@@ -288,6 +288,7 @@
     "repairFinalize": "Восстановить финализацию",
     "repairFinalizeTooltip": "Повторно запустить неудачные шаги постобработки (карточки персонажей, база знаний и т.д.)",
     "mergeDialogTitle": "Слияние правок — Гл.{{chapter}} {{title}}",
+    "mergeDialogDescription": "Сравните и разрешите конфликты по фрагментам, затем запишите результат обратно в черновик.",
     "refineDialogTitle": "Подтверждение ИИ-шлифовки",
     "reviewDialogTitle": "Подтверждение ИИ-рецензии",
     "dialogTarget": "Цель: {{title}} v{{version}}",
