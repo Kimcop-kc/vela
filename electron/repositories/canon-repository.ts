@@ -18,6 +18,7 @@ import type {
   Fact,
   ChapterSummary,
 } from '../../src/services/narrative-consistency/types'
+import { detectFactConflict } from '../../src/services/narrative-consistency/fact-conflict'
 
 interface TimelineRow {
   id: number
@@ -66,6 +67,7 @@ interface FactRow {
   introduced_at: number
   characters: string
   evidence: string
+  status: string | null
   created_at: string
 }
 
@@ -142,6 +144,7 @@ function rowToFact(row: FactRow): Fact {
     introducedAt: row.introduced_at,
     characters: safeParse<string[]>(row.characters, [], 'characters', `fact#${row.id}`),
     evidence: row.evidence || undefined,
+    status: (row.status as Fact['status']) || 'active',
   }
 }
 
@@ -414,14 +417,15 @@ export class CanonRepository {
     if (!normalizedStatement) throw new Error('[CanonRepository] addFact: statement 不能为空')
     // 用 UNIQUE 索引 + INSERT OR IGNORE 处理重复（依赖 migration 添加的 idx_canon_facts_unique）
     const r = db.prepare(`
-      INSERT OR IGNORE INTO canon_facts (category, statement, introduced_at, characters, evidence)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO canon_facts (category, statement, introduced_at, characters, evidence, status)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       fact.category,
       normalizedStatement,
       fact.introducedAt || 0,
       JSON.stringify(fact.characters || []),
       (fact.evidence || '').slice(0, 500),  // 截断 evidence
+      fact.status || 'active',
     )
     if (r.changes > 0) return Number(r.lastInsertRowid)
     // 重复：返回已存在行的 id
@@ -437,6 +441,23 @@ export class CanonRepository {
     const db = getProjectDb()
     if (!db) return
     db.prepare(`DELETE FROM canon_facts WHERE introduced_at = ?`).run(chapterNumber)
+  }
+
+  /** 更新事实的记忆状态（active / outdated / contradicted / tentative）。 */
+  static markFactStatus(id: number, status: Fact['status']): void {
+    const db = getProjectDb()
+    if (!db) return
+    db.prepare(`UPDATE canon_facts SET status = ? WHERE id = ?`).run(status || 'active', id)
+  }
+
+  /** 找出与候选事实可能冲突的 active 事实（保守判定，见 detectFactConflict）。 */
+  static findConflictingFacts(candidate: Pick<Fact, 'category' | 'statement' | 'characters'>): Fact[] {
+    if (!candidate?.statement) return []
+    return this.getFacts().filter(fact =>
+      (fact.status ?? 'active') === 'active' &&
+      fact.statement !== candidate.statement &&
+      detectFactConflict(fact, candidate) !== null,
+    )
   }
 
   // ============================================================
@@ -526,6 +547,7 @@ export class CanonRepository {
     characterStatesWritten: number
     plotIds: number[]
     factIds: number[]
+    conflicts: Array<{ aId: number; bId: number; reason: string }>
   } {
     const db = getProjectDb()
     if (!db) throw new Error('[CanonRepository] 数据库未连接')
@@ -599,7 +621,24 @@ export class CanonRepository {
         factIds.push(id)
       }
 
-      return { timelineIds, characterStatesWritten, plotIds, factIds }
+      // 记忆状态：新写入的事实若与既有 active 事实可能矛盾，两边都标记 contradicted。
+      // 内容不删除、也不改写，只加标记并返回冲突说明，交给作者确认。
+      const conflicts: Array<{ aId: number; bId: number; reason: string }> = []
+      const activeFacts = this.getFacts().filter(fact => (fact.status ?? 'active') === 'active')
+      for (const factId of new Set(factIds)) {
+        const candidate = activeFacts.find(fact => fact.id === factId)
+        if (!candidate) continue
+        for (const other of activeFacts) {
+          if (other.id === factId || other.id == null) continue
+          const conflict = detectFactConflict(candidate, other)
+          if (!conflict) continue
+          this.markFactStatus(factId, 'contradicted')
+          this.markFactStatus(other.id, 'contradicted')
+          conflicts.push({ aId: factId, bId: other.id, reason: conflict.reason })
+        }
+      }
+
+      return { timelineIds, characterStatesWritten, plotIds, factIds, conflicts }
     })
 
     return tx()

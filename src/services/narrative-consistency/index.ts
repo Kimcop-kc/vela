@@ -49,3 +49,4 @@ export {
   isTemporaryDescriptorName,
   filterTemporaryDescriptorNames,
 } from './character-name-filter'
+export { detectFactConflict, type FactLike } from './fact-conflict'

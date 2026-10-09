@@ -8,6 +8,12 @@ const RETRYABLE_CODES = new Set([
 
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
 
+/**
+ * 命中这些关键词说明是「账号额度/模型用量上限」类错误，重试不会恢复：
+ * 例如智谱的 SetLimitExceeded（安全体验模式）、OpenAI 的 insufficient_quota、余额不足等。
+ */
+const PERMANENT_LIMIT_PATTERN = /余额不足|无可用资源包|欠费|insufficient|quota|SetLimitExceeded|usage limit|安全体验|Safe Experience Mode/i
+
 export interface FetchRetryOptions {
   maxAttempts?: number
   signal?: AbortSignal
@@ -63,6 +69,13 @@ export function formatNetworkError(error: unknown): string {
 export function formatApiError(status: number, body: string): string {
   const text = (body || '').trim()
   const clipped = text.slice(0, 300)
+  // 模型用量上限 / 「安全体验模式」暂停：给出可执行的操作指引。
+  if (/SetLimitExceeded|usage limit|model service has been paused|安全体验|Safe Experience Mode/i.test(text)) {
+    const hint = /安全体验|Safe Experience Mode/i.test(text)
+      ? '请到服务商的模型激活页调整或关闭「安全体验模式」'
+      : '请到服务商后台调整该模型的用量上限'
+    return `该模型已触发账号用量上限，服务被暂停。${hint}，或改用其他模型后重试。`
+  }
   if (/余额不足|无可用资源包|欠费|insufficient|quota/i.test(text)) {
     return '服务商账户余额或额度不足，请充值或更换模型后再试。'
   }
@@ -117,7 +130,7 @@ export async function fetchWithRetry(
       if (!retryableStatus || attempt >= maxAttempts) return response
       // 余额不足这类 429 不是「过一会儿再试」能恢复的，直接交给上层给出提示。
       const bodyText = await response.clone().text().catch(() => '')
-      if (/余额不足|无可用资源包|欠费|insufficient|quota/i.test(bodyText)) return response
+      if (PERMANENT_LIMIT_PATTERN.test(bodyText)) return response
       await response.body?.cancel().catch(() => undefined)
       options.onRetry?.(attempt, new Error(`HTTP ${response.status}`))
     } catch (error) {

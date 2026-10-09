@@ -259,6 +259,12 @@ export function buildFinalizePostProcessSteps(
         } else if (result.errors.length > 0) {
           callbacks.log(t('finalize.canonWritebackPartial', { count: result.errors.length, errors: result.errors.slice(0, 3).join('；') }))
         }
+        if (result.conflicts.length > 0) {
+          callbacks.log(t('finalize.canonFactConflicts', {
+            count: result.conflicts.length,
+            details: result.conflicts.slice(0, 3).join('；'),
+          }))
+        }
       } catch (e) {
         callbacks.log(t('finalize.canonWritebackError', { error: String(e) }))
       }

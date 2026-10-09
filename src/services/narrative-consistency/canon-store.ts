@@ -157,6 +157,17 @@ export class CanonStore {
     try { await this.ipcClient.invoke('db:canon-fact-clear-chapter', chapterNumber) } catch { /* 忽略 */ }
   }
 
+  /** 更新事实的记忆状态（active / outdated / contradicted / tentative）。 */
+  async markFactStatus(id: number, status: Fact['status']): Promise<boolean> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-fact-mark-status', id, status) as { success?: boolean } | undefined
+      return r?.success === true
+    } catch (err) {
+      console.warn('[CanonStore] markFactStatus 失败:', err)
+      return false
+    }
+  }
+
   // ============================================================
   // Summaries
   // ============================================================
@@ -206,8 +217,9 @@ export class CanonStore {
    *   - 摘要在事务外单独写入（失败不阻塞）
    *   - 单次 IPC 调用 vs 旧的 10+ 次 roundtrip
    */
-  async writeback(payload: CanonWriteback): Promise<{ ok: boolean; errors: string[] }> {
+  async writeback(payload: CanonWriteback): Promise<{ ok: boolean; errors: string[]; conflicts: string[] }> {
     const errors: string[] = []
+    const conflicts: string[] = []
 
     // 1) 摘要（独立写入，失败不阻塞定稿）
     if (payload.chapterSummary) {
@@ -229,15 +241,17 @@ export class CanonStore {
         characterDeltas: payload.characterDeltas,
         plotLineChanges: payload.plotLineChanges,
         newFacts: payload.newFacts,
-      }) as { success: boolean; error?: string } | undefined
+      }) as { success: boolean; error?: string; conflicts?: Array<{ reason: string }> } | undefined
       if (!r?.success) {
         errors.push(`writeback-atomic: ${r?.error || 'unknown'}`)
+      } else if (r.conflicts?.length) {
+        for (const conflict of r.conflicts) conflicts.push(conflict.reason)
       }
     } catch (e) {
       errors.push(`writeback-atomic: ${String(e)}`)
     }
 
-    return { ok: errors.length === 0, errors }
+    return { ok: errors.length === 0, errors, conflicts }
   }
 }
 

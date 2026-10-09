@@ -15,6 +15,7 @@ import {
   clampSynopsisForChapter,
   ARCHITECTURE_FIELD_LIMITS,
 } from '../../narrative-consistency'
+import { validateChapterPrewrite } from '../prewrite-validator'
 import i18n from '../../../i18n'
 
 export class GenerateDraftCommand extends BaseWorkflowCommand {
@@ -26,6 +27,20 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(i18n.t('common.noProject', { ns: 'commands' }))
+
+    // 写前校验：占位符（如 {章纲目标}、第N章）会导致整章跑偏，直接拦下；
+    // 章纲缺失/过短只提示，不阻断。
+    const prewriteIssues = validateChapterPrewrite(this.chapterInfo)
+    const prewriteBlockers = prewriteIssues.filter(issue => issue.kind === 'placeholder')
+    if (prewriteBlockers.length > 0) {
+      const details = prewriteBlockers.map(issue => `${issue.field}: ${issue.detail}`).join('；')
+      throw new Error(i18n.t('generateDraft.prewriteBlocked', { ns: 'commands', details }))
+    }
+    for (const issue of prewriteIssues) {
+      if (issue.kind === 'placeholder') continue
+      const key = issue.kind === 'missing' ? 'generateDraft.prewriteMissing' : 'generateDraft.prewriteTooShort'
+      callbacks.log(i18n.t(key, { ns: 'commands', field: issue.field }))
+    }
 
     callbacks.log(i18n.t('generateDraft.assemblingContext', { ns: 'commands' }))
 

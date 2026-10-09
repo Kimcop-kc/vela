@@ -79,6 +79,9 @@ export interface PlotLine {
   description: string
 }
 
+/** 记忆状态：active=有效，outdated=已过期（不再注入），contradicted=与其他事实矛盾（待确认），tentative=暂定 */
+export type FactStatus = 'active' | 'outdated' | 'contradicted' | 'tentative'
+
 /** 客观事实条目（短句） */
 export interface Fact {
   id?: number
@@ -92,6 +95,8 @@ export interface Fact {
   characters: string[]
   /** 关键证据短语（用于自动校验） */
   evidence?: string
+  /** 记忆状态；未标记时按 active 处理 */
+  status?: FactStatus
 }
 
 /** 生成前注入的 CanonContext —— 按固定优先级排序 */

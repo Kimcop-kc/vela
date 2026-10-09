@@ -84,6 +84,16 @@ export type AiTraceKind =
   | 'monotonous-sentence'
   /** 过度总结：段尾/章尾的抽象总结式旁白 */
   | 'over-summary'
+  /** 清单式罗列：第一条……第二条…… / 一、二、三、 / 1. 2. 3. */
+  | 'list-enumeration'
+  /** 神态/内心套话：眸中闪过、嘴角勾起、心中暗道…… */
+  | 'cliche-expression'
+  /** 万能副词堆叠：缓缓、淡淡、微微、轻轻…… */
+  | 'universal-adverb'
+  /** 对白标签单调：说道 / 淡淡道 / 沉声道…… 缺乏动作替代 */
+  | 'dialogue-tag'
+  /** 转折/递进模板：然而就在这时、殊不知、话虽如此…… */
+  | 'transition-template'
 
 /** 一条 AI 痕迹检测结果 —— 指向一个「可修订位置」 */
 export interface AiTraceFinding {
@@ -135,6 +145,18 @@ export interface AiTraceThresholds {
   minConsecutiveSameStart: number
   /** 过度总结：段落最少数量（低于该值不做段尾检测） */
   minParagraphsForSummary: number
+  /** 清单式罗列：最近连续条目最少数量 */
+  minEnumerationItems: number
+  /** 神态/内心套话：命中次数下限 */
+  minClicheHits: number
+  /** 万能副词：命中次数下限 */
+  minUniversalAdverbHits: number
+  /** 万能副词：每千字命中次数上限 */
+  maxUniversalAdverbPerKilo: number
+  /** 对白标签：命中次数下限 */
+  minDialogueTags: number
+  /** 转折模板：命中次数下限 */
+  minTransitionHits: number
 }
 
 /** 审稿产物：观察 + AI 痕迹，二者都只是「反馈」 */

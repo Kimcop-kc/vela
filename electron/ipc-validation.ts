@@ -160,6 +160,8 @@ export const VALID_TIMEFLOW = ['sequential', 'flashback'] as const
 
 export const VALID_PLOT_STATUS = ['active', 'resolved', 'paused'] as const
 
+export const VALID_FACT_STATUS = ['active', 'outdated', 'contradicted', 'tentative'] as const
+
 export function validateCanonTimelineEventInput(v: unknown, path = 'event') {
   if (!isObject(v)) {
     throw new ValidationError(path, 'expected object')
@@ -185,6 +187,7 @@ export function validateCanonFactInput(v: unknown, path = 'fact') {
     introducedAt: checkNumberRange(v.introducedAt, `${path}.introducedAt`, { min: 0, max: 1e9, integer: true }),
     characters: checkArray(v.characters, `${path}.characters`, (c, p) => checkStringLength(c, p, { max: 50 }), { maxLength: MAX_LIST_SIZE }),
     evidence: checkOptional(v.evidence, `${path}.evidence`, (s, p) => checkStringLength(s, p, { max: MAX_EVIDENCE_LEN })) ?? '',
+    status: checkOptional(v.status, `${path}.status`, (s, p) => checkEnum(s, p, VALID_FACT_STATUS)),
   }
 }
 

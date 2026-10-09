@@ -378,11 +378,11 @@ export function extractCanonWriteback(params: ExtractParams): CanonWriteback {
  * 便捷方法：执行提取 + 写回（调用 CanonStore）
  * 任何异常都不会抛出，最多重置 ok=false。
  */
-export async function extractAndWriteback(params: ExtractParams): Promise<{ ok: boolean; errors: string[] }> {
+export async function extractAndWriteback(params: ExtractParams): Promise<{ ok: boolean; errors: string[]; conflicts: string[] }> {
   try {
     const payload = extractCanonWriteback(params)
     return await canonStore.writeback(payload)
   } catch (err) {
-    return { ok: false, errors: [String(err)] }
+    return { ok: false, errors: [String(err)], conflicts: [] }
   }
 }

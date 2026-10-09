@@ -30,7 +30,41 @@ export const DEFAULT_AI_TRACE_THRESHOLDS: AiTraceThresholds = {
   maxLengthVariation: 0.35,
   minConsecutiveSameStart: 3,
   minParagraphsForSummary: 3,
+  minEnumerationItems: 3,
+  minClicheHits: 4,
+  minUniversalAdverbHits: 6,
+  maxUniversalAdverbPerKilo: 6,
+  minDialogueTags: 8,
+  minTransitionHits: 3,
 }
+
+/**
+ * 神态 / 内心活动套话（网文里最典型的 AI 模板）。
+ * 只用于「标记」，不会自动替换；用户可在设置里覆盖或关闭检测。
+ */
+export const CLICHE_EXPRESSION_PHRASES: string[] = [
+  '眸中闪过', '眼底掠过', '瞳孔微缩', '瞳孔骤缩', '嘴角勾起', '嘴角扬起', '嘴角微翘',
+  '眉头微蹙', '眉心微皱', '面色微变', '神色一凝', '目光微闪', '眼神微动', '脸色微沉',
+  '不露声色', '心中暗道', '心中一凛', '心中一沉', '心底涌起', '心中升起', '暗自盘算',
+  '暗自揣测', '心下了然', '心中有了计较', '不由自主地', '下意识地', '深吸一口气',
+]
+
+/** 万能副词：AI 习惯在每个动作前都加，形成「副词+动词」的固定模式。 */
+export const UNIVERSAL_ADVERBS: string[] = [
+  '缓缓', '淡淡', '微微', '轻轻', '静静', '默默', '悄悄', '慢慢', '渐渐', '暗暗',
+]
+
+/** 对白标签模板：频繁使用会比动作替代更「单调」。 */
+export const DIALOGUE_TAGS: string[] = [
+  '说道', '问道', '答道', '回道', '开口道', '沉声道', '淡淡道', '轻声道', '低声道',
+  '冷声道', '笑着说道', '点头道', '摇头道',
+]
+
+/** 转折 / 递进模板。 */
+export const TRANSITION_TEMPLATES: string[] = [
+  '然而就在这时', '就在此时', '就在这一刻', '殊不知', '话虽如此', '值得一提的是',
+  '更令人惊讶的是', '更要命的是', '与此同时', '不得不承认',
+]
 
 /**
  * 过度总结的提示短语。
@@ -79,6 +113,11 @@ export function detectAiTraces(text: string, options: DetectAiTraceOptions = {})
     ...detectHighFrequencyWords(text, thresholds, maxPerKind),
     ...detectMonotonousSentences(text, thresholds, maxPerKind),
     ...detectOverSummary(text, thresholds, maxPerKind),
+    ...detectListEnumeration(text, thresholds, maxPerKind),
+    ...detectClicheExpressions(text, thresholds),
+    ...detectUniversalAdverbs(text, thresholds),
+    ...detectDialogueTags(text, thresholds),
+    ...detectTransitionTemplates(text, thresholds),
   ]
 
   return findings.sort((a, b) => a.start - b.start)
@@ -275,4 +314,172 @@ function matchOverSummary(
     return { cue: '', label: 'abstractNouns', value: abstractCount, threshold: 2 }
   }
   return null
+}
+
+// ===== 4. 清单式罗列 =====
+
+/** 清单标记：第 N 条 / 一、二、 / 1. 2. */
+const ENUMERATION_PATTERNS: Array<{ regex: RegExp; key: string }> = [
+  { regex: /第\s*[一二三四五六七八九十百零〇\d]+\s*条/g, key: 'numberedClause' },
+  { regex: /(?:^|\n)\s*[一二三四五六七八九十]+\s*[、.．]/g, key: 'chineseOrdinal' },
+  { regex: /(?:^|\n)\s*\d+\s*[、.．]/g, key: 'arabicOrdinal' },
+]
+
+/** 收集一个正则的全部命中（1 基 [start, end)） */
+function findAllRegexOccurrences(text: string, regex: RegExp): Array<{ start: number; end: number }> {
+  const hits: Array<{ start: number; end: number }> = []
+  const flags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`
+  const re = new RegExp(regex.source, flags)
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) {
+    if (match[0].length === 0) {
+      re.lastIndex++
+      continue
+    }
+    hits.push({ start: match.index + 1, end: match.index + match[0].length + 1 })
+  }
+  return hits
+}
+
+function detectListEnumeration(
+  text: string,
+  thresholds: AiTraceThresholds,
+  maxFindings: number,
+): AiTraceFinding[] {
+  const findings: AiTraceFinding[] = []
+  for (const { regex, key } of ENUMERATION_PATTERNS) {
+    if (findings.length >= maxFindings) break
+    const hits = findAllRegexOccurrences(text, regex)
+    if (hits.length < thresholds.minEnumerationItems) continue
+    findings.push({
+      id: `trace-enum-${key}`,
+      kind: 'list-enumeration',
+      start: hits[0].start,
+      end: hits[0].end,
+      quote: text.slice(hits[0].start - 1, Math.min(hits[hits.length - 1].end - 1, hits[0].start - 1 + 120)),
+      occurrences: hits.slice(0, 30),
+      message: t('review.aiTrace.listEnumeration', { count: hits.length }),
+      metric: { label: 'enumerationItems', value: hits.length, threshold: thresholds.minEnumerationItems },
+      hint: t('review.aiTrace.listEnumerationHint'),
+    })
+  }
+  return findings
+}
+
+// ===== 5. 神态 / 内心套话 =====
+
+function detectClicheExpressions(
+  text: string,
+  thresholds: AiTraceThresholds,
+): AiTraceFinding[] {
+  const hits: Array<{ phrase: string; start: number; end: number }> = []
+  for (const phrase of CLICHE_EXPRESSION_PHRASES) {
+    for (const hit of findAllOccurrences(text, phrase)) hits.push({ phrase, ...hit })
+  }
+  if (hits.length < thresholds.minClicheHits) return []
+  hits.sort((a, b) => a.start - b.start)
+  const distinct = new Set(hits.map(hit => hit.phrase)).size
+  return [{
+    id: 'trace-cliche-expression',
+    kind: 'cliche-expression',
+    start: hits[0].start,
+    end: hits[0].end,
+    quote: Array.from(new Set(hits.map(hit => hit.phrase))).slice(0, 6).join('、'),
+    occurrences: hits.slice(0, 30).map(hit => ({ start: hit.start, end: hit.end })),
+    message: t('review.aiTrace.clicheExpression', { count: hits.length, distinct }),
+    metric: { label: 'clicheHits', value: hits.length, threshold: thresholds.minClicheHits },
+    hint: t('review.aiTrace.clicheExpressionHint'),
+  }]
+}
+
+// ===== 6. 万能副词 =====
+
+function detectUniversalAdverbs(
+  text: string,
+  thresholds: AiTraceThresholds,
+): AiTraceFinding[] {
+  const hits: Array<{ adverb: string; start: number; end: number }> = []
+  for (const adverb of UNIVERSAL_ADVERBS) {
+    for (const hit of findAllOccurrences(text, adverb)) hits.push({ adverb, ...hit })
+  }
+  if (hits.length < thresholds.minUniversalAdverbHits) return []
+  const kiloChars = Math.max(1, countMeaningfulChars(text) / 1000)
+  const density = Math.round((hits.length / kiloChars) * 100) / 100
+  if (density < thresholds.maxUniversalAdverbPerKilo) return []
+  hits.sort((a, b) => a.start - b.start)
+  const counts = countBy(hits.map(hit => hit.adverb))
+  return [{
+    id: 'trace-universal-adverb',
+    kind: 'universal-adverb',
+    start: hits[0].start,
+    end: hits[0].end,
+    quote: formatTopCounts(counts, 5),
+    occurrences: hits.slice(0, 30).map(hit => ({ start: hit.start, end: hit.end })),
+    message: t('review.aiTrace.universalAdverb', { count: hits.length, density }),
+    metric: { label: 'perKiloChars', value: density, threshold: thresholds.maxUniversalAdverbPerKilo },
+    hint: t('review.aiTrace.universalAdverbHint'),
+  }]
+}
+
+// ===== 7. 对白标签 =====
+
+function detectDialogueTags(
+  text: string,
+  thresholds: AiTraceThresholds,
+): AiTraceFinding[] {
+  const hits: Array<{ tag: string; start: number; end: number }> = []
+  for (const tag of DIALOGUE_TAGS) {
+    for (const hit of findAllOccurrences(text, tag)) hits.push({ tag, ...hit })
+  }
+  if (hits.length < thresholds.minDialogueTags) return []
+  hits.sort((a, b) => a.start - b.start)
+  const counts = countBy(hits.map(hit => hit.tag))
+  return [{
+    id: 'trace-dialogue-tag',
+    kind: 'dialogue-tag',
+    start: hits[0].start,
+    end: hits[0].end,
+    quote: formatTopCounts(counts, 5),
+    occurrences: hits.slice(0, 30).map(hit => ({ start: hit.start, end: hit.end })),
+    message: t('review.aiTrace.dialogueTag', { count: hits.length }),
+    metric: { label: 'dialogueTags', value: hits.length, threshold: thresholds.minDialogueTags },
+    hint: t('review.aiTrace.dialogueTagHint'),
+  }]
+}
+
+// ===== 8. 转折 / 递进模板 =====
+
+function detectTransitionTemplates(
+  text: string,
+  thresholds: AiTraceThresholds,
+): AiTraceFinding[] {
+  const hits: Array<{ phrase: string; start: number; end: number }> = []
+  for (const phrase of TRANSITION_TEMPLATES) {
+    for (const hit of findAllOccurrences(text, phrase)) hits.push({ phrase, ...hit })
+  }
+  if (hits.length < thresholds.minTransitionHits) return []
+  hits.sort((a, b) => a.start - b.start)
+  return [{
+    id: 'trace-transition-template',
+    kind: 'transition-template',
+    start: hits[0].start,
+    end: hits[0].end,
+    quote: Array.from(new Set(hits.map(hit => hit.phrase))).slice(0, 6).join('、'),
+    occurrences: hits.slice(0, 30).map(hit => ({ start: hit.start, end: hit.end })),
+    message: t('review.aiTrace.transitionTemplate', { count: hits.length }),
+    metric: { label: 'transitionHits', value: hits.length, threshold: thresholds.minTransitionHits },
+    hint: t('review.aiTrace.transitionTemplateHint'),
+  }]
+}
+
+/** 统计出现次数（值降序） */
+function countBy(items: string[]): Array<[string, number]> {
+  const counts = new Map<string, number>()
+  for (const item of items) counts.set(item, (counts.get(item) || 0) + 1)
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
+}
+
+/** 格式化为「词×次数」列表 */
+function formatTopCounts(counts: Array<[string, number]>, limit: number): string {
+  return counts.slice(0, limit).map(([word, count]) => `${word}×${count}`).join('、')
 }

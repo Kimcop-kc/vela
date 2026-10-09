@@ -218,14 +218,16 @@ function formatOpenPlotLines(lines: PlotLine[]): string {
 
 /** 把事实条目格式化为短文本 */
 function formatFacts(facts: Fact[]): string {
-  if (facts.length === 0) return ''
-  // 取最近 30 条避免 prompt 过大
-  return facts
+  // 记忆状态：outdated 不再注入；contradicted / tentative 注入时带标记供模型与作者注意。
+  const visible = facts.filter(fact => (fact.status ?? 'active') !== 'outdated')
+  if (visible.length === 0) return ''
+  return visible
     .slice(-30)
     .map(f => {
       const statement = escapeTemplateVars(f.statement)
       const evidence = f.evidence ? `，证据："${escapeTemplateVars(f.evidence)}"` : ''
-      return `- [${f.category}] ${statement}（引入第${f.introducedAt}章${evidence}）`
+      const statusTag = f.status === 'contradicted' ? '⚠️矛盾待确认 ' : f.status === 'tentative' ? '暂定 ' : ''
+      return `- [${f.category}] ${statusTag}${statement}（引入第${f.introducedAt}章${evidence}）`
     })
     .join('\n')
 }

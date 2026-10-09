@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchWithRetry } from '../llm/fetch-retry'
+import { fetchWithRetry, formatApiError } from '../llm/fetch-retry'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -53,5 +53,32 @@ describe('fetchWithRetry', () => {
 
     expect(response.status).toBe(429)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry a model usage-limit 429 (SetLimitExceeded)', async () => {
+    const body = JSON.stringify({
+      error: {
+        code: 'SetLimitExceeded',
+        message: 'Your account has reached the set usage limit for the [glm-5-2] model, and the model service has been paused.',
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(body, { status: 429 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await fetchWithRetry('https://example.com', { method: 'POST' }, { maxAttempts: 3 })
+
+    expect(response.status).toBe(429)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('turns a model usage-limit error into an actionable message', () => {
+    const message = formatApiError(429, JSON.stringify({
+      error: {
+        code: 'SetLimitExceeded',
+        message: 'reached the set usage limit; close the "Safe Experience Mode"',
+      },
+    }))
+    expect(message).toContain('用量上限')
+    expect(message).toContain('安全体验模式')
   })
 })

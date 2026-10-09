@@ -4,6 +4,7 @@ import type { SkillInputField } from '../agent/skill-inputs'
 import i18n from '../../i18n'
 
 import type { DraftStatus } from '../../shared/draft-status'
+import type { AiTraceKind } from '../review'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
@@ -75,7 +76,7 @@ export interface DeaiReviseParams {
   draftPath: string
   draftContent: string
   /** 只处理指定的痕迹类型；缺省时处理全部 */
-  kinds?: Array<'high-frequency-word' | 'monotonous-sentence' | 'over-summary'>
+  kinds?: AiTraceKind[]
 }
 
 /** 文风指南编译参数 */

@@ -652,6 +652,14 @@ ipcMain.handle('db:revision-create', async (_event, params: {
     CanonRepository.clearChapterFacts(chapterNumber)
     return { success: true }
   })
+  ipcMain.handle('db:canon-fact-mark-status', async (_event, id: number, status: 'active' | 'outdated' | 'contradicted' | 'tentative') => {
+    try {
+      CanonRepository.markFactStatus(id, status)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
 
   // 章节摘要
   ipcMain.handle('db:canon-summary-get', async (_event, chapterNumber: number) => {

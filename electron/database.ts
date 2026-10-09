@@ -49,7 +49,7 @@ export function getCurrentProjectPath(): string | null {
 }
 
 /** 已执行的 schema 迁移版本号（用于幂等迁移） */
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 /** 对老库执行 schema 迁移（加 UNIQUE/CHECK 约束等） */
 function migrateProjectDatabase(db: BetterSqlite3.Database): void {
@@ -113,6 +113,17 @@ function migrateProjectDatabase(db: BetterSqlite3.Database): void {
         db.exec(`CREATE UNIQUE INDEX idx_canon_plot_unique ON canon_plot_lines(name COLLATE NOCASE)`)
       } catch (e) {
         console.warn('[Vela DB] 添加 canon_plot unique 约束失败:', e)
+      }
+    }
+  }
+  // v1 → v2: canon_facts 增加 status 列（记忆状态：active / outdated / contradicted / tentative）
+  if (currentVersion < 2) {
+    const columns = db.prepare('PRAGMA table_info(canon_facts)').all() as Array<{ name: string }>
+    if (!columns.some(column => column.name === 'status')) {
+      try {
+        db.exec(`ALTER TABLE canon_facts ADD COLUMN status TEXT DEFAULT 'active'`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_facts.status 列失败:', e)
       }
     }
   }
@@ -401,6 +412,7 @@ function createTables(db: BetterSqlite3.Database) {
       introduced_at INTEGER DEFAULT 0,
       characters TEXT DEFAULT '[]',
       evidence TEXT DEFAULT '',
+      status TEXT DEFAULT 'active',                -- active/outdated/contradicted/tentative
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_canon_facts_category ON canon_facts(category);

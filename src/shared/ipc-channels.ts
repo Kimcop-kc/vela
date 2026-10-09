@@ -452,6 +452,7 @@ export interface DatabaseChannels {
   'db:canon-fact-list': { args: []; return: CanonFact[] }
   'db:canon-fact-add': { args: [fact: CanonFactInput]; return: { success: boolean; id?: number; error?: string } }
   'db:canon-fact-clear-chapter': { args: [chapterNumber: number]; return: { success: boolean } }
+  'db:canon-fact-mark-status': { args: [id: number, status: 'active' | 'outdated' | 'contradicted' | 'tentative']; return: { success: boolean; error?: string } }
   'db:canon-summary-get': { args: [chapterNumber: number]; return: CanonChapterSummary | null }
   'db:canon-summary-list-recent': { args: [limit?: number]; return: CanonChapterSummary[] }
   'db:canon-summary-list-up-to': { args: [maxChapter: number]; return: CanonChapterSummary[] }
@@ -460,7 +461,7 @@ export interface DatabaseChannels {
   // 原子写回（推荐路径：单次事务）
   'db:canon-writeback-atomic': {
     args: [payload: CanonWritebackPayload]
-    return: { success: boolean; error?: string; timelineIds?: number[]; characterStatesWritten?: number; plotIds?: number[]; factIds?: number[] }
+    return: { success: boolean; error?: string; timelineIds?: number[]; characterStatesWritten?: number; plotIds?: number[]; factIds?: number[]; conflicts?: Array<{ aId: number; bId: number; reason: string }> }
   }
 }
 
@@ -577,6 +578,7 @@ export interface CanonFact {
   introducedAt: number
   characters: string[]
   evidence?: string
+  status?: 'active' | 'outdated' | 'contradicted' | 'tentative'
 }
 export interface CanonFactInput {
   category: 'world' | 'location' | 'item' | 'event' | 'relationship' | 'identity'
@@ -584,6 +586,7 @@ export interface CanonFactInput {
   introducedAt: number
   characters: string[]
   evidence?: string
+  status?: 'active' | 'outdated' | 'contradicted' | 'tentative'
 }
 export interface CanonChapterSummary {
   chapterNumber: number
