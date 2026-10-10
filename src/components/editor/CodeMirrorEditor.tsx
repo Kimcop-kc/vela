@@ -6,6 +6,7 @@ import { languages } from '@codemirror/language-data'
 import { EditorState } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { Sparkles, Bold } from 'lucide-react'
+import { applyInlineDiffSelection, computeInlineDiff } from '../../services/text-diff'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 
@@ -99,11 +100,27 @@ export default function CodeMirrorEditor({
   const [aiGenerating, setAiGenerating] = useState(false)
   /** 本次结果是否被输出上限截断：预览里给出提示，避免用户直接把不完整的改写替换进正文 */
   const [aiTruncated, setAiTruncated] = useState(false)
+  /** 本次动作处理前的原文：用于「对比」视图标出改动 */
+  const [aiOriginal, setAiOriginal] = useState('')
+  /** 本次动作是覆盖选区还是插到选区之后：决定按钮文案与是否提供对比 */
+  const [aiActionMode, setAiActionMode] = useState<'replace' | 'append'>('replace')
+  const [aiPreviewView, setAiPreviewView] = useState<'diff' | 'changes' | 'result'>('diff')
+  /** 「逐条」视图里被退回的改动序号：退回的改动保持原文，其余采用改写 */
+  const [aiRejectedChanges, setAiRejectedChanges] = useState<Set<number>>(new Set())
   const [aiExtra, setAiExtra] = useState('')
   const aiRequestIdRef = useRef<string | null>(null)
   /** 最近一次发起动作（含选区范围）：供「重新生成」与「替换/插入」复用 */
   const lastActionRef = useRef<{ action: AiAction, from: number, to: number } | null>(null)
   const cancelledRef = useRef(false)
+
+  // 改动对比：只在「覆盖型」动作、且已有产出时计算；续写是新增内容，不存在可对比的原文。
+  // 流式生成期间不计算（半成品对比没意义，而且每来一段都重算会拖慢预览）。
+  const aiDiff = useMemo(
+    () => (aiGenerating || aiActionMode !== 'replace' || !aiOriginal || !aiResult
+      ? null
+      : computeInlineDiff(aiOriginal, aiResult)),
+    [aiGenerating, aiActionMode, aiOriginal, aiResult],
+  )
 
   /** 中断进行中的选区 AI 请求（请求已结束则为无操作） */
   const cancelAIAction = useCallback(() => {
@@ -141,6 +158,8 @@ export default function CodeMirrorEditor({
         cancelAIAction()
         setAiResult(null)
         setAiTruncated(false)
+        setAiOriginal('')
+        setAiRejectedChanges(new Set())
         setSelectionRange(null)
         setBubbleOpen(false)
         return
@@ -348,6 +367,9 @@ export default function CodeMirrorEditor({
     if (after) userParts.push(`${t('codeMirrorEditor.aiContextAfterLabel')}\n${after}`)
 
     setActiveAIAction(action.label)
+    setAiActionMode(action.mode)
+    setAiOriginal(selectedText)
+    setAiRejectedChanges(new Set())
     setAiResult('')
     setAiGenerating(true)
     setAiTruncated(false)
@@ -406,20 +428,26 @@ export default function CodeMirrorEditor({
   const handleAcceptAI = () => {
     const view = editorRef.current?.view
     const last = lastActionRef.current
-    if (view && last && aiResult) {
+    // 「逐条」里退回过改动时，只把选中的那几处写回去，其余保持原文
+    const textToApply = aiResult && aiDiff && aiRejectedChanges.size > 0
+      ? applyInlineDiffSelection(aiDiff, aiRejectedChanges)
+      : aiResult
+    if (view && last && textToApply) {
       if (last.action.mode === 'append') {
         // 续写：插到选区之后，保留原文
         view.dispatch({
-          changes: { from: last.to, to: last.to, insert: aiResult },
-          selection: { anchor: last.to + aiResult.length },
+          changes: { from: last.to, to: last.to, insert: textToApply },
+          selection: { anchor: last.to + textToApply.length },
         })
       } else {
-        view.dispatch({ changes: { from: last.from, to: last.to, insert: aiResult } })
+        view.dispatch({ changes: { from: last.from, to: last.to, insert: textToApply } })
       }
     }
     setAiResult(null)
     setAiGenerating(false)
     setAiTruncated(false)
+    setAiOriginal('')
+    setAiRejectedChanges(new Set())
     aiRequestIdRef.current = null
     setBubbleOpen(false)
   }
@@ -428,6 +456,8 @@ export default function CodeMirrorEditor({
     cancelAIAction()
     setAiResult(null)
     setAiTruncated(false)
+    setAiOriginal('')
+    setAiRejectedChanges(new Set())
     setBubbleOpen(false)
   }
 
@@ -507,12 +537,36 @@ export default function CodeMirrorEditor({
           }}
         >
           {aiResult !== null ? (
-            <div className="w-[360px] max-h-[260px] overflow-y-auto p-2">
-              <div
-                className="text-[10px] mb-1.5 font-medium flex items-center gap-1"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                <Sparkles size={11} style={{ color: 'var(--color-accent)' }} /> {activeAIAction ? t('codeMirrorEditor.aiPreviewWithAction', { action: activeAIAction }) : t('codeMirrorEditor.aiPreview')}
+            <div className="w-[420px] max-h-[260px] overflow-y-auto p-2">
+              <div className="flex items-center justify-between mb-1.5 gap-2">
+                <div
+                  className="text-[10px] font-medium flex items-center gap-1"
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  <Sparkles size={11} style={{ color: 'var(--color-accent)' }} /> {activeAIAction ? t('codeMirrorEditor.aiPreviewWithAction', { action: activeAIAction }) : t('codeMirrorEditor.aiPreview')}
+                </div>
+                {aiResult !== '' && aiActionMode === 'replace' && (
+                  <div
+                    className="flex items-center rounded-md overflow-hidden flex-shrink-0"
+                    style={{ border: '1px solid var(--color-border)' }}
+                  >
+                    {(aiDiff && !aiDiff.tooLong ? (['diff', 'changes', 'result'] as const) : (['diff', 'result'] as const)).map(view => (
+                      <button
+                        key={view}
+                        className="px-2 py-0.5 text-[10px] transition-colors"
+                        style={{
+                          backgroundColor: aiPreviewView === view ? 'var(--color-accent)' : 'transparent',
+                          color: aiPreviewView === view ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                        }}
+                        onClick={() => setAiPreviewView(view)}
+                      >
+                        {view === 'diff'
+                          ? t('codeMirrorEditor.compareView')
+                          : view === 'changes' ? t('codeMirrorEditor.changesView') : t('codeMirrorEditor.resultView')}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               {/* 流式输入中显示动态内容 */}
               {aiResult === '' ? (
@@ -522,6 +576,107 @@ export default function CodeMirrorEditor({
                 >
                   {t('codeMirrorEditor.generating')} {loadingDots}
                 </div>
+              ) : aiDiff && aiPreviewView === 'changes' ? (
+                <>
+                  <div
+                    className="text-[10px] mb-1.5 flex items-center justify-between gap-2"
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    <span>{t('codeMirrorEditor.changesSelected', { selected: aiDiff.changeGroups - aiRejectedChanges.size, total: aiDiff.changeGroups })}</span>
+                    <span className="flex items-center gap-2">
+                      <button
+                        className="transition-colors"
+                        style={{ color: 'var(--color-accent)' }}
+                        onClick={() => setAiRejectedChanges(new Set())}
+                      >{t('codeMirrorEditor.selectAll')}</button>
+                      <button
+                        className="transition-colors"
+                        style={{ color: 'var(--color-accent)' }}
+                        onClick={() => setAiRejectedChanges(new Set(aiDiff.changes.map((_, index) => index)))}
+                      >{t('codeMirrorEditor.selectNone')}</button>
+                    </span>
+                  </div>
+                  <div className="mb-3">
+                    {aiDiff.changes.map((change, index) => {
+                      const keep = !aiRejectedChanges.has(index)
+                      const clip = (text: string) => (text.length > 80 ? `${text.slice(0, 80)}…` : text)
+                      return (
+                        <label
+                          key={index}
+                          className="flex items-start gap-2 py-1 cursor-pointer"
+                          style={{ opacity: keep ? 1 : 0.55 }}
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 flex-shrink-0"
+                            checked={keep}
+                            onChange={() => setAiRejectedChanges(previous => {
+                              const next = new Set(previous)
+                              if (next.has(index)) next.delete(index)
+                              else next.add(index)
+                              return next
+                            })}
+                          />
+                          <span className="text-[11px] leading-snug flex-1 break-all">
+                            {change.removed && (
+                              <span style={{ color: 'var(--color-error)', textDecoration: keep ? 'line-through' : 'none' }}>
+                                {clip(change.removed)}
+                              </span>
+                            )}
+                            {change.removed && change.added && (
+                              <span style={{ color: 'var(--color-text-muted)' }}> → </span>
+                            )}
+                            {change.added && (
+                              <span style={{ color: keep ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                                {clip(change.added)}
+                              </span>
+                            )}
+                            {!change.removed && !change.added && (
+                              <span style={{ color: 'var(--color-text-muted)' }}>（无变化）</span>
+                            )}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </>
+              ) : aiDiff && aiPreviewView === 'diff' ? (
+                <>
+                  <div
+                    className="text-[10px] mb-1 flex items-center gap-2"
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    {aiDiff.identical
+                      ? t('codeMirrorEditor.diffIdentical')
+                      : t('codeMirrorEditor.diffStats', { count: aiDiff.changeGroups, added: aiDiff.addedChars, removed: aiDiff.removedChars })}
+                    {aiDiff.tooLong && <span style={{ color: 'var(--color-warning-text)' }}>{t('codeMirrorEditor.diffTooLong')}</span>}
+                  </div>
+                  <div className="text-xs whitespace-pre-wrap leading-relaxed mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+                    {aiDiff.segments.map((seg, index) =>
+                      seg.kind === 'same' ? (
+                        <span key={index}>{seg.text}</span>
+                      ) : seg.kind === 'add' ? (
+                        <span
+                          key={index}
+                          style={{ color: 'var(--color-success)', backgroundColor: 'rgba(var(--color-success-rgb), 0.18)' }}
+                        >
+                          {seg.text}
+                        </span>
+                      ) : (
+                        <span
+                          key={index}
+                          style={{
+                            color: 'var(--color-error)',
+                            backgroundColor: 'rgba(var(--color-error-rgb), 0.16)',
+                            textDecoration: 'line-through',
+                          }}
+                        >
+                          {seg.text}
+                        </span>
+                      )
+                    )}
+                  </div>
+                </>
               ) : (
                 <div
                   className="text-xs whitespace-pre-wrap leading-relaxed mb-3"
@@ -587,7 +742,9 @@ export default function CodeMirrorEditor({
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                   disabled={!aiResult || aiGenerating}
                   onClick={handleAcceptAI}
-                >{lastActionRef.current?.action.mode === 'append' ? t('codeMirrorEditor.insert') : t('codeMirrorEditor.replace')}</button>
+                >{aiActionMode === 'append'
+                  ? t('codeMirrorEditor.insert')
+                  : aiRejectedChanges.size > 0 && aiDiff ? t('codeMirrorEditor.replaceSelected') : t('codeMirrorEditor.replace')}</button>
               </div>
             </div>
           ) : (

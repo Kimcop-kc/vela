@@ -135,6 +135,17 @@
   word-break: break-word;
   background: rgba(var(--color-text-muted-rgb), 0.05);
 }
+.twm-word-removed {
+  background: rgba(var(--color-error-rgb), 0.26);
+  color: var(--color-error);
+  text-decoration: line-through;
+  border-radius: 2px;
+}
+.twm-word-added {
+  background: rgba(var(--color-success-rgb), 0.24);
+  color: var(--color-success-text);
+  border-radius: 2px;
+}
 .twm-line-placeholder {
   padding: 0 16px;
   white-space: pre-wrap;
