@@ -12,7 +12,10 @@ import { deconstructBook, listBooks, removeBook } from '../book-deconstruct'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { pickModelIdForCategory } from '../../src/shared/purpose-routing'
 
-function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string } } | null {
+function getEmbeddingConfig(): {
+  protocol: 'openai' | 'gemini'
+  model: { baseUrl: string; apiKey: string; modelName: string; provider?: string; purposes?: string[] }
+} | null {
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
   const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
   // 与渲染进程共用同一条回退链：用途绑定 → 默认向量模型 → 声明向量能力的模型 → 默认生成模型
@@ -28,7 +31,8 @@ function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl
   if (!model) return null
   return {
     protocol: model.protocol as 'openai' | 'gemini',
-    model: { baseUrl: model.baseUrl, apiKey: model.apiKey, modelName: model.modelName },
+    // provider / purposes 一并带上：本地推理（Ollama 等）没有 apiKey，靠它们判断能不能用向量
+    model: { baseUrl: model.baseUrl, apiKey: model.apiKey, modelName: model.modelName, provider: model.provider, purposes: model.purposes },
   }
 }
 

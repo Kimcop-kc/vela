@@ -13,7 +13,7 @@ export default defineConfig({
       'electron/__tests__/ipc-validation.test.ts',
       'src/i18n/__tests__/i18n.test.ts',
       'src/services/__tests__/*.test.ts',
-      'electron/__tests__/{ollama-models,rehearsal-*,story-revision,draft-lifecycle,chapter-rollback,chapter-splitting,vector-store-page,vector-store-search,app-logger,fetch-retry,chunk-rejoin,epub-export,skill-package,project-backup}.test.ts',
+      'electron/__tests__/{ollama-models,rehearsal-*,story-revision,draft-lifecycle,chapter-rollback,chapter-splitting,vector-store-page,vector-store-search,embedding-availability,app-logger,fetch-retry,chunk-rejoin,epub-export,skill-package,project-backup}.test.ts',
     ],
     globals: false,
   },

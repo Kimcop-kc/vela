@@ -8,7 +8,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { chunkText, generateEmbeddings } from './embedding'
+import { canUseEmbedding, chunkText, generateEmbeddings } from './embedding'
 import { addChunks, removeDocument as removeDocFromStore, listDocuments as storeListDocuments } from './vector-store'
 import { splitFileIntoChaptersAsync } from './chapter-splitting'
 import type { BookChapterEntry, BookRecord } from '../src/shared/ipc-channels'
@@ -54,7 +54,7 @@ export async function deconstructBook(
   filePath: string,
   projectPath: string,
   protocol: 'openai' | 'gemini',
-  model: { baseUrl: string; apiKey: string },
+  model: { baseUrl: string; apiKey: string; provider?: string; purposes?: string[] },
   onProgress?: (progress: BookImportProgress) => void,
 ): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
   try {
@@ -79,9 +79,9 @@ export async function deconstructBook(
       const chunks = chunkText(chapter.content, 500, 50)
       if (chunks.length === 0) continue
 
-      // 可选：生成向量（未配置 Embedding 模型时降级为纯全文检索）
+      // 可选：生成向量（未配置向量模型时降级为纯全文检索；本地模型没有 key 也要能用）
       let vectors: number[][] | undefined
-      if (model.apiKey) {
+      if (canUseEmbedding(model)) {
         try {
           onProgress?.({ phase: 'embedding', current: index + 1, total: chapters.length })
           vectors = await generateEmbeddings(chunks, protocol, model)

@@ -13,7 +13,10 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import * as lancedb from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
-import { chunkText, generateEmbeddings } from './embedding'
+import { canUseEmbedding, chunkText, generateEmbeddings } from './embedding'
+
+/** 向量模型配置：本地服务（Ollama 等）没有 apiKey，靠 provider/purposes 判断能不能用 */
+type EmbeddingModelConfig = { baseUrl: string; apiKey: string; provider?: string; purposes?: string[] }
 import {
   addChunks,
   removeDocument as removeDocFromStore,
@@ -53,7 +56,7 @@ export async function importDocument(
   filePath: string,
   projectPath: string,
   protocol: 'openai' | 'gemini',
-  model: { baseUrl: string; apiKey: string },
+  model: EmbeddingModelConfig,
   onProgress?: (progress: number, message: string) => void,
 ): Promise<{ success: boolean; docId?: string; chunkCount?: number; error?: string }> {
   try {
@@ -77,9 +80,9 @@ export async function importDocument(
     const chunks = chunkText(content, 500, 50)
     const docId = randomUUID()
 
-    // 3. 可选：生成向量（如果有 Embedding 配置）
+    // 3. 可选：生成向量（配置了向量模型就尝试；失败只降级，不影响导入）
     let vectors: number[][] | undefined
-    if (model.apiKey) {
+    if (canUseEmbedding(model)) {
       try {
         onProgress?.(20, `正在向量化 ${chunks.length} 个块...`)
         vectors = await generateEmbeddings(chunks, protocol, model)
@@ -113,7 +116,7 @@ export async function searchKnowledge(
   query: string,
   projectPath: string,
   protocol: 'openai' | 'gemini',
-  model: { baseUrl: string; apiKey: string },
+  model: EmbeddingModelConfig,
   topK: number = 5,
   chapterScope?: [number, number],
 ): Promise<Array<{ text: string; score: number; fileName: string }>> {
@@ -121,7 +124,7 @@ export async function searchKnowledge(
 
   // 可选：生成查询向量
   let queryVector: number[] | undefined
-  if (model.apiKey && query.trim()) {
+  if (canUseEmbedding(model) && query.trim()) {
     try {
       const [vec] = await generateEmbeddings([query], protocol, model)
       if (vec && vec.length > 0) {
@@ -172,7 +175,7 @@ export async function importFolder(
   folderPath: string,
   projectPath: string,
   protocol: 'openai' | 'gemini',
-  model: { baseUrl: string; apiKey: string },
+  model: EmbeddingModelConfig,
   onProgress?: (current: number, total: number, fileName: string) => void,
 ): Promise<{
   success: boolean
@@ -244,7 +247,7 @@ export async function importText(
   fileName: string,
   projectPath: string,
   protocol: 'openai' | 'gemini',
-  model: { baseUrl: string; apiKey: string },
+  model: EmbeddingModelConfig,
 ): Promise<{ success: boolean; docId?: string; chunkCount?: number; error?: string }> {
   try {
     if (!text.trim()) return { success: false, error: '文本内容为空' }
@@ -260,7 +263,7 @@ export async function importText(
 
     // 可选：生成向量
     let vectors: number[][] | undefined
-    if (model.apiKey) {
+    if (canUseEmbedding(model)) {
       try {
         vectors = await generateEmbeddings(chunks, protocol, model)
       } catch (e) {
@@ -303,7 +306,7 @@ export async function getVectorlessCount(projectPath: string): Promise<{ count: 
 export async function backfillVectors(
   projectPath: string,
   protocol: 'openai' | 'gemini',
-  model: { baseUrl: string; apiKey: string },
+  model: EmbeddingModelConfig,
 ): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
   try {
     const { count: total } = await storeGetChunksWithoutVectors(projectPath)

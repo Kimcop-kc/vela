@@ -10,6 +10,23 @@
 
 // ===== Embedding API 调用 =====
 
+/**
+ * 本次是否应该尝试调用向量模型。
+ *
+ * 不能只看 apiKey：本地推理（Ollama 等）不需要密钥，之前因为 key 为空就整个跳过，
+ * 导致本地向量模型永远不生效——导入不生成向量、检索也不算查询向量，一直退化成关键词匹配。
+ */
+export function canUseEmbedding(model: { apiKey?: string; provider?: string; purposes?: string[] }): boolean {
+  if (model.apiKey) return true
+  if (model.provider === 'ollama') return true
+  return (model.purposes ?? []).includes('embedding')
+}
+
+/** 本地无鉴权的服务不该带一个空的 Authorization 头 */
+function authHeader(apiKey: string): Record<string, string> {
+  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+}
+
 /** OpenAI Embedding API */
 export async function embedOpenAI(
   texts: string[],
@@ -33,7 +50,7 @@ export async function embedOpenAI(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${model.apiKey}`,
+      ...authHeader(model.apiKey),
     },
     body: JSON.stringify({
       model: embeddingModel,
