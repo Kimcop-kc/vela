@@ -897,10 +897,11 @@ export async function generateJsonItemsWithResume(options: JsonResumeOptions): P
       tail: tailOf(trimIncompleteJsonTail(lastText)),
     })
     rounds = round + 1
-    lastText = result.text
+    // 模型偶尔把思维链以 <think>…</think> 的形式混在正文里；先剥离，避免污染 JSON 解析与续写尾部。
+    lastText = stripThinkingSegments(result.text)
     truncated = result.truncated === true
 
-    const salvaged = salvageJson(result.text).items
+    const salvaged = salvageJson(lastText).items
     const before = items.length
     if (salvaged.length > 0) {
       items = mergeByKey([items, salvaged], { keyOf: options.keyOf, prefer, keepInvalid: true })
@@ -914,6 +915,11 @@ export async function generateJsonItemsWithResume(options: JsonResumeOptions): P
   }
 
   return { items, rounds, truncated, text: lastText }
+}
+
+/** 去掉模型泄漏在正文里的 <think>…</think> 思维链片段。 */
+function stripThinkingSegments(text: string): string {
+  return (text || '').replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
 }
 
 // ===== 分段 / 续写指令（i18n） =====

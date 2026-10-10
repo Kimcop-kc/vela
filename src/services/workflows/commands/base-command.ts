@@ -123,7 +123,13 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string },
     context?: WorkflowContext
   ): Promise<string> {
-    return this.callLLM(builder.build(), builder.getSystemRole(), callbacks, options, context)
+    const prompt = builder.build()
+    // 模板引用了未赋值的变量（多见于自定义提示词写错变量名）：占位符已从提示词中移除，
+    // 这里明确提示一次，避免「提示词少了一大段」这种问题只留在控制台日志里。
+    if (builder.missingVariables.length > 0) {
+      callbacks.log(i18n.t('common.promptMissingVars', { ns: 'commands', template: builder.templateName, vars: builder.missingVariables.join('、') }))
+    }
+    return this.callLLM(prompt, builder.getSystemRole(), callbacks, options, context)
   }
 
   /**

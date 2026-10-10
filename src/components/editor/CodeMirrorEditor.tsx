@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import CodeMirror, { ReactCodeMirrorRef, EditorView, ViewUpdate, ExternalChange } from '@uiw/react-codemirror'
 import { keymap } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -12,6 +12,26 @@ import { cn } from '../../lib/utils'
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
   return text.length
+}
+
+/** 选区上下文注入长度：让改写贴合语境，又不至于把提示词撑大。 */
+const CONTEXT_BEFORE_CHARS = 400
+const CONTEXT_AFTER_CHARS = 200
+
+/** 去掉模型泄漏在流里的思维链（<think>…</think>），避免预览和「替换」把思考过程写进正文。 */
+function stripThinkingSegments(text: string): string {
+  return (text || '').replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+}
+
+/** 选区 AI 动作；replace=用结果覆盖选区，append=把结果插到选区之后（续写用） */
+type AiAction = {
+  key: string
+  label: string
+  color: string
+  prompt: string
+  mode: 'replace' | 'append'
+  /** 调用用途：决定走哪类模型（refine_* → 精修用途；generate_* → 生成用途） */
+  purpose: string
 }
 
 export type CodeMirrorEditorProps = {
@@ -37,11 +57,12 @@ export default function CodeMirrorEditor({
   const { t } = useTranslation('editors')
   const editorRef = useRef<ReactCodeMirrorRef>(null)
 
-  const AI_ACTIONS = useMemo(() => [
-    { key: 'refine', label: t('codeMirrorEditor.aiRefine'), color: 'text-blue-400', prompt: t('codeMirrorEditor.aiRefinePrompt') },
-    { key: 'expand', label: t('codeMirrorEditor.aiExpand'), color: 'text-amber-400', prompt: t('codeMirrorEditor.aiExpandPrompt') },
-    { key: 'continue', label: t('codeMirrorEditor.aiContinue'), color: 'text-purple-400', prompt: t('codeMirrorEditor.aiContinuePrompt') },
-    { key: 'dialogue', label: t('codeMirrorEditor.aiDialogue'), color: 'text-emerald-400', prompt: t('codeMirrorEditor.aiDialoguePrompt') },
+  const AI_ACTIONS = useMemo<AiAction[]>(() => [
+    { key: 'refine', label: t('codeMirrorEditor.aiRefine'), color: 'text-blue-400', prompt: t('codeMirrorEditor.aiRefinePrompt'), mode: 'replace', purpose: 'refine_selection' },
+    { key: 'expand', label: t('codeMirrorEditor.aiExpand'), color: 'text-amber-400', prompt: t('codeMirrorEditor.aiExpandPrompt'), mode: 'replace', purpose: 'refine_selection' },
+    { key: 'continue', label: t('codeMirrorEditor.aiContinue'), color: 'text-purple-400', prompt: t('codeMirrorEditor.aiContinuePrompt'), mode: 'append', purpose: 'generate_selection_continuation' },
+    { key: 'dialogue', label: t('codeMirrorEditor.aiDialogue'), color: 'text-emerald-400', prompt: t('codeMirrorEditor.aiDialoguePrompt'), mode: 'replace', purpose: 'refine_selection' },
+    { key: 'deai', label: t('codeMirrorEditor.aiDeai'), color: 'text-rose-400', prompt: t('codeMirrorEditor.aiDeaiPrompt'), mode: 'replace', purpose: 'deai_revise' },
   ], [t])
 
   // 避免状态回路
@@ -68,10 +89,32 @@ export default function CodeMirrorEditor({
   // ===== Bubble Menu 逻辑 =====
   const [bubbleOpen, setBubbleOpen] = useState(false)
   const [bubblePos, setBubblePos] = useState({ top: 0, left: 0 })
+  const bubbleRef = useRef<HTMLDivElement>(null)
+  /** 气泡锚点（视口坐标）：选区当前在屏幕上的位置，滚动/缩放后据此重算落点 */
+  const bubbleAnchorRef = useRef<{ top: number; bottom: number; centerLeft: number } | null>(null)
   const [aiResult, setAiResult] = useState<string | null>(null)
   const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  /** 本次结果是否被输出上限截断：预览里给出提示，避免用户直接把不完整的改写替换进正文 */
+  const [aiTruncated, setAiTruncated] = useState(false)
+  const [aiExtra, setAiExtra] = useState('')
+  const aiRequestIdRef = useRef<string | null>(null)
+  /** 最近一次发起动作（含选区范围）：供「重新生成」与「替换/插入」复用 */
+  const lastActionRef = useRef<{ action: AiAction, from: number, to: number } | null>(null)
+  const cancelledRef = useRef(false)
+
+  /** 中断进行中的选区 AI 请求（请求已结束则为无操作） */
+  const cancelAIAction = useCallback(() => {
+    cancelledRef.current = true
+    const reqId = aiRequestIdRef.current
+    aiRequestIdRef.current = null
+    setAiGenerating(false)
+    if (reqId) {
+      void import('../../stores/llm-store').then(m => m.useLLMStore.getState().cancelGeneration(reqId))
+    }
+  }, [])
 
   useEffect(() => {
     if (aiResult === '') {
@@ -92,6 +135,16 @@ export default function CodeMirrorEditor({
 
     if (v.selectionSet || v.docChanged || v.geometryChanged) {
       const sel = v.state.selection.main
+      // 预览面板还开着时用户又改了正文或把光标落回编辑器：放弃这次预览并中断请求。
+      // 否则 aiResult 会一直有值，后续任何选中都弹不出 AI 菜单。
+      if (aiResult !== null && (v.docChanged || sel.empty || sel.to - sel.from < 1)) {
+        cancelAIAction()
+        setAiResult(null)
+        setAiTruncated(false)
+        setSelectionRange(null)
+        setBubbleOpen(false)
+        return
+      }
       if (sel.empty || sel.to - sel.from < 1) {
         setBubbleOpen(false)
         setSelectionRange(null)
@@ -103,9 +156,40 @@ export default function CodeMirrorEditor({
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult])
+  }, [onChange, onCharCountChange, aiResult, cancelAIAction])
 
-  // 监听滚动与缩放，实时更新 Bubble Menu 坐标
+  // 按「实测的气泡尺寸」决定落点：水平贴边。垂直方向上方放不下就翻到选区下方，
+  // 保证无论面板多高（动作菜单很矮、预览面板很高）都不会被窗口裁掉。
+  const applyBubblePosition = useCallback(() => {
+    const view = editorRef.current?.view
+    const anchor = bubbleAnchorRef.current
+    if (!view || !anchor) return
+    const viewRect = view.scrollDOM.getBoundingClientRect()
+    const width = bubbleRef.current?.offsetWidth ?? 0
+    const height = bubbleRef.current?.offsetHeight ?? 0
+    const gap = 5
+    const margin = 8
+
+    let left = anchor.centerLeft
+    if (width) {
+      const min = viewRect.left + width / 2 + margin
+      const max = viewRect.right - width / 2 - margin
+      if (min <= max) left = Math.max(min, Math.min(max, left))
+    }
+
+    // 气泡用 -translate-y-full 定位，所以这里的 top 就是气泡的底边。
+    let bottom = Math.min(anchor.top - gap, viewRect.bottom - margin)
+    if (height && bottom - height < viewRect.top + margin) {
+      bottom = Math.min(anchor.bottom + height + gap, viewRect.bottom - margin)
+    }
+
+    setBubblePos(prev => (
+      Math.abs(prev.top - bottom) < 0.5 && Math.abs(prev.left - left) < 0.5
+        ? prev
+        : { top: bottom, left }
+    ))
+  }, [])
+
   useEffect(() => {
     if (!bubbleOpen || !selectionRange || !editorRef.current?.view) return;
 
@@ -115,37 +199,25 @@ export default function CodeMirrorEditor({
     let rafId: number;
 
     const updatePosition = () => {
-      const sel = window.getSelection()
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
-        const coords = view.coordsAtPos(selectionRange.from)
-        if (coords) {
-          setBubblePos({ top: coords.top, left: coords.left })
-        } else {
-          setBubbleOpen(false)
-        }
-        return
-      }
-
-      const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
       const viewRect = scrollDOM.getBoundingClientRect()
-
-      // 判断选区是否整体完全在视口之外
-      if (rect.bottom < viewRect.top || rect.top > viewRect.bottom || rect.width === 0) {
-        setBubbleOpen(false)
-        return
+      const sel = window.getSelection()
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+        const rect = sel.getRangeAt(0).getBoundingClientRect()
+        // 选区整体滚出视口：收起气泡
+        if (rect.bottom < viewRect.top || rect.top > viewRect.bottom || rect.width === 0) {
+          setBubbleOpen(false)
+          return
+        }
+        bubbleAnchorRef.current = { top: rect.top, bottom: rect.bottom, centerLeft: rect.left + rect.width / 2 }
+      } else {
+        const coords = view.coordsAtPos(selectionRange.from)
+        if (!coords) {
+          setBubbleOpen(false)
+          return
+        }
+        bubbleAnchorRef.current = { top: coords.top, bottom: coords.bottom, centerLeft: coords.left }
       }
-
-      let top = rect.top - 5 // 与选区顶部有些许间距
-      const left = rect.left + rect.width / 2
-
-      // 当用户圈选了一大段并向下滚动时，如果选区顶部滚出了视区，
-      // 我们让气泡悬浮在视区顶部边缘，直到选区底部也完全滚出视区。
-      if (top < viewRect.top + 45) {
-        top = Math.min(viewRect.top + 45, rect.bottom - 10)
-      }
-
-      setBubblePos({ top, left })
+      applyBubblePosition()
     }
 
     const onScrollOrResize = () => {
@@ -164,7 +236,14 @@ export default function CodeMirrorEditor({
       window.removeEventListener('resize', onScrollOrResize)
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [bubbleOpen, selectionRange])
+  }, [bubbleOpen, selectionRange, applyBubblePosition])
+
+  // 气泡在「动作菜单 ↔ 预览面板」「生成中 ↔ 已完成」之间切换时尺寸会变，
+  // 渲染后用实测尺寸重新落点，避免加长/加高的气泡溢出窗口。
+  useLayoutEffect(() => {
+    if (!bubbleOpen) return
+    applyBubblePosition()
+  }, [bubbleOpen, aiResult, activeAIAction, aiGenerating, aiTruncated, selectionRange, applyBubblePosition])
 
   // 主题配置
   const cmTheme = useMemo(() => EditorView.theme({
@@ -247,51 +326,108 @@ export default function CodeMirrorEditor({
   }, [mode, t])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
-  const handleAIAction = async (prompt: string, _actionKey: string) => {
+  const runAIAction = async (action: AiAction, from: number, to: number, extra = '') => {
+    const view = editorRef.current?.view
+    if (!view) return
+    const selectedText = view.state.sliceDoc(from, to)
+    if (!selectedText.trim()) return
+
+    lastActionRef.current = { action, from, to }
+    cancelledRef.current = false
+
+    // 带上选区前后的少量上下文，让改写贴合语境；续写尤其依赖前文。
+    const before = view.state.sliceDoc(Math.max(0, from - CONTEXT_BEFORE_CHARS), from).trim()
+    const after = view.state.sliceDoc(to, Math.min(view.state.doc.length, to + CONTEXT_AFTER_CHARS)).trim()
+    const extraText = extra.trim()
+    const instruction = extraText
+      ? `${t('codeMirrorEditor.aiExtraLabel')}${extraText}\n${action.prompt}`
+      : action.prompt
+    const userParts = [`${t('codeMirrorEditor.aiRequirementLabel')}${instruction}`]
+    if (before) userParts.push(`${t('codeMirrorEditor.aiContextBeforeLabel')}\n${before}`)
+    userParts.push(`${t('codeMirrorEditor.aiSelectionLabel')}\n${selectedText}`)
+    if (after) userParts.push(`${t('codeMirrorEditor.aiContextAfterLabel')}\n${after}`)
+
+    setActiveAIAction(action.label)
+    setAiResult('')
+    setAiGenerating(true)
+    setAiTruncated(false)
     try {
-      if (!selectionRange || !editorRef.current?.view) return
-      const view = editorRef.current.view
-      const selectedText = view.state.sliceDoc(selectionRange.from, selectionRange.to)
-
       const { useLLMStore } = await import('../../stores/llm-store')
-
-      // 初始化流式内容
-      setActiveAIAction(AI_ACTIONS.find(a => a.key === _actionKey)?.label || 'AI')
-      setAiResult('')
-
-      await useLLMStore.getState().generateStream(
+      const reqId = await useLLMStore.getState().generateStream(
         [
           { role: 'system', content: t('codeMirrorEditor.aiSystemPrompt') },
-          { role: 'user', content: `要求：${prompt}\n\n文本：\n${selectedText}` },
+          { role: 'user', content: userParts.join('\n\n') },
         ],
         {
           onChunk: (chunk) => {
-            setAiResult(prev => (prev ?? '') + chunk)
+            setAiResult(prev => stripThinkingSegments((prev ?? '') + chunk))
+          },
+          onDone: (text) => {
+            setAiResult(stripThinkingSegments(text || ''))
+            setAiGenerating(false)
+            setAiTruncated(false)
+            aiRequestIdRef.current = null
+          },
+          // 选区较长时可能撞上输出上限：保留已产出的部分，总比直接报「生成失败」好。
+          onTruncated: (partial) => {
+            setAiResult(stripThinkingSegments(partial || ''))
+            setAiGenerating(false)
+            setAiTruncated(true)
+            aiRequestIdRef.current = null
           },
           onError: () => {
-            setAiResult(t('codeMirrorEditor.generateFailed'))
+            setAiGenerating(false)
+            aiRequestIdRef.current = null
+            // 用户主动停止时保留已生成的部分，不覆盖成「生成失败」
+            if (!cancelledRef.current) setAiResult(t('codeMirrorEditor.generateFailed'))
           },
-        }
+        },
+        undefined,
+        { thinking: false, purpose: action.purpose }
       )
+      aiRequestIdRef.current = reqId || null
     } catch (e) {
       console.error(e)
-      setAiResult(t('codeMirrorEditor.generateFailed'))
+      setAiGenerating(false)
+      if (!cancelledRef.current) setAiResult(t('codeMirrorEditor.generateFailed'))
     }
   }
 
+  const handleRegenerateAI = () => {
+    const last = lastActionRef.current
+    if (last) void runAIAction(last.action, last.from, last.to, aiExtra)
+  }
+
+  const handleStopAI = () => {
+    // 停止但保留已生成的部分，供用户决定是否采用
+    cancelAIAction()
+  }
+
   const handleAcceptAI = () => {
-    if (selectionRange && aiResult && editorRef.current?.view) {
-      const view = editorRef.current.view
-      view.dispatch({
-        changes: { from: selectionRange.from, to: selectionRange.to, insert: aiResult }
-      })
+    const view = editorRef.current?.view
+    const last = lastActionRef.current
+    if (view && last && aiResult) {
+      if (last.action.mode === 'append') {
+        // 续写：插到选区之后，保留原文
+        view.dispatch({
+          changes: { from: last.to, to: last.to, insert: aiResult },
+          selection: { anchor: last.to + aiResult.length },
+        })
+      } else {
+        view.dispatch({ changes: { from: last.from, to: last.to, insert: aiResult } })
+      }
     }
     setAiResult(null)
+    setAiGenerating(false)
+    setAiTruncated(false)
+    aiRequestIdRef.current = null
     setBubbleOpen(false)
   }
 
   const handleRejectAI = () => {
+    cancelAIAction()
     setAiResult(null)
+    setAiTruncated(false)
     setBubbleOpen(false)
   }
 
@@ -357,6 +493,7 @@ export default function CodeMirrorEditor({
       {/* Bubble Menu */}
       {bubbleOpen && bubblePos.top !== 0 && (
         <div
+          ref={bubbleRef}
           className="fixed z-50 flex items-center gap-0.5 p-1 rounded-xl border select-none shadow-xl transform -translate-x-1/2 -translate-y-full"
           style={{
             top: bubblePos.top,
@@ -364,7 +501,10 @@ export default function CodeMirrorEditor({
             backgroundColor: 'var(--color-sidebar)',
             borderColor: 'var(--color-border)',
           }}
-          onMouseDown={(e) => e.preventDefault()} // 防止编辑器失焦
+          // 点按钮时阻止默认行为，避免编辑器失焦导致选区丢失；输入框需要能正常获得焦点
+          onMouseDown={(e) => {
+            if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault()
+          }}
         >
           {aiResult !== null ? (
             <div className="w-[360px] max-h-[260px] overflow-y-auto p-2">
@@ -390,7 +530,49 @@ export default function CodeMirrorEditor({
                   {aiResult}
                 </div>
               )}
+              {aiTruncated && (
+                <div
+                  className="text-[10px] leading-snug mb-2"
+                  style={{ color: 'var(--color-warning-text)' }}
+                >
+                  {t('codeMirrorEditor.aiTruncated')}
+                </div>
+              )}
+              <input
+                className="w-full mb-2 px-2 py-1 text-[11px] rounded-md outline-none"
+                style={{
+                  background: 'var(--color-bg-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text)',
+                }}
+                placeholder={t('codeMirrorEditor.extraPlaceholder')}
+                value={aiExtra}
+                onChange={e => setAiExtra(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !aiGenerating) {
+                    e.preventDefault()
+                    handleRegenerateAI()
+                  }
+                }}
+              />
               <div className="flex items-center gap-2 justify-end">
+                {aiGenerating ? (
+                  <button
+                    className="px-2.5 py-1 text-xs rounded-md transition-colors"
+                    style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={handleStopAI}
+                  >{t('codeMirrorEditor.stop')}</button>
+                ) : (
+                  <button
+                    className="px-2.5 py-1 text-xs rounded-md transition-colors"
+                    style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={handleRegenerateAI}
+                  >{t('codeMirrorEditor.regenerate')}</button>
+                )}
                 <button
                   className="px-2.5 py-1 text-xs rounded-md transition-colors"
                   style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
@@ -403,9 +585,9 @@ export default function CodeMirrorEditor({
                   style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-on-accent)' }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-                  disabled={aiResult === ''}
+                  disabled={!aiResult || aiGenerating}
                   onClick={handleAcceptAI}
-                >{t('codeMirrorEditor.replace')}</button>
+                >{lastActionRef.current?.action.mode === 'append' ? t('codeMirrorEditor.insert') : t('codeMirrorEditor.replace')}</button>
               </div>
             </div>
           ) : (
@@ -443,7 +625,11 @@ export default function CodeMirrorEditor({
                   className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                  onClick={() => handleAIAction(action.prompt, action.key)}
+                  onClick={() => {
+                    if (!selectionRange) return
+                    setAiExtra('')
+                    void runAIAction(action, selectionRange.from, selectionRange.to)
+                  }}
                 >
                   <span className="text-[10px] tracking-widest">{action.label}</span>
                 </button>

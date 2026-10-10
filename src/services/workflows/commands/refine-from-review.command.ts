@@ -4,6 +4,7 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import i18n from '../../../i18n'
+import { splitRefineOutput } from './refine-output'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
@@ -12,39 +13,6 @@ import {
   renderCanonContext,
   runConsistencyGate,
 } from '../../narrative-consistency'
-
-/**
- * 从「审稿驱动修稿」的模型输出里切出正文，剥离【修复说明】【待作者确认】等元信息段落。
- * 自定义提示词常要求「正文 + 说明」多段输出，内置模板则只输出正文；两处都要兼容，
- * 否则说明块会被当成正文写进修订稿、出现在 diff 里。
- */
-export function splitRefineOutput(raw: string): { body: string; notes: string } {
-  const text = (raw || '').trim()
-  if (!text) return { body: '', notes: '' }
-
-  const bodyMarkers = ['【修复后正文】', '【修复后的正文】', '【修订后正文】', '【正文】']
-  const notesMarkers = ['【修复说明】', '【修改说明】', '【修订说明】', '【待作者确认】']
-
-  let start = 0
-  for (const marker of bodyMarkers) {
-    const index = text.indexOf(marker)
-    if (index !== -1) {
-      start = index + marker.length
-      break
-    }
-  }
-
-  let end = text.length
-  for (const marker of notesMarkers) {
-    const index = text.indexOf(marker, start)
-    if (index !== -1 && index < end) end = index
-  }
-
-  const body = text.slice(start, end).trim()
-  const notes = text.slice(end).trim()
-  // 没有正文标记且说明标记在最前时 body 会为空，此时退回完整文本，避免产出空修订稿。
-  return { body: body || text, notes }
-}
 
 
 export interface RefineFromReviewParams {

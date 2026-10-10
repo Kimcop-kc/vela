@@ -8,6 +8,11 @@ import { BUILTIN_PROMPTS, getLocalizedContent, getLocalizedSystemRole, getLocali
 export class BasePromptBuilder {
   protected template: PromptTemplate;
   protected variables: Record<string, string> = {};
+  /**
+   * 模板里引用了、但本轮没有被赋值的变量名（在 build() 之后可读）。
+   * 通常意味着当前代码路径漏了赋值，或者用户自定义提示词写了 app 不认识的变量。
+   */
+  public missingVariables: string[] = [];
 
   /**
    * 注入叙事一致性 Canon 上下文，所有 Builder 子类均可使用。模板应预留 {{canon_context}} 变量。
@@ -33,6 +38,11 @@ export class BasePromptBuilder {
   /** 获取模板定义的 system role（LLM system message 角色定位） */
   public getSystemRole(): string {
     return getLocalizedSystemRole(this.template)
+  }
+
+  /** 模板显示名（用于日志里指出是哪个提示词出的问题） */
+  public get templateName(): string {
+    return this.template.name
   }
 
   /** 打包输出最终经过所有合法性替换的字符串 */
@@ -65,9 +75,18 @@ export class BasePromptBuilder {
       .replace(/\n{3,}/g, '\n\n')
 
     // 防御性校验：检查是否有未处理的模板占位符
-    const missing = result.match(/\{\{.*?\}\}/g)
+    const missing = result.match(/\{\{[^{}]*\}\}/g)
     if (missing) {
-      console.warn(`[PromptBuilder] 警告：模板 "${this.template.name}" 中有未赋值的变量残留:`, missing)
+      this.missingVariables = [...new Set(missing.map(v => v.slice(2, -2).trim()))]
+      console.warn(`[PromptBuilder] 警告：模板 "${this.template.name}" 中有未赋值的变量，已从提示词中移除:`, this.missingVariables)
+      // 占位符绝不能进提示词：模型会把 {{变量}} 当作正文内容照抄。独立成行的整行删掉，行内的直接删除。
+      result = result
+        .replace(/^[^\S\n]*\{\{[^{}]*\}\}[^\S\n]*$/gm, '')
+        .replace(/\{\{[^{}]*\}\}/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    } else {
+      this.missingVariables = []
     }
     return result
   }

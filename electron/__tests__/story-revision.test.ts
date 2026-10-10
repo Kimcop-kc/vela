@@ -158,6 +158,31 @@ describe('atomic author-directed story revisions', () => {
     expect(() => undoStoryRevision(folder, revision.id)).toThrow('后来又被修改')
     expect(ProjectCoreRepository.get()?.writingStyle).toBe('第三人称')
   })
+  it('accepts a chapter number in place of a draft id, and records the resolved id', () => {
+    DraftRepository.updateStatus(draftId, 'draft')
+    const chapter20 = DraftRepository.create({ chapterNumber: 20, version: 1, source: 'write', content: '第二十章：顾野重新登场。', wordCount: 12 })
+
+    // 助手手上的编号常常是章节号（蓝图就是章节号），20 不是任何草稿 id，应解析到第 20 章的最新草稿
+    const doc = readStoryDocument(folder, { kind: 'draft', id: '20' })
+    expect(doc.id).toBe(String(chapter20))
+    expect(doc.chapterNumber).toBe(20)
+
+    const revision = applyStoryRevision(folder, { ...request([
+      edit('draft', '20', 'content', '顾野重新登场。', '顾野在第二十章重新登场。'),
+    ]), editWrittenText: true })
+    expect(revision.changes[0].id).toBe(String(chapter20))
+    expect(DraftRepository.getFull(chapter20)?.content).toBe('第二十章：顾野在第二十章重新登场。')
+    undoStoryRevision(folder, revision.id)
+    expect(DraftRepository.getFull(chapter20)?.content).toBe('第二十章：顾野重新登场。')
+  })
+
+  it('lists what is actually available when the target does not exist', () => {
+    expect(() => readStoryDocument(folder, { kind: 'draft', id: '987' })).toThrow('内容不存在')
+    expect(() => readStoryDocument(folder, { kind: 'draft', id: '987' })).toThrow(/现有内容/)
+    expect(() => readStoryDocument(folder, { kind: 'character', id: '查无此人' })).toThrow('顾野')
+    expect(() => readStoryDocument(folder, { kind: 'blueprint', id: '99' })).toThrow('第 3 章')
+  })
+
   it('exposes complete paginated text and marks written evidence separately from plans', () => {
     ProjectCoreRepository.update({ synopsis: '前'.repeat(3500) + '末尾伏笔' })
     const first = readStoryDocument(folder, { kind: 'core', id: 'main', field: 'synopsis' })

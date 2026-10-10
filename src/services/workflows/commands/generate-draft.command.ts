@@ -153,11 +153,8 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         .withCharacterStates(characterState)
         // ---- 缓存失效区（逐章变化）----
         .withPreviousEnding(previousEnding || i18n.t('generateDraft.noPreviousEnding', { ns: 'commands' }))
-        .withChapterInfo(this.chapterInfo)
-        .withFutureBlueprints(futureBlueprintsStr)
         .withFilteredContext(filteredContext)
         .withShortSummary('')
-        .withUserGuidance(this.chapterInfo.userGuidance?.trim() || i18n.t('generateDraft.noUserGuidance', { ns: 'commands' }))
 
       // [Canon] 二次注入：在 RAG 与上一章结尾就绪后，把它们写回 Canon 并重渲染
       if (canonForValidation) {
@@ -167,6 +164,14 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       }
     }
 
+    // 本章蓝图、后续预告、作者微操指导对第 1 章同样关键：
+    // 之前它们被划在「非首章」分支里，导致首章提示词里残留 {{chapter_info}} 等占位符，
+    // 模型在既没有章纲、也没有后续大纲约束的情况下自由发挥（开篇跑偏的直接原因）。
+    promptBuilder
+      .withChapterInfo(this.chapterInfo)
+      .withFutureBlueprints(futureBlueprintsStr)
+      .withUserGuidance(this.chapterInfo.userGuidance?.trim() || i18n.t('generateDraft.noUserGuidance', { ns: 'commands' }))
+
     // [Canon] 注入叙事一致性上下文（强制最高优先级）
     if (canonRendered) {
       promptBuilder.withCanonContext(canonRendered)
@@ -174,6 +179,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
     // Token 预算管控：中文约 1.5 字符/token，预留 4K 给输出
     const prompt = promptBuilder.build()
+    if (promptBuilder.missingVariables.length > 0) {
+      callbacks.log(i18n.t('common.promptMissingVars', { ns: 'commands', template: template.name, vars: promptBuilder.missingVariables.join('、') }))
+    }
     const estimatedTokens = Math.ceil(prompt.length / 1.5)
     const TOKEN_BUDGET = 28000
     if (estimatedTokens > TOKEN_BUDGET) {

@@ -13,7 +13,8 @@
     "templateMissing": "模板丢失",
     "templateNotFound": "未找到模板: {{key}}",
     "noDraftContent": "无草稿内容",
-    "baseDraftNotFound": "找不到基准草稿版本"
+    "baseDraftNotFound": "找不到基准草稿版本",
+    "promptMissingVars": "⚠️ 提示词模板「{{template}}」引用了未提供的变量：{{vars}}。已从提示词中移除这些占位符，避免模型当成正文，但请检查该提示词（自定义提示词需要只使用应用支持的变量）。"
   },
   "architecture": {
     "dispatchingAI": "正在调度配置专家 AI，准备解析您的脑洞...",
@@ -124,6 +125,8 @@
   "refineDraft": {
     "refining": "正在进行大神级修稿...",
     "templateNotFound": "未找到修稿模板",
+    "notesStripped": "已剥离模型附带的修改说明，只把正文写入修订稿：{{preview}}",
+    "notesOnly": "模型只返回了说明、没有返回正文，本次未保存修订稿，请重试。",
     "gateBlocked": "精修结果被叙事一致性 Gate 阻止：{{reasons}}",
     "tabName": "修稿合并：第{{chapter}}章",
     "completed": "✅ 修稿完成（{{length}} 字），已生成修订稿版本 r{{version}}"

@@ -240,7 +240,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
                       onError: (err) => reject(new Error(err))
                     },
                     undefined,
-                    { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
+                    { responseFormat: { type: 'json_object' }, thinking: false, maxTokens: budgets.outputTokens }
                   )
                 })
                 return { text: fullContent, truncated }

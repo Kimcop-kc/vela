@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { requireProjectDatabase } from './rehearsal-repository'
-import type { StoryDocument, StoryDocumentRef, StoryReadRequest, StoryReadResult, StoryRevision, StoryRevisionRequest, StoryIndex, StoryIndexEntry } from '../../src/shared/story-revision'
+import { STALE_VERSION_MARKER, type StoryDocument, type StoryDocumentRef, type StoryReadRequest, type StoryReadResult, type StoryRevision, type StoryRevisionRequest, type StoryIndex, type StoryIndexEntry } from '../../src/shared/story-revision'
 
 // Draft text needs an explicit author instruction. Finalized/archived versions remain
 // protected because their canon and downstream publication state require a separate rewrite.
@@ -28,19 +28,55 @@ function ensureJournal(projectPath: string) {
   return db
 }
 
+/**
+ * 把 draft 的 id 解析成真正的草稿记录 id。
+ *
+ * 助手手上的编号有时是章节号（蓝图就是这么约定的），直接报「内容不存在」会让整次调整
+ * 白跑。这里在「id 不是任何草稿」时退化为「该章最新的草稿」；id 本身是草稿 id 时
+ * 行为与之前完全一致，不会出现同一编号两种解释的歧义。
+ */
+function resolveRefId(db: ReturnType<typeof requireProjectDatabase>, ref: StoryDocumentRef): string {
+  if (ref.kind !== 'draft') return ref.id
+  const direct = db.prepare('SELECT id FROM drafts WHERE id = ?').get(ref.id) as { id: number } | undefined
+  if (direct) return String(direct.id)
+  const byChapter = db.prepare('SELECT id FROM drafts WHERE chapter_number = ? ORDER BY version DESC, id DESC LIMIT 1')
+    .get(Number(ref.id)) as { id: number } | undefined
+  return byChapter ? String(byChapter.id) : ref.id
+}
+
+/** 「内容不存在」时把当前真正可用的内容列出来，助手才能自己改对 */
+function notFoundError(db: ReturnType<typeof requireProjectDatabase>, ref: StoryDocumentRef): Error {
+  const list = (items: string[], empty: string) =>
+    items.length > 0 ? `${items.slice(0, 12).join('、')}${items.length > 12 ? ' 等' : ''}` : empty
+  let available = ''
+  if (ref.kind === 'draft') {
+    const rows = db.prepare('SELECT id, chapter_number FROM drafts ORDER BY chapter_number, version DESC').all() as { id: number; chapter_number: number }[]
+    available = list(rows.map(row => `${row.id}（第 ${row.chapter_number} 章）`), '当前作品还没有草稿')
+  } else if (ref.kind === 'blueprint') {
+    const rows = db.prepare('SELECT chapter_number FROM blueprints ORDER BY chapter_number').all() as { chapter_number: number }[]
+    available = list(rows.map(row => `第 ${row.chapter_number} 章`), '当前还没有章节蓝图')
+  } else if (ref.kind === 'character') {
+    const rows = db.prepare('SELECT name FROM characters ORDER BY name').all() as { name: string }[]
+    available = list(rows.map(row => row.name), '当前还没有角色卡')
+  }
+  const suffix = available ? `现有内容：${available}。` : ''
+  return new Error(`内容不存在（${ref.kind}：${ref.id}）。${suffix}请重新读取作品目录后再调整。`)
+}
+
 function document(projectPath: string, ref: StoryDocumentRef): StoryDocument {
   validateRef(ref)
   const db = requireProjectDatabase(projectPath)
-  const row = (ref.kind === 'draft'
-    ? db.prepare('SELECT d.*, c.body FROM drafts d JOIN contents c ON c.id = d.content_id WHERE d.id = ?').get(ref.id)
-    : db.prepare(`SELECT * FROM ${table[ref.kind]} WHERE ${key[ref.kind]} = ?`).get(ref.id)) as Record<string, unknown> | undefined
-  if (!row) throw new Error('内容不存在，请刷新作品目录。')
+  const resolved: StoryDocumentRef = { ...ref, id: resolveRefId(db, ref) }
+  const row = (resolved.kind === 'draft'
+    ? db.prepare('SELECT d.*, c.body FROM drafts d JOIN contents c ON c.id = d.content_id WHERE d.id = ?').get(resolved.id)
+    : db.prepare(`SELECT * FROM ${table[resolved.kind]} WHERE ${key[resolved.kind]} = ?`).get(resolved.id)) as Record<string, unknown> | undefined
+  if (!row) throw notFoundError(db, ref)
   const data: Record<string, string> = {}
-  for (const [name, column] of Object.entries(fields[ref.kind])) data[name] = String(row[column] ?? '')
+  for (const [name, column] of Object.entries(fields[resolved.kind])) data[name] = String(row[column] ?? '')
   const version = createHash('sha256').update(JSON.stringify(row)).digest('hex')
   return {
-    ...ref, version, fields: data,
-    title: ref.kind === 'core' ? '全书设定与架构' : ref.kind === 'character' ? ref.id : ref.kind === 'draft' ? `第 ${row.chapter_number} 章 · 草稿 v${row.version}` : `第 ${ref.id} 章 · ${row.title}`,
+    ...resolved, version, fields: data,
+    title: resolved.kind === 'core' ? '全书设定与架构' : resolved.kind === 'character' ? resolved.id : resolved.kind === 'draft' ? `第 ${row.chapter_number} 章 · 草稿 v${row.version}` : `第 ${resolved.id} 章 · ${row.title}`,
     ...(row.chapter_number ? { chapterNumber: Number(row.chapter_number) } : {}),
     ...(row.status ? { status: String(row.status) } : {}),
   }
@@ -119,17 +155,19 @@ export function applyStoryRevision(projectPath: string, request: StoryRevisionRe
     const revision: StoryRevision = { id: randomUUID(), intent: request.intent, summary: request.summary, createdAt: new Date().toISOString(), status: 'applied', changes: [] }
     for (const edit of request.edits) {
       validateRef(edit)
-      if (edit.kind === 'draft') {
+      // 统一用解析后的编号（草稿可以用章节号定位），后续读写与记录都用它
+      const ref = { ...edit, id: resolveRefId(db, edit) }
+      if (ref.kind === 'draft') {
         if (request.editWrittenText !== true) throw new Error('本轮默认保留已写正文；作者明确要求改正文后，才可设置 editWrittenText=true。')
-        writableDraft(projectPath, edit.id)
+        writableDraft(projectPath, ref.id)
       }
       if (typeof edit.field !== 'string' || typeof edit.oldText !== 'string' || typeof edit.newText !== 'string' || edit.newText.length > 50000) throw new Error('修改字段与文本格式不正确。')
-      const identity = `${edit.kind}:${edit.id}`
+      const identity = `${ref.kind}:${ref.id}`
       let doc = docs.get(identity)
-      if (!doc) { doc = document(projectPath, edit); docs.set(identity, doc) }
-      if (doc.version !== edit.version) throw new Error(`${doc.title} 已有更新，请重新读取后调整；本次未写入任何修改。`)
+      if (!doc) { doc = document(projectPath, ref); docs.set(identity, doc) }
+      if (doc.version !== edit.version) throw new Error(`${doc.title} ${STALE_VERSION_MARKER}，请重新读取后调整；本次未写入任何修改。`)
       if (!Object.hasOwn(doc.fields, edit.field)) throw new Error('该字段不可修改。')
-      const previous = revision.changes.find(c => c.kind === edit.kind && c.id === edit.id && c.field === edit.field)
+      const previous = revision.changes.find(c => c.kind === ref.kind && c.id === ref.id && c.field === edit.field)
       const before = previous?.after ?? doc.fields[edit.field]
       if (!edit.oldText && before) throw new Error('空 oldText 只能用于填入空字段，不能覆盖已有内容。')
       const at = before.indexOf(edit.oldText)
@@ -147,8 +185,8 @@ export function applyStoryRevision(projectPath: string, request: StoryRevisionRe
       if (after === before) continue
       if (previous) previous.after = after
       else {
-        const draft = edit.kind === 'draft' ? writableDraft(projectPath, edit.id) : undefined
-        revision.changes.push({ kind: edit.kind, id: edit.id, title: doc.title, field: edit.field, before, after,
+        const draft = ref.kind === 'draft' ? writableDraft(projectPath, ref.id) : undefined
+        revision.changes.push({ kind: ref.kind, id: ref.id, title: doc.title, field: edit.field, before, after,
           ...(draft ? { draftState: { beforeStatus: draft.status, beforeWordCount: draft.word_count, afterStatus: 'draft' } } : {}),
         })
       }

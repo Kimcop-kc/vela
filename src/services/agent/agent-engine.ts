@@ -12,7 +12,7 @@
  */
 
 import i18n from '../../i18n'
-import { toolRegistry, type ToolResult, type ToolArtifact } from './tool-registry'
+import { toolRegistry, needsConfirmation, type ToolResult, type ToolArtifact } from './tool-registry'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'panels', ...opts })
 
@@ -205,8 +205,8 @@ export async function runAgentLoop(
       toolCallInfo.source = tool.source
       toolCallInfo.displayName = tool.userFacingName ?? tool.name
 
-      // 需要用户确认的 Tool
-      if (tool.requiresConfirmation) {
+      // 需要用户确认的 Tool（可按本次参数决定，例如只有改已写正文时才需要确认）
+      if (needsConfirmation(tool, tc.arguments)) {
         toolCallInfo.status = 'waiting_confirm'
         callbacks.onToolCallStart(toolCallInfo)
 

@@ -65,8 +65,12 @@ export interface AgentTool {
   source: ToolSource
   /** 参数 JSON Schema */
   inputSchema: ToolInputSchema
-  /** 是否需要用户确认后才执行（写入型操作 = true） */
-  requiresConfirmation: boolean
+  /**
+   * 是否需要用户确认后才执行。
+   * 写入型操作固定为 true；也可以给一个判断函数，按本次参数决定是否需要确认
+   * （例如「只有真的去改已写正文时才需要作者确认」）。
+   */
+  requiresConfirmation: boolean | ((args: Record<string, unknown>) => boolean)
   /** 是否为只读操作 */
   isReadOnly: boolean
   /** 执行函数 */
@@ -195,7 +199,10 @@ message 使用中文，可以包含换行。toolCall 只能是一个操作对象
     for (const tool of tools) {
       const displayName = tool.userFacingName ?? tool.name
       const sourceTag = tool.source === 'mcp' ? ' [MCP]' : tool.source === 'skill' ? ' [Skill]' : ''
-      const confirmTag = tool.requiresConfirmation ? ' ⚠️需确认' : ''
+      // 按参数判断的工具（例如只在改写已写正文时才确认）给一个更准确的提示
+      const confirmTag = typeof tool.requiresConfirmation === 'function'
+        ? ' ⚠️部分情况需作者确认'
+        : tool.requiresConfirmation ? ' ⚠️需确认' : ''
 
       prompt += `#### ${tool.name} (${displayName})${sourceTag}${confirmTag}\n`
       prompt += `${tool.description}\n`
@@ -246,4 +253,11 @@ export function buildAgentTool(
     isReadOnly: !def.requiresConfirmation,
     ...def,
   }
+}
+
+/** 本次调用是否需要用户确认（requiresConfirmation 支持布尔或按参数判断的函数） */
+export function needsConfirmation(tool: AgentTool, args: Record<string, unknown>): boolean {
+  return typeof tool.requiresConfirmation === 'function'
+    ? tool.requiresConfirmation(args)
+    : tool.requiresConfirmation
 }

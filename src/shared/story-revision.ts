@@ -1,4 +1,11 @@
 export type StoryDocumentKind = 'core' | 'blueprint' | 'character' | 'draft'
+
+/**
+ * 并发冲突标记：读取之后内容又被改过，助手必须基于最新版本重试。
+ * 仓储层用它拼错误信息，调用方据此判断「可以自动重读并重试」。
+ */
+export const STALE_VERSION_MARKER = '已有更新'
+
 export interface StoryDocumentRef { kind: StoryDocumentKind; id: string }
 export interface StoryDocument extends StoryDocumentRef {
   title: string

@@ -13,7 +13,8 @@
     "templateMissing": "Template missing",
     "templateNotFound": "Template not found: {{key}}",
     "noDraftContent": "No draft content",
-    "baseDraftNotFound": "Base draft version not found"
+    "baseDraftNotFound": "Base draft version not found",
+    "promptMissingVars": "⚠️ Prompt template \"{{template}}\" references variables that were not provided: {{vars}}. These placeholders were removed from the prompt so the model does not read them as text, but please check this prompt (custom prompts must only use variables the app supports)."
   },
   "architecture": {
     "dispatchingAI": "Dispatching config expert AI, preparing to parse your idea...",
@@ -124,6 +125,8 @@
   "refineDraft": {
     "refining": "Performing master-level refinement...",
     "templateNotFound": "Refinement template not found",
+    "notesStripped": "Stripped the model's revision notes; only the prose was written to the revision: {{preview}}",
+    "notesOnly": "The model returned only notes without any prose, so nothing was saved. Please retry.",
     "gateBlocked": "Refinement blocked by narrative consistency gate: {{reasons}}",
     "tabName": "Refinement merge: Ch.{{chapter}}",
     "completed": "✅ Refinement complete ({{length}} chars), revision version r{{version}} generated"

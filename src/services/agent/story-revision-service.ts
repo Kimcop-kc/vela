@@ -4,7 +4,7 @@ import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useCharacterStore } from '../../stores/character-store'
 import { globalEventBus } from '../../shared/event-bus'
-import type { StoryRevision, StoryRevisionRequest } from '../../shared/story-revision'
+import { STALE_VERSION_MARKER, type StoryDocumentRef, type StoryReadResult, type StoryRevision, type StoryRevisionRequest } from '../../shared/story-revision'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
 const configMap: Record<string, keyof NovelConfig> = { genre: 'genre', subGenre: 'subGenre', targetAudience: 'targetAudience', totalChapters: 'totalChapters', wordsPerChapter: 'wordsPerChapter', plotStructure: 'plotStructure', writingStyle: 'writingStyle', narrativePov: 'narrativePOV', globalGuidance: 'globalGuidance', referenceWorks: 'referenceWorks', goldenFinger: 'goldenFinger', synopsis: 'coreOutline', worldbuilding: 'worldSetting', charactersArch: 'protagonistProfile' }
@@ -70,12 +70,52 @@ export function refreshAfterStoryRevision(projectPath: string, revision: StoryRe
   globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
 }
 
+/** 写入尝试次数：首次 + 并发冲突后自动重读重试一次 */
+const APPLY_ATTEMPTS = 2
+
+/** 是否属于「读到写入之间内容又被改过」的并发冲突 */
+function isStaleVersionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes(STALE_VERSION_MARKER)
+}
+
+/** 重新读取这些内容的最新 version（内容本身不必重新拉取：仓储层会再校验片段是否仍唯一） */
+async function readVersions(projectPath: string, refs: StoryDocumentRef[]): Promise<Map<string, string>> {
+  const versions = new Map<string, string>()
+  for (const ref of refs) {
+    const identity = `${ref.kind}:${ref.id}`
+    if (versions.has(identity)) continue
+    const doc: StoryReadResult = await ipc.invoke('story:read', projectPath, { kind: ref.kind, id: ref.id })
+    assertStoryProject(projectPath)
+    versions.set(identity, doc.version)
+  }
+  return versions
+}
+
 export async function applyRevision(projectPath: string, request: StoryRevisionRequest, signal?: AbortSignal, options?: RevisionPreflightOptions) {
-  await ready(projectPath, options)
-  if (signal?.aborted) throw new Error('调整已取消，未提交修改。')
-  const result = await ipc.invoke('story:apply', projectPath, request)
-  refreshAfterStoryRevision(projectPath, result)
-  return result
+  let attempt = request
+  for (let round = 0; round < APPLY_ATTEMPTS; round++) {
+    await ready(projectPath, options)
+    if (signal?.aborted) throw new Error('调整已取消，未提交修改。')
+    try {
+      const result = await ipc.invoke('story:apply', projectPath, attempt)
+      refreshAfterStoryRevision(projectPath, result)
+      return result
+    } catch (error) {
+      if (!isStaleVersionError(error)) throw error
+      // 读到写入之间作者又保存过：整次失败太亏，这里重新读取最新版本再试一次。
+      // 如果内容真的被改到「旧片段对不上」，仓储层仍会拦下（整次不写）。
+      if (round === APPLY_ATTEMPTS - 1) {
+        throw new Error(`${error instanceof Error ? error.message : String(error)}（已自动重读最新版本仍冲突，请重新读取该内容后再调整。）`)
+      }
+      const versions = await readVersions(projectPath, attempt.edits)
+      attempt = {
+        ...attempt,
+        edits: attempt.edits.map(edit => ({ ...edit, version: versions.get(`${edit.kind}:${edit.id}`) ?? edit.version })),
+      }
+    }
+  }
+  throw new Error('调整未提交。')
 }
 export async function undoRevision(projectPath: string, id: string, signal?: AbortSignal) {
   await ready(projectPath)

@@ -4,6 +4,7 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import i18n from '../../../i18n'
+import { splitRefineOutput } from './refine-output'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
@@ -53,6 +54,9 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       .withGlobalSummary(this.params.shortSummary || '')
       .withShortSummary(this.params.shortSummary || '')
       .withWordNumber(project.novelConfig.wordsPerChapter)
+      // 模板里有一段「文风要求」，之前一直没赋值 → 精修提示词里残留 {{writing_style}}，
+      // 模型既看不到文风锚点，又会把占位符当正文读。
+      .withWritingStyle(project.novelConfig.writingStyle || '')
       .withUserRefinePrompt(userPromptBlock)
 
     // ==========================================
@@ -91,7 +95,12 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     }
 
     const refined = await this.callLLMWithBuilder(promptBuilder, callbacks)
-    const cleanRefined = this.stripThinkingTags(refined)
+    // 模型经常把「修复说明 / 待作者确认」接在正文后面。只把正文当稿子：
+    // 否则说明会被写进修订稿、进 diff，还会被后面的一致性检查与 canon 写回当成正文。
+    const { body: cleanRefined, notes: refineNotes } = splitRefineOutput(this.stripThinkingTags(refined))
+    // 输出整段都是「说明」时，splitRefineOutput 会退回完整文本；那种情况绝不能当成正文写进修订稿。
+    if (refineNotes && refineNotes === cleanRefined) throw new Error(t('refineDraft.notesOnly'))
+    if (refineNotes) callbacks.log(t('refineDraft.notesStripped', { preview: refineNotes.slice(0, 200) }))
 
     // ==========================================
     // [Canon] 精修后一致性 Gate（isRewrite=true：禁止破坏既有事实）

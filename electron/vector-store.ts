@@ -3,8 +3,8 @@
  *
  * 提供本地嵌入式向量数据库能力，替代旧的 vectors.json 方案。
  * 支持两种检索模式：
- * - FTS-only（BM25 全文检索，零配置默认可用）
- * - 混合检索（FTS + 向量近邻，需要 Embedding 模型）
+ * - 关键词检索（DataFusion LIKE 模糊匹配，零配置默认可用；Tantivy 对中文分词支持有限）
+ * - 混合检索（向量近邻优先，失败时回落到关键词检索，需要 Embedding 模型）
  *
  * 存储位置：{projectPath}/.vela/lancedb/
  */
@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { joinChunkTexts, stripChunkOverlap } from './embedding'
+import { buildLikePredicate, extractSearchTerms, scoreByTermHits } from '../src/shared/search-terms'
 
 // ===== 类型定义 =====
 
@@ -503,31 +504,62 @@ export async function searchWithScope(
       }
     }
 
-    // FTS 检索 (Tantivy 不支持中文分词，改为 DataFusion LIKE 模糊匹配)
+    // 文本检索：Tantivy 对中文分词支持有限，改用 DataFusion LIKE 模糊匹配。
+    // 关键词经 shared/search-terms 安全化与限长处理，再和章节范围拼成「一个」谓词——
+    // where() 是覆盖式的，分两次调用会让后一个条件顶掉前一个（曾导致带章节范围的检索
+    // 丢掉关键词条件，返回该范围内任意文本块）。
+    const terms = extractSearchTerms(queryText)
+    if (terms.length === 0) return []
+
+    const textFilter = buildLikePredicate('text', terms)
+    const combinedFilter = scopeFilter ? `(${textFilter}) AND (${scopeFilter})` : textFilter
+    // 多取一些候选再按命中关键词数排序，避免 limit 截断掉更相关的那条
+    const scanLimit = Math.min(Math.max(topK * 5, topK), 50)
+
     try {
-      const escapedQuery = queryText.replace(/'/g, "''")
-      // 将 "搜索" 转换为 "%搜%索%" 进行容错匹配
-      const likePattern = `%${escapedQuery.split('').join('%')}%`
-
-      let q = table.query().filter(`text LIKE '${likePattern}'`).limit(topK)
-      if (scopeFilter) {
-        q = q.where(scopeFilter)
-      }
-      const results = await q.toArray()
-
-      return results.map((r: { text: string; fileName: string }) => ({
-        text: r.text,
-        score: 0.5, // 普通匹配无打分
-        fileName: r.fileName,
-      }))
+      const rows = await table.query().where(combinedFilter).limit(scanLimit).toArray()
+      return rankRowsByTerms(rows, terms, topK)
     } catch (e) {
-      console.warn('[Vela VectorStore] 纯文本检索失败:', e)
-      return []
+      // 过滤条件本身出问题（老版本 LanceDB / 未预料到的字符）时退化为本地匹配，
+      // 保证检索不会因为一条 SQL 谓词而整体拿不到结果。
+      console.warn('[Vela VectorStore] 文本检索过滤失败，退化为本地匹配:', e)
+      try {
+        const rows = await table.query().limit(LOCAL_FALLBACK_SCAN_LIMIT).toArray()
+        const scoped = chapterScope
+          ? rows.filter((r: { chapterNumber?: number }) =>
+            typeof r.chapterNumber === 'number'
+            && r.chapterNumber >= chapterScope[0]
+            && r.chapterNumber <= chapterScope[1])
+          : rows
+        return rankRowsByTerms(scoped, terms, topK)
+      } catch (e2) {
+        console.warn('[Vela VectorStore] 纯文本检索失败:', e2)
+        return []
+      }
     }
   } catch (error) {
     console.error('[Vela VectorStore] 检索失败:', error)
     return []
   }
+}
+
+/** 过滤条件失效时的本地兜底扫描上限（超过这个规模的库仍走 LIKE，不回退全表） */
+const LOCAL_FALLBACK_SCAN_LIMIT = 2000
+
+/** 按命中关键词数排序，取前 topK 条 */
+function rankRowsByTerms(
+  rows: Array<{ text?: unknown; fileName?: unknown }>,
+  terms: string[],
+  topK: number,
+): SearchResult[] {
+  const scored = rows
+    .map(row => {
+      const text = String(row.text ?? '')
+      return { text, fileName: String(row.fileName ?? ''), score: scoreByTermHits(text, terms) }
+    })
+    .filter(row => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+  return scored.slice(0, Math.max(1, topK))
 }
 
 /**

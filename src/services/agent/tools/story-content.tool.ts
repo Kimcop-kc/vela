@@ -12,6 +12,34 @@ function projectPath() {
   return path
 }
 
+/** 解析 edits_json；解析失败时给出可执行的提示，而不是把异常抛给引擎 */
+function parseEdits(raw: unknown): { ok: true; edits: unknown[] } | { ok: false; error: string } {
+  try {
+    const parsed = JSON.parse(String(raw ?? ''))
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return { ok: false, error: 'edits_json 必须是至少含 1 项修改的 JSON 数组，例如 [{"kind":"blueprint","id":"5","version":"…","field":"keyEvents","oldText":"…","newText":"…"}]。' }
+    }
+    return { ok: true, edits: parsed }
+  } catch {
+    return { ok: false, error: 'edits_json 不是合法 JSON。请检查引号与逗号后重试，注意换行要写成 \\n。' }
+  }
+}
+
+/**
+ * 本次调整是否会改写「已经写好的正文」。
+ *
+ * 这个判断同时用在两处：引擎据此决定是否先请作者确认；确认通过后本工具才允许置位
+ * editWrittenText（作者点了确认，才等于「作者明确要求改正文」）。
+ */
+export function touchesWrittenProse(args: Record<string, unknown>): boolean {
+  const parsed = parseEdits(args.edits_json)
+  if (!parsed.ok) return false
+  return parsed.edits.some(edit => {
+    const item = edit as { kind?: unknown; field?: unknown } | null
+    return !!item && item.kind === 'draft' && item.field === 'content'
+  })
+}
+
 export const storyIndexTool = buildAgentTool({
   name: 'search_story', userFacingName: '查找作品内容', source: 'builtin', requiresConfirmation: false, maxResultChars: 12000,
   description: '搜索当前作品的设定、角色、蓝图及已写草稿，建立修改影响范围。query 为空列出目录；有 nextOffset 必须继续翻页。摘要仅供定位，正文用 read_story 读取。',
@@ -28,17 +56,26 @@ export const storyReadTool = buildAgentTool({
   execute: async args => ({ success: true, content: JSON.stringify(await ipc.invoke('story:read', projectPath(), args as unknown as StoryReadRequest)) }),
 })
 export const storyReviseTool = buildAgentTool({
-  name: 'revise_story', userFacingName: '联动调整剧情', source: 'builtin', requiresConfirmation: false, isReadOnly: false, maxResultChars: 12000,
-  description: '按作者明确的修改意图，原子保存设定、角色、蓝图及最新草稿正文。先完整读取相关原文并解决关键歧义。edits_json 是 JSON 数组，每项含 kind,id,version,field,oldText,newText；用唯一原文片段精确替换，空 oldText 只允许填空字段。改正文用 kind=draft,field=content，且 edit_written_text=true；已定稿/归档正文不可覆盖。成功后正文直接保存并在编辑器显示，返回可撤回的前后记录；失败则整次不写。不要用 write_file 或工作流入口修改数据库内容。',
+  name: 'revise_story', userFacingName: '联动调整剧情', source: 'builtin', requiresConfirmation: touchesWrittenProse, isReadOnly: false, maxResultChars: 12000,
+  description: '按作者明确的修改意图，原子保存设定、角色、蓝图及最新草稿正文。先完整读取相关原文并解决关键歧义。edits_json 是 JSON 数组，每项含 kind,id,version,field,oldText,newText；用唯一原文片段精确替换，空 oldText 只允许填空字段。改正文用 kind=draft,field=content 并带上 edit_written_text=true（工具会先请作者确认，作者同意后才会真正落盘）；已定稿/归档正文不可覆盖。draft 的 id 优先用 search_story / read_story 给出的草稿编号，也可以直接给章节号。成功后正文直接保存并在编辑器显示，返回可撤回的前后记录；失败则整次不写。不要用 write_file 或工作流入口修改数据库内容。',
   inputSchema: { type: 'object', properties: {
     intent: { type: 'string', description: '用一句简短的话概括作者已明确的创作要求，不编造作者选择。' },
     summary: { type: 'string', description: '面向作者，用中文简述具体影响、因果衔接、伏笔处理和保留范围，说明未处理事项。使用“大纲、人物发展”等创作术语，不写字段名、接口名或授权说明。' },
-    edit_written_text: { type: 'boolean', description: '只有作者明确要求改写已写正文（如全文改成第三人称）时设为 true。仅调整未来剧情时不设置。' },
+    edit_written_text: { type: 'boolean', description: '只有作者明确要求改写已写正文（如全文改成第三人称）时设为 true。仅调整未来剧情时不设置。（改正文时工具会先请作者确认）' },
     edits_json: { type: 'string', description: '修改数组 JSON，1–60 项。每项示例：{"kind":"blueprint","id":"5","version":"读取到的version","field":"keyEvents","oldText":"原文唯一片段","newText":"修改后的片段"}。同一字段多项按顺序执行。' },
   }, required: ['intent', 'summary', 'edits_json'] },
   execute: async (args, context) => {
     const path = projectPath()
-    const request: StoryRevisionRequest = { intent: args.intent as string, summary: args.summary as string, edits: JSON.parse(args.edits_json as string), editWrittenText: args.edit_written_text === true }
+    const parsed = parseEdits(args.edits_json)
+    if (!parsed.ok) return { success: false, content: '', error: parsed.error }
+    const request: StoryRevisionRequest = {
+      intent: args.intent as string,
+      summary: args.summary as string,
+      edits: parsed.edits as StoryRevisionRequest['edits'],
+      // 改正文时引擎会先请作者确认；作者点了确认即视为「作者明确要求改正文」，
+      // 因此这里可以置位，避免模型漏设 edit_written_text 就整次失败。
+      editWrittenText: args.edit_written_text === true || touchesWrittenProse(args),
+    }
     const revision = await applyRevision(path, request, context?.signal)
     return { success: true, content: JSON.stringify({ id: revision.id, status: revision.status, summary: revision.summary, savedAndVerified: revision.changes.map(c => ({ kind: c.kind, id: c.id, field: c.field })) }), artifacts: [{ type: 'story_revision', name: revision.intent, path, revisionId: revision.id }] }
   },
@@ -50,8 +87,8 @@ export const storyHistoryTool = buildAgentTool({
   execute: async () => ({ success: true, content: JSON.stringify((await ipc.invoke('story:history', projectPath())).slice(0, 10).map(r => ({ id: r.id, intent: r.intent, summary: r.summary, status: r.status, changed: r.changes.map(c => `${c.title}/${c.field}`) }))) }),
 })
 export const storyRewriteDraftTool = buildAgentTool({
-  name: 'rewrite_draft', userFacingName: '改写整章正文', source: 'builtin', requiresConfirmation: false, isReadOnly: false, maxResultChars: 12000, timeoutMs: 600000,
-  description: '作者明确要求整章改写时首选此工具。先读取最新草稿，再给出具体 instruction，工具会真正调用当前写作模型完成改稿、保存、打开正文并记录前后内容；等待返回实际结果即可。不要在主对话先生成全文或用工作流面板代替执行。也可直接提交完整 content（二选一）。按 version 检查原稿未变，可撤回。只改该草稿，文风和视角配置另用 revise_story 同步。已定稿/归档版本不可覆盖。',
+  name: 'rewrite_draft', userFacingName: '改写整章正文', source: 'builtin', requiresConfirmation: true, isReadOnly: false, maxResultChars: 12000, timeoutMs: 600000,
+  description: '作者明确要求整章改写时首选此工具。先读取最新草稿，再给出具体 instruction，工具会真正调用当前写作模型完成改稿、保存、打开正文并记录前后内容；等待返回实际结果即可。执行前会先请作者确认。不要在主对话先生成全文或用工作流面板代替执行。也可直接提交完整 content（二选一）。按 version 检查原稿未变，可撤回。只改该草稿，文风和视角配置另用 revise_story 同步。已定稿/归档版本不可覆盖。',
   inputSchema: { type: 'object', properties: {
     id: { type: 'string', description: 'read_story 读取的草稿 id。' },
     version: { type: 'string', description: '完整读取原稿时返回的 version，原样传入。' },
