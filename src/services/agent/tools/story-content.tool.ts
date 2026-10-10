@@ -28,8 +28,8 @@ function parseEdits(raw: unknown): { ok: true; edits: unknown[] } | { ok: false;
 /**
  * 本次调整是否会改写「已经写好的正文」。
  *
- * 这个判断同时用在两处：引擎据此决定是否先请作者确认；确认通过后本工具才允许置位
- * editWrittenText（作者点了确认，才等于「作者明确要求改正文」）。
+ * 改正文默认直接落盘（作者要求助手别每次都弹确认），这个判断只用来决定是否自动置位
+ * editWrittenText —— 仓储层要求改正文时必须显式声明，否则整次不写。
  */
 export function touchesWrittenProse(args: Record<string, unknown>): boolean {
   const parsed = parseEdits(args.edits_json)
@@ -56,12 +56,12 @@ export const storyReadTool = buildAgentTool({
   execute: async args => ({ success: true, content: JSON.stringify(await ipc.invoke('story:read', projectPath(), args as unknown as StoryReadRequest)) }),
 })
 export const storyReviseTool = buildAgentTool({
-  name: 'revise_story', userFacingName: '联动调整剧情', source: 'builtin', requiresConfirmation: touchesWrittenProse, isReadOnly: false, maxResultChars: 12000,
-  description: '按作者明确的修改意图，原子保存设定、角色、蓝图及最新草稿正文。先完整读取相关原文并解决关键歧义。edits_json 是 JSON 数组，每项含 kind,id,version,field,oldText,newText；用唯一原文片段精确替换，空 oldText 只允许填空字段。改正文用 kind=draft,field=content 并带上 edit_written_text=true（工具会先请作者确认，作者同意后才会真正落盘）；已定稿/归档正文不可覆盖。draft 的 id 优先用 search_story / read_story 给出的草稿编号，也可以直接给章节号。成功后正文直接保存并在编辑器显示，返回可撤回的前后记录；失败则整次不写。不要用 write_file 或工作流入口修改数据库内容。',
+  name: 'revise_story', userFacingName: '联动调整剧情', source: 'builtin', requiresConfirmation: false, isReadOnly: false, maxResultChars: 12000,
+  description: '按作者明确的修改意图，原子保存设定、角色、蓝图及最新草稿正文。作者已授权直接改正文，不必额外征求确认，改完在 summary 里说清楚改了什么即可。先完整读取相关原文并解决关键歧义。edits_json 是 JSON 数组，每项含 kind,id,version,field,oldText,newText；用唯一原文片段精确替换，空 oldText 只允许填空字段。改正文用 kind=draft,field=content；工具会自动置位 edit_written_text，无需手动设置。已定稿/归档正文不可覆盖。draft 的 id 优先用 search_story / read_story 给出的草稿编号，也可以直接给章节号。成功后正文直接保存并在编辑器显示，返回可撤回的前后记录；失败则整次不写。不要用 write_file 或工作流入口修改数据库内容。',
   inputSchema: { type: 'object', properties: {
     intent: { type: 'string', description: '用一句简短的话概括作者已明确的创作要求，不编造作者选择。' },
     summary: { type: 'string', description: '面向作者，用中文简述具体影响、因果衔接、伏笔处理和保留范围，说明未处理事项。使用“大纲、人物发展”等创作术语，不写字段名、接口名或授权说明。' },
-    edit_written_text: { type: 'boolean', description: '只有作者明确要求改写已写正文（如全文改成第三人称）时设为 true。仅调整未来剧情时不设置。（改正文时工具会先请作者确认）' },
+    edit_written_text: { type: 'boolean', description: '可选。改正文时工具会自动置位，无需手动设置；仅调整未来剧情时不设置。' },
     edits_json: { type: 'string', description: '修改数组 JSON，1–60 项。每项示例：{"kind":"blueprint","id":"5","version":"读取到的version","field":"keyEvents","oldText":"原文唯一片段","newText":"修改后的片段"}。同一字段多项按顺序执行。' },
   }, required: ['intent', 'summary', 'edits_json'] },
   execute: async (args, context) => {
@@ -72,8 +72,9 @@ export const storyReviseTool = buildAgentTool({
       intent: args.intent as string,
       summary: args.summary as string,
       edits: parsed.edits as StoryRevisionRequest['edits'],
-      // 改正文时引擎会先请作者确认；作者点了确认即视为「作者明确要求改正文」，
-      // 因此这里可以置位，避免模型漏设 edit_written_text 就整次失败。
+      // 作者要求改正文不再弹确认：本次只要动了正文就自动声明，避免模型漏设 edit_written_text。
+      // 防误改的约束仍在仓储层（定稿/归档不可覆盖、按 version 检查并发、整次要么全写要么不写），
+      // 改动也会记录前后内容，可用 undo_story_change 撤回。
       editWrittenText: args.edit_written_text === true || touchesWrittenProse(args),
     }
     const revision = await applyRevision(path, request, context?.signal)
@@ -87,8 +88,8 @@ export const storyHistoryTool = buildAgentTool({
   execute: async () => ({ success: true, content: JSON.stringify((await ipc.invoke('story:history', projectPath())).slice(0, 10).map(r => ({ id: r.id, intent: r.intent, summary: r.summary, status: r.status, changed: r.changes.map(c => `${c.title}/${c.field}`) }))) }),
 })
 export const storyRewriteDraftTool = buildAgentTool({
-  name: 'rewrite_draft', userFacingName: '改写整章正文', source: 'builtin', requiresConfirmation: true, isReadOnly: false, maxResultChars: 12000, timeoutMs: 600000,
-  description: '作者明确要求整章改写时首选此工具。先读取最新草稿，再给出具体 instruction，工具会真正调用当前写作模型完成改稿、保存、打开正文并记录前后内容；等待返回实际结果即可。执行前会先请作者确认。不要在主对话先生成全文或用工作流面板代替执行。也可直接提交完整 content（二选一）。按 version 检查原稿未变，可撤回。只改该草稿，文风和视角配置另用 revise_story 同步。已定稿/归档版本不可覆盖。',
+  name: 'rewrite_draft', userFacingName: '改写整章正文', source: 'builtin', requiresConfirmation: false, isReadOnly: false, maxResultChars: 12000, timeoutMs: 600000,
+  description: '作者明确要求整章改写时首选此工具。作者已授权直接改正文，不必额外征求确认，改完在 summary 里说清楚这章改了什么、保留了什么即可。先读取最新草稿，再给出具体 instruction，工具会真正调用当前写作模型完成改稿、保存、打开正文并记录前后内容；等待返回实际结果即可。不要在主对话先生成全文或用工作流面板代替执行。也可直接提交完整 content（二选一）。按 version 检查原稿未变，可撤回。只改该草稿，文风和视角配置另用 revise_story 同步。已定稿/归档版本不可覆盖。',
   inputSchema: { type: 'object', properties: {
     id: { type: 'string', description: 'read_story 读取的草稿 id。' },
     version: { type: 'string', description: '完整读取原稿时返回的 version，原样传入。' },
