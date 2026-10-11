@@ -87,7 +87,8 @@ describe('拆书创作系统迁移（v8 → v9）', () => {
     expect(ReconstructRepository.listAnalyses('book-1')).toEqual([])
 
     initProjectDatabase(folder)
-    expect(db.prepare('SELECT COUNT(*) AS c FROM canon_facts').get()).toMatchObject({ c: 1 })
+    // 重新打开会换连接，句柄必须重新取，否则拿到的是已关闭的旧连接
+    expect(getProjectDb()!.prepare('SELECT COUNT(*) AS c FROM canon_facts').get()).toMatchObject({ c: 1 })
   })
 })
 
