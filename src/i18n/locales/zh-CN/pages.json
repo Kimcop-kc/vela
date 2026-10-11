@@ -102,7 +102,7 @@
     "emptyHint": "导入一本参考小说，自动分章并写入本地知识库",
     "source": "来源文件：{{path}}",
     "vectorized": "已生成向量：可按语义检索",
-    "fulltextOnly": "仅全文检索（未配置 Embedding 模型）",
+    "fulltextOnly": "仅全文检索（未生成向量）",
     "searchPlaceholder": "在本书范围内检索，如：主角突破境界的写法",
     "search": "检索",
     "searchResults": "本书命中 {{count}} 条",

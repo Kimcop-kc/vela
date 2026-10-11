@@ -123,7 +123,11 @@ export class DeaiReviseCommand extends BaseWorkflowCommand<string> {
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('deai_revise')
     const outputTokens = Math.max(2048, Math.floor((defaultModel?.maxTokens || 4096)))
-    const inputBudget = Math.max(2000, Math.floor(outputTokens * 2.5) - 2500)
+    // 预留：模板 + 硬性要求 + 标记清单，再加方法本身。
+    // 方法来自可替换的 Skill（用户可能放一份很长的 SKILL.md），所以按实测长度动态扣，
+    // 而不是写死一个数字——否则换成长方法后分段会算多，整段塞爆模型上下文。
+    const methodTokens = estimateTokens(skillContent?.trim() || FALLBACK_DEAI_METHOD)
+    const inputBudget = Math.max(2000, Math.floor(outputTokens * 2.5) - 1500 - methodTokens)
 
     // ── 3. 分段改写：长章节按预算切段，每段只带自己范围内的标记 ──
     const chunks = splitDraftWithSpans(draft, inputBudget)

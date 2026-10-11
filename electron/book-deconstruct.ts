@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { canUseEmbedding, chunkText, generateEmbeddings } from './embedding'
-import { addChunks, removeDocument as removeDocFromStore, listDocuments as storeListDocuments } from './vector-store'
+import { addChunks, removeDocument as removeDocFromStore, listDocuments as storeListDocuments, getVectorlessDocIds } from './vector-store'
 import { splitFileIntoChaptersAsync } from './chapter-splitting'
 import type { BookChapterEntry, BookRecord } from '../src/shared/ipc-channels'
 
@@ -27,7 +27,8 @@ function booksDir(projectPath: string): string {
 }
 
 /** 列出本项目已有的拆书档案（按导入时间倒序） */
-export function listBooks(projectPath: string): BookRecord[] {
+/** 读取拆书档案文件（不含向量状态） */
+function readBookFiles(projectPath: string): BookRecord[] {
   try {
     const dir = booksDir(projectPath)
     if (!fs.existsSync(dir)) return []
@@ -44,6 +45,34 @@ export function listBooks(projectPath: string): BookRecord[] {
       .sort((a, b) => b.importedAt.localeCompare(a.importedAt))
   } catch {
     return []
+  }
+}
+
+/**
+ * 档案里存的向量状态是导入当时的快照；这里按知识库现状实时判断。
+ * 部分章节还没有向量时算「未完成」，避免显示成已生成却搜不到。
+ */
+function resolveVectorized(book: BookRecord, presentDocIds: Set<string>, vectorlessDocIds: Set<string>): boolean {
+  const docIds = book.chapters.map(chapter => chapter.docId).filter(id => id && presentDocIds.has(id))
+  if (docIds.length === 0) return book.vectorized
+  return docIds.every(id => !vectorlessDocIds.has(id))
+}
+
+/** 列出本项目已有的拆书档案（按导入时间倒序），向量状态按知识库现状实时计算 */
+export async function listBooks(projectPath: string): Promise<BookRecord[]> {
+  const books = readBookFiles(projectPath)
+  if (books.length === 0) return books
+  try {
+    const [documents, vectorlessDocIds] = await Promise.all([
+      storeListDocuments(projectPath),
+      getVectorlessDocIds(projectPath),
+    ])
+    const presentDocIds = new Set(documents.map(document => document.id))
+    return books.map(book => ({ ...book, vectorized: resolveVectorized(book, presentDocIds, vectorlessDocIds) }))
+  } catch (e) {
+    // 知识库读不出来时退回档案里的快照，不影响列表本身
+    console.warn('[Vela 拆书] 读取向量状态失败，显示导入时的快照:', e)
+    return books
   }
 }
 

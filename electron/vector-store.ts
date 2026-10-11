@@ -649,21 +649,52 @@ export async function getChunksWithoutVectors(
       return { count: total }
     }
 
-    // 有 vector 列的情况下，统计 vector 为 null 的记录
+    // 有 vector 列的情况下，统计 vector 为空的记录
     const all = await table.query().select(['id', 'vector']).toArray()
-    const missing = all.filter((r: { id: string; vector?: unknown }) => {
-      if (!r.vector) return true
-      const vec = r.vector as { length?: number; toArray?: () => unknown[] }
-      if (typeof vec.toArray === 'function') {
-        return vec.toArray().length === 0
-      }
-      return (vec.length ?? -1) === 0
-    })
+    const missing = all.filter((r: { id: string; vector?: unknown }) => isVectorEmpty(r.vector))
     return { count: missing.length }
   } catch (e) {
     console.error('[Vela KB] getChunksWithoutVectors error:', e)
     return { count: 0 }
   }
+}
+
+/** 向量是否为空（Arrow Vector 或普通数组） */
+function isVectorEmpty(vector: unknown): boolean {
+  if (!vector) return true
+  const vec = vector as { length?: number; toArray?: () => unknown[] }
+  if (typeof vec.toArray === 'function') return vec.toArray().length === 0
+  return (vec.length ?? -1) === 0
+}
+
+/**
+ * 哪些文档（docId）还有没生成向量的块。
+ *
+ * 拆书列表用它实时显示「已生成向量 / 仅全文检索」：档案里存的 vectorized 是导入当时的快照，
+ * 之后在知识库页补过向量也不会变，会出现「明明补好了还写着仅全文检索」的误导。
+ */
+export async function getVectorlessDocIds(projectPath: string): Promise<Set<string>> {
+  const vectorless = new Set<string>()
+  try {
+    const db = await getConnection(projectPath)
+    const tableNames = await db.tableNames()
+    if (!tableNames.includes(TABLE_NAME)) return vectorless
+
+    const table = await db.openTable(TABLE_NAME)
+    const schema = await table.schema()
+    const hasVectorCol = schema.fields.some(f => f.name === 'vector')
+    const rows = hasVectorCol
+      ? await table.query().select(['docId', 'vector']).toArray()
+      : await table.query().select(['docId']).toArray()
+
+    for (const row of rows as Array<{ docId?: string; vector?: unknown }>) {
+      if (!row.docId) continue
+      if (!hasVectorCol || isVectorEmpty(row.vector)) vectorless.add(row.docId)
+    }
+  } catch (e) {
+    console.warn('[Vela KB] getVectorlessDocIds error:', e)
+  }
+  return vectorless
 }
 
 /**

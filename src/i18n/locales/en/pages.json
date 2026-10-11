@@ -102,7 +102,7 @@
     "emptyHint": "Import a reference novel to split it by chapter into the local knowledge base",
     "source": "Source file: {{path}}",
     "vectorized": "Vectors generated: semantic search available",
-    "fulltextOnly": "Full-text search only (no embedding model configured)",
+    "fulltextOnly": "Full-text search only (no vectors generated)",
     "searchPlaceholder": "Search within this book, e.g. how the protagonist breaks through",
     "search": "Search",
     "searchResults": "{{count}} hit(s) in this book",
