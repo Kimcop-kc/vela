@@ -47,6 +47,13 @@ export {
 
 
 export { extractCanonWriteback, extractAndWriteback, type ExtractParams } from './fact-extractor'
+export { parseChapterNotes, type ParsedChapterNotes } from './notes-parser'
+export {
+  backfillCanonWriteback,
+  findChaptersMissingWriteback,
+  type BackfillChapterResult,
+  type BackfillResult,
+} from './canon-backfill'
 export {
   isTemporaryDescriptorName,
   filterTemporaryDescriptorNames,

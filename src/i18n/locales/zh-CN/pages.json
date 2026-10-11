@@ -15,6 +15,13 @@
   "storyBibleOverview": {
     "openProjectFirst": "请先打开项目",
     "refresh": "刷新",
+    "backfill": "补写圣经数据",
+    "backfillRunning": "补写中 {{done}}/{{total}}",
+    "backfillConfirm": "有 {{count}} 章已定稿但圣经里没有写回痕迹（时间线 / 角色状态 / 事实都没有）。\n\n现在用这些章节的正文与「章节要点」重新抽一遍？不会改动正文，也不会额外调用模型。",
+    "backfillNothing": "没有需要补写的章节",
+    "backfillDone": "补写完成：{{chapters}} 章写入（时间线 {{events}} 条、候选事实 {{facts}} 条）{{empty}} 章要点里没有可用条目。",
+    "backfillNoResult": "{{count}} 章都没抽到内容——通常是这些章节还没有生成「章节要点」。可以在定稿时重新生成，或手工在时间线/事实页补录。",
+    "backfillFailed": "补写失败：{{error}}",
     "searchPlaceholder": "搜索角色、事件、剧情或事实",
     "sections": {
       "overview": "总览",

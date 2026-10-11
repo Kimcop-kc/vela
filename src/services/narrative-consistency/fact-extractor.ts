@@ -5,8 +5,9 @@
  * 输出：CanonWriteback payload（事件 / 角色 delta / 剧情线 / 事实 / 摘要）
  *
  * 策略：
- *   - 本地启发式优先：基于正则/词法提取能在不调用 LLM 的情况下提取出
- *     70%+ 的事件和角色状态变更，避免每章多耗一次 LLM 调用。
+ *   - 「章节要点」优先：定稿时生成的要点已经按段落分好（剧情节点/角色动态/新增设定/伏笔与钩子），
+ *     直接解析它比关键词启发式准得多，且同样不额外调用模型。
+ *   - 本地启发式兜底：要点缺失或解析不出东西时，才用正则/词法提取。
  *   - LLM 增强：可选；若调用方传入 llmExtractor 函数，则用它抽取更精细的
  *     角色目标/关系/目标剧情线。最终以本地提取为兜底，LLM 提取为补充。
  *
@@ -22,6 +23,7 @@ import type {
   Fact,
 } from './types'
 import { canonStore } from './canon-store'
+import { parseChapterNotes } from './notes-parser'
 
 const FLASHBACK_MARKERS = ['回忆', '十年前', '二十年前', '那年', '曾经', '脑海中']
 
@@ -336,9 +338,33 @@ export function extractCanonWriteback(params: ExtractParams): CanonWriteback {
   // 清理标题（去掉 "第N章 " 前缀）
   const cleanTitle = chapterTitle.replace(/^第\s*[\d一二三四五六七八九十百千万零〇]+\s*章\s*/, '').trim()
 
-  const events = extractEvents(chapterContent, chapterNumber, characters)
-  const characterDeltas = extractCharacterDeltas(chapterContent, chapterNumber, characters)
-  const facts = extractFacts(chapterContent, chapterNumber, characters.map(c => c.name))
+  // 优先用「章节要点」里已经分好段的结构（模型产物，质量高、零额外调用）；
+  // 要点缺失或解析不出东西时，才退回关键词启发式。
+  const fromNotes = params.existingNotes?.trim()
+    ? parseChapterNotes(params.existingNotes, {
+        chapterNumber,
+        chapterTitle: cleanTitle,
+        characterNames: characters.map(c => c.name).filter(Boolean),
+      })
+    : null
+  const notesUsable = !!fromNotes && (fromNotes.events.length > 0 || fromNotes.facts.length > 0 || fromNotes.characterDeltas.length > 0)
+
+  const events = notesUsable && fromNotes!.events.length > 0
+    ? fromNotes!.events
+    : extractEvents(chapterContent, chapterNumber, characters)
+  const characterDeltas = notesUsable && fromNotes!.characterDeltas.length > 0
+    ? fromNotes!.characterDeltas
+    : extractCharacterDeltas(chapterContent, chapterNumber, characters)
+  const noteFacts = notesUsable ? fromNotes!.facts : []
+  const heuristicFacts = extractFacts(chapterContent, chapterNumber, characters.map(c => c.name))
+  // 合并两边的候选事实并按陈述去重；要点里的排在前面（更具体）
+  const seenStatements = new Set<string>()
+  const facts = [...noteFacts, ...heuristicFacts].filter(fact => {
+    const statement = String(fact.statement ?? '').trim()
+    if (!statement || seenStatements.has(statement)) return false
+    seenStatements.add(statement)
+    return true
+  })
 
   // 摘要：本地提取 + existing notes（若有）
   let summary = extractSummary(chapterContent, cleanTitle)
@@ -346,13 +372,21 @@ export function extractCanonWriteback(params: ExtractParams): CanonWriteback {
     summary = `${summary}\n\n【结构化要点】\n${params.existingNotes.trim()}`
   }
 
-  // 剧情线变更：若 chapterBlueprint.keyEvents 存在，新建一条剧情线
+  // 剧情线变更：要点里的 [埋] 直接登记为伏笔，比只认关键词准得多
   const plotLineChanges: CanonWriteback['plotLineChanges'] = {}
+  if (notesUsable && fromNotes!.foreshadows.length > 0) {
+    plotLineChanges.added = fromNotes!.foreshadows.map(item => ({
+      ...item,
+      kind: 'foreshadow' as const,
+      startedAt: chapterNumber,
+      lastAdvancedAt: chapterNumber,
+    }))
+  }
   if (params.chapterBlueprint?.keyEvents?.trim()) {
     const kev = params.chapterBlueprint.keyEvents.trim()
     // 只在出现"开启"、"开启"、"建立"、"启动"等关键词时新建
     if (/开启|启动|建立|开启|启动|开启|开端/.test(kev)) {
-      plotLineChanges.added = [{
+      plotLineChanges.added = [...(plotLineChanges.added ?? []), {
         name: kev.slice(0, 30),
         status: 'active',
         startedAt: chapterNumber,

@@ -15,6 +15,13 @@
   "storyBibleOverview": {
     "openProjectFirst": "Open a project first",
     "refresh": "Refresh",
+    "backfill": "Backfill bible data",
+    "backfillRunning": "Backfilling {{done}}/{{total}}",
+    "backfillConfirm": "{{count}} finalized chapters have no write-back in the story bible (no timeline, character state, or facts).\n\nRe-extract them from the finalized text and their chapter notes? The text is not modified and no model call is made.",
+    "backfillNothing": "Nothing to backfill",
+    "backfillDone": "Backfill done: {{chapters}} chapters written ({{events}} timeline entries, {{facts}} candidate facts); {{empty}} chapters had no usable notes.",
+    "backfillNoResult": "Nothing extractable in {{count}} chapters — usually because they have no chapter notes yet. Regenerate the notes on finalize, or add entries by hand.",
+    "backfillFailed": "Backfill failed: {{error}}",
     "searchPlaceholder": "Search characters, events, plots, or facts",
     "sections": {
       "overview": "Overview",

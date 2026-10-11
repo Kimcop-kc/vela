@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Archive, BookMarked, Check, ChevronDown, ChevronRight, Clock3, GitBranch, History, Lightbulb, MapPin, Mountain, Plus, RefreshCw, RotateCcw, Search, Undo2, Users,
+  AlertTriangle, Archive, BookMarked, Check, ChevronDown, ChevronRight, Clock3, GitBranch, History, Lightbulb, Loader2, MapPin, Mountain, Plus, RefreshCw, RotateCcw, Search, Undo2, Users,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '../../stores/project-store'
@@ -8,7 +8,8 @@ import { useLayoutStore, type StoryBibleSection } from '../../stores/layout-stor
 import { useCharacterStore } from '../../stores/character-store'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
-import { canonStore } from '../../services/narrative-consistency'
+import { confirm } from '../ui/Confirm'
+import { backfillCanonWriteback, canonStore, findChaptersMissingWriteback } from '../../services/narrative-consistency'
 import type { CharacterStateSnapshot, ChapterSummary, Fact, ItemEvent, Location, PlotLine, Realm, TimelineEvent } from '../../services/narrative-consistency'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { Button } from '../ui/Button'
@@ -82,6 +83,10 @@ export default function StoryBibleOverview() {
   /** 地点与空间关系 */
   const [locations, setLocations] = useState<Location[]>([])
   const [locationDraft, setLocationDraft] = useState({ name: '', region: '' })
+  /** 「补写圣经数据」的进度（已定稿但没写回的章节） */
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillDone, setBackfillDone] = useState(0)
+  const [backfillTotal, setBackfillTotal] = useState(0)
 
   const load = useCallback(async () => {
     if (!projectPath) {
@@ -269,6 +274,45 @@ export default function StoryBibleOverview() {
     if (await canonStore.removeLocation(id)) setLocations(await canonStore.getLocations())
   }, [])
 
+  /**
+   * 补写圣经数据：把「已定稿但时间线/角色状态/事实都没有痕迹」的章节重跑一遍写回。
+   *
+   * 用的是现成材料（已定稿正文 + 定稿时生成的章节要点 + 角色卡 + 蓝图），
+   * 不重新调用模型、也不改动正文。
+   */
+  const handleBackfill = useCallback(async () => {
+    const missing = await findChaptersMissingWriteback()
+    if (missing.length === 0) {
+      toast.info(t('storyBibleOverview.backfillNothing'))
+      return
+    }
+    const ok = await confirm(t('storyBibleOverview.backfillConfirm', { count: missing.length }))
+    if (!ok) return
+    setBackfilling(true)
+    setBackfillDone(0)
+    setBackfillTotal(missing.length)
+    try {
+      const result = await backfillCanonWriteback({
+        chapters: missing,
+        onProgress: (_item, done) => setBackfillDone(done),
+      })
+      const written = result.chapters.filter(item => item.ok && (item.events > 0 || item.facts > 0 || item.characterStates > 0 || item.foreshadows > 0))
+      const empty = result.chapters.filter(item => item.ok && item.events === 0 && item.facts === 0 && item.characterStates === 0 && item.foreshadows === 0)
+      if (written.length === 0) toast.warning(t('storyBibleOverview.backfillNoResult', { count: result.chapters.length }))
+      else toast.success(t('storyBibleOverview.backfillDone', {
+        chapters: written.length,
+        events: written.reduce((sum, item) => sum + item.events, 0),
+        facts: written.reduce((sum, item) => sum + item.facts, 0),
+        empty: empty.length,
+      }))
+      await load()
+    } catch (error) {
+      toast.error(t('storyBibleOverview.backfillFailed', { error: String(error) }))
+    } finally {
+      setBackfilling(false)
+    }
+  }, [load, t])
+
   const filteredCharacters = useMemo(
     () => characters.filter(character => includesQuery(query, character.name, character.role, character.background, character.motivation, character.arc)),
     [characters, query],
@@ -302,10 +346,20 @@ export default function StoryBibleOverview() {
             {sectionTitle(section, t)}
           </span>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          {t('storyBibleOverview.refresh')}
-        </Button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => void handleBackfill()} disabled={loading || backfilling}>
+            {backfilling
+              ? <Loader2 size={11} className="animate-spin" />
+              : <History size={11} />}
+            {backfilling
+              ? t('storyBibleOverview.backfillRunning', { done: backfillDone, total: backfillTotal })
+              : t('storyBibleOverview.backfill')}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            {t('storyBibleOverview.refresh')}
+          </Button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">
