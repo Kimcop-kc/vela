@@ -5,7 +5,7 @@
  * 拆书内容与普通知识库共用 LanceDB，检索结果按书名前缀过滤即为本书范围。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BookMarked, ChevronRight, Copy, Loader2, Search, ScrollText, Trash2, Upload } from 'lucide-react'
+import { BookMarked, ChevronRight, Copy, FileText, GitBranch, ListChecks, Loader2, Search, ScrollText, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -22,9 +22,15 @@ import {
   getChapterTextPage, selectBookFiles, type BookChapterEntry, type BookRecord,
   type BookImportProgress,
 } from '../../services/book-service'
+import BookAnalysisPanel from './books/BookAnalysisPanel'
+import PlotReconstructPanel from './books/PlotReconstructPanel'
+import { ConsistencyPanel, DraftGeneratePanel, SimilarityPanel } from './books/ReconstructChecksPanels'
 
 const PREVIEW_CHUNKS = 32
 const FULL_READ_CHUNKS = 100
+
+/** 拆书页签：从「读参考书」到「写成自己的稿」的完整链路 */
+type BookView = 'reference' | 'analysis' | 'reconstruct' | 'draft' | 'consistency' | 'similarity'
 
 interface ChapterPageState {
   text: string
@@ -44,6 +50,7 @@ export default function BooksOverview() {
 
   const [books, setBooks] = useState<BookRecord[]>([])
   const [importing, setImporting] = useState(false)
+  const [view, setView] = useState<BookView>('reference')
   const [importProgress, setImportProgress] = useState<BookImportProgress | null>(null)
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
@@ -310,6 +317,44 @@ export default function BooksOverview() {
       ) : (
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-[880px] mx-auto px-6 py-5 space-y-6">
+            {/* 页签：原文 / 拆书分析 */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-md p-0.5" style={{ border: '1px solid var(--color-border)' }}>
+                {([
+                  { id: 'reference' as BookView, label: t('tabs.reference'), icon: BookMarked },
+                  { id: 'analysis' as BookView, label: t('tabs.analysis'), icon: ListChecks },
+                  { id: 'reconstruct' as BookView, label: t('tabs.reconstruct'), icon: GitBranch },
+                  { id: 'draft' as BookView, label: t('tabs.draft'), icon: FileText },
+                  { id: 'consistency' as BookView, label: t('tabs.consistency'), icon: ShieldCheck },
+                  { id: 'similarity' as BookView, label: t('tabs.similarity'), icon: Search },
+                ]).map(item => {
+                  const Icon = item.icon
+                  const active = view === item.id
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setView(item.id)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors"
+                      style={{
+                        backgroundColor: active ? 'var(--color-hover)' : 'transparent',
+                        color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
+                      }}
+                    >
+                      <Icon size={12} />
+                      {item.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {view === 'analysis' && <BookAnalysisPanel book={book} chapters={book.chapters} />}
+            {view === 'reconstruct' && <PlotReconstructPanel books={books} />}
+            {view === 'draft' && <DraftGeneratePanel />}
+            {view === 'consistency' && <ConsistencyPanel />}
+            {view === 'similarity' && <SimilarityPanel books={books} />}
+            {view === 'reference' && (
+            <>
             {/* 来源与索引状态 */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem]">
               <span className="truncate max-w-[560px]" style={{ color: 'var(--color-text-muted)' }} title={book.sourcePath}>
@@ -460,6 +505,8 @@ export default function BooksOverview() {
                 })}
               </div>
             </section>
+            </>
+            )}
           </div>
         </div>
       )}

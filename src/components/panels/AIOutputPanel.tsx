@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
+import type { ContextPreview } from '../../services/workflows/context-preview'
 
 /**
  * 右侧面板「AI 输出」视图
@@ -92,6 +93,78 @@ export default function AIOutputPanel() {
 
 
 // ===== 空状态 =====
+
+/**
+ * 「本次上下文」预览：生成前就能看到这次喂了哪些段落、各占多少字/token、数据来自哪里。
+ * 数据由写稿命令写进 workflow run 的 data.contextPreview。
+ */
+function ContextPreviewBlock({ run }: { run: WorkflowRun }) {
+  const { t } = useTranslation('panels')
+  const [open, setOpen] = useState(true)
+  const preview = run.data?.contextPreview as ContextPreview | undefined
+  if (!preview) return null
+
+  const sectionLabel = (key: string) => t(`aiPanel.contextPreviewSection.${key}`)
+  const breakdownLabel = (key: string) => t(`aiPanel.contextPreviewBreakdown.${key}`)
+
+  return (
+    <div className="mb-2 rounded-md overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+      <button
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs transition-colors"
+        style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-elevated)' }}
+        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--color-bg-elevated)')}
+        onClick={() => setOpen(value => !value)}
+      >
+        <ChevronRight size={12} style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        <span className="font-medium">{t('aiPanel.contextPreviewTitle')}</span>
+        <span className="ml-auto font-mono text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+          {t('aiPanel.contextPreviewTotals', {
+            chars: preview.promptChars,
+            tokens: preview.promptTokens,
+            budget: preview.tokenBudget,
+          })}
+        </span>
+      </button>
+      {open && (
+        <div className="px-2 py-1.5 space-y-1" style={{ borderTop: '1px solid var(--color-border)' }}>
+          {preview.sections.map(section => (
+            <div key={section.key} className="flex items-baseline gap-2 text-[0.68rem]">
+              <span className="flex-shrink-0" style={{ color: 'var(--color-text)', minWidth: 76 }}>{sectionLabel(section.key)}</span>
+              <span className="font-mono" style={{ color: 'var(--color-text-muted)' }}>
+                {t('aiPanel.contextPreviewSectionChars', { chars: section.chars, tokens: section.tokens })}
+              </span>
+              {section.breakdown && (
+                <span className="truncate" style={{ color: 'var(--color-text-muted)' }}>
+                  {section.breakdown
+                    .filter(item => item.count > 0)
+                    .map(item => `${breakdownLabel(item.key)} ${item.count}`)
+                    .join(' · ')}
+                </span>
+              )}
+              {!section.breakdown && section.items !== undefined && section.items > 0 && (
+                <span style={{ color: 'var(--color-text-muted)' }}>{t('aiPanel.contextPreviewItems', { count: section.items })}</span>
+              )}
+              {section.truncated && (
+                <span style={{ color: 'var(--color-warning-text)' }}>{t('aiPanel.contextPreviewTruncated')}</span>
+              )}
+            </div>
+          ))}
+          {preview.notes.map(note => (
+            <div key={note} className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {t(`aiPanel.contextPreviewNote.${note}`)}
+            </div>
+          ))}
+          {preview.warnings.map(warning => (
+            <div key={warning} className="text-[0.65rem]" style={{ color: 'var(--color-warning-text)' }}>
+              {t(`aiPanel.contextPreviewWarning.${warning}`)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function EmptyState() {
   const { t } = useTranslation('panels')
@@ -209,6 +282,7 @@ function ActiveRunView({
       >
         {/* 步骤进度区及独立输出流 */}
         <div className="px-2 pt-2 pb-4">
+          <ContextPreviewBlock run={run} />
           {run.steps.map((step, i) => (
             <StepOutputBlock
               key={step.id}

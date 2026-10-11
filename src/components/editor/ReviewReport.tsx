@@ -1,19 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle, Info, HelpCircle, ListChecks, LoaderCircle, Quote, ScanText, Sparkles, WandSparkles } from 'lucide-react'
+import { AlertTriangle, CheckCircle, FilePenLine, Info, HelpCircle, ListChecks, LoaderCircle, Quote, ScanText, Sparkles, WandSparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/Button'
+import { Textarea } from '../ui/Textarea'
+import { ipc } from '../../services/ipc-client'
+import { useProjectStore } from '../../stores/project-store'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import {
   OBSERVATION_DIMENSIONS,
+  OUTLINE_CLASSES,
   type AiTraceFinding,
+  type OutlineClass,
   type ObservationDimension,
   type ObservationSeverity,
   type QualitativeReview,
   type ReviewObservation,
+  buildAppendEdit,
+  buildOutlineAdjustmentBlock,
+  buildWritebackPrefill,
+  canWriteBackToOutline,
 } from '../../services/review'
 
 /** 审稿问题条目（JSON 格式） */
@@ -544,6 +553,19 @@ function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }
 
 // ===== 定性审稿视图 =====
 
+/**
+ * 大纲分类的配色：完成类是正向色，偏差类用告警色，
+ * 但「偏离不等于错误」——所以 creative（合理创新）用中性色，不当成问题。
+ */
+const OUTLINE_CLASS_COLOR: Record<OutlineClass, string> = {
+  done: 'var(--color-success-text)',
+  pending: 'var(--color-text-muted)',
+  deviated: 'var(--color-warning-text)',
+  missing: 'var(--color-warning-text)',
+  creative: 'var(--color-info-text)',
+  conflict: 'var(--color-error)',
+}
+
 /** 观察强度 → 视觉样式（只表示建议的阅读优先级，不是通过/失败判定） */
 const OBSERVATION_SEVERITY_META: Record<ObservationSeverity, {
   colorClass: string
@@ -593,6 +615,10 @@ function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber,
   const [busy, setBusy] = useState<'deai' | 'revise' | null>(null)
   // 证据偏移相对「被审正文」，需要读回草稿正文才能换算成行号
   const [draftContent, setDraftContent] = useState('')
+  /** 正在写回大纲的观察 id（null 表示没有展开编辑框） */
+  const [writebackId, setWritebackId] = useState<string | null>(null)
+  const [writebackText, setWritebackText] = useState('')
+  const [writebackBusy, setWritebackBusy] = useState(false)
 
   useEffect(() => {
     if (!draftPath) return
@@ -621,6 +647,19 @@ function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber,
   const canAct = !!(draftPath && chapterDir)
   const contextTotal = review.context.timelineEvents + review.context.characterStates
     + review.context.openPlotLines + review.context.knownFacts
+
+  // 大纲维度的六类汇总：需求文档要求「偏离不等于错误」，
+  // 所以这里把「已完成 / 未完成 / 偏差 / 遗漏 / 合理创新 / 冲突」分开计数，供作者判断。
+  const outlineSummary = useMemo(() => {
+    const counts: Record<OutlineClass, number> = { done: 0, pending: 0, deviated: 0, missing: 0, creative: 0, conflict: 0 }
+    for (const observation of review.observations) {
+      if (observation.dimension !== 'outline-deviation' || !observation.outlineClass) continue
+      counts[observation.outlineClass] += 1
+    }
+    return OUTLINE_CLASSES
+      .map((outlineClass) => ({ outlineClass, count: counts[outlineClass] }))
+      .filter(item => item.count > 0)
+  }, [review.observations])
 
   /** 收集发起修订所需的信息（草稿正文 / 章节标题 / 最新审稿文件名） */
   const resolveRevisionContext = async (targetPath: string, targetDir: string): Promise<RevisionContext | null> => {
@@ -697,6 +736,55 @@ function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber,
     }
   }
 
+  /**
+   * 显式发起：把作者确认的新方向写回本章大纲。
+   *
+   * 只追加到「作者微操指导」这一栏（写稿时按最高优先级注入），不覆盖原有规划；
+   * 走的是剧情调整那条通路，所以留前后对照、可在剧情调整记录里撤回。
+   */
+  const doWritebackOutline = async (observation: ReviewObservation) => {
+    const text = writebackText.trim()
+    if (!text) return
+    const chapter = chapterNumber || review.chapterNumber
+    const projectPath = useProjectStore.getState().currentProject?.path
+    if (!projectPath) {
+      toast.error(t('reviewReport.qualitative.writebackFailed', { error: t('reviewReport.qualitative.noDraft') }))
+      return
+    }
+    setWritebackBusy(true)
+    try {
+      // 内容走蓝图接口拿全文（story:read 每次只返回 3500 字，截断的尾巴会挑错锚点）；
+      // 版本号仍取自 story:read，写入时由仓储层校验并发冲突。
+      const [doc, blueprint] = await Promise.all([
+        ipc.invoke('story:read', projectPath, { kind: 'blueprint', id: String(chapter) }),
+        ipc.invoke('db:blueprint-get', chapter),
+      ])
+      if (!blueprint) throw new Error(t('reviewReport.qualitative.writebackNoBlueprint', { chapter }))
+      const edit = buildAppendEdit(blueprint.userGuidance ?? '', buildOutlineAdjustmentBlock(text, chapter))
+      if (!edit) throw new Error(t('reviewReport.qualitative.writebackEmpty'))
+      const { applyRevision } = await import('../../services/agent/story-revision-service')
+      await applyRevision(projectPath, {
+        intent: t('reviewReport.qualitative.writebackIntent', { chapter }),
+        summary: t('reviewReport.qualitative.writebackSummary', { chapter, title: observation.title }),
+        edits: [{
+          kind: 'blueprint',
+          id: String(chapter),
+          version: doc.version,
+          field: 'userGuidance',
+          oldText: edit.oldText,
+          newText: edit.newText,
+        }],
+      })
+      setWritebackId(null)
+      setWritebackText('')
+      toast.success(t('reviewReport.qualitative.writebackSuccess', { chapter }))
+    } catch (e) {
+      toast.error(t('reviewReport.qualitative.writebackFailed', { error: String(e) }))
+    } finally {
+      setWritebackBusy(false)
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-4">
@@ -745,6 +833,25 @@ function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber,
                   <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                     {t(`commands:review.dimension.${group.dimension}`)} · {group.items.length}
                   </div>
+                  {group.dimension === 'outline-deviation' && outlineSummary.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1.5 pl-1">
+                      {outlineSummary.map(item => (
+                        <span
+                          key={item.outlineClass}
+                          className="px-1.5 py-[1px] rounded text-[0.65rem]"
+                          style={{
+                            border: '1px solid var(--color-border)',
+                            color: OUTLINE_CLASS_COLOR[item.outlineClass],
+                          }}
+                        >
+                          {t(`reviewReport.qualitative.outlineClass.${item.outlineClass}`)} {item.count}
+                        </span>
+                      ))}
+                      <span className="text-[0.62rem]" style={{ color: 'var(--color-text-muted)' }}>
+                        {t('reviewReport.qualitative.outlineClassHint')}
+                      </span>
+                    </div>
+                  )}
                   <div className="space-y-1.5 pl-1">
                     {group.items.map((observation) => {
                       const meta = OBSERVATION_SEVERITY_META[observation.severity] ?? OBSERVATION_SEVERITY_META.note
@@ -767,6 +874,11 @@ function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber,
                               )}
                               <div className={cn('mt-1 text-[0.65rem]', meta.colorClass)}>
                                 {t(`commands:review.severity.${observation.severity}`)}
+                                {observation.outlineClass && (
+                                  <span className="ml-1.5" style={{ color: OUTLINE_CLASS_COLOR[observation.outlineClass] }}>
+                                    {t(`reviewReport.qualitative.outlineClass.${observation.outlineClass}`)}
+                                  </span>
+                                )}
                                 {observation.origin === 'rule' ? ` · ${t('reviewReport.qualitative.originRule')}` : ''}
                               </div>
                             </div>
@@ -789,6 +901,56 @@ function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber,
                           {observation.suggestion && (
                             <div className="mt-1.5 ml-5 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
                               {t('reviewReport.qualitative.suggestion')} {observation.suggestion}
+                            </div>
+                          )}
+                          {canWriteBackToOutline(observation) && (
+                            <div className="mt-2 ml-5">
+                              {writebackId === observation.id ? (
+                                <div
+                                  className="p-2 rounded-md"
+                                  style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+                                >
+                                  <Textarea
+                                    rows={3}
+                                    value={writebackText}
+                                    onChange={(e) => setWritebackText(e.target.value)}
+                                    placeholder={t('reviewReport.qualitative.writebackPlaceholder')}
+                                  />
+                                  <div className="mt-1 text-[0.65rem] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                                    {t('reviewReport.qualitative.writebackHint', { chapter: chapterNumber || review.chapterNumber })}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1.5">
+                                    <Button
+                                      size="sm"
+                                      disabled={writebackBusy || !writebackText.trim()}
+                                      onClick={() => void doWritebackOutline(observation)}
+                                    >
+                                      {writebackBusy ? <LoaderCircle size={11} className="animate-spin" /> : <FilePenLine size={11} />}
+                                      {t('reviewReport.qualitative.writebackConfirm')}
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled={writebackBusy}
+                                      onClick={() => { setWritebackId(null); setWritebackText('') }}
+                                    >
+                                      {t('reviewReport.qualitative.writebackCancel')}
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setWritebackId(observation.id)
+                                    setWritebackText(buildWritebackPrefill(observation))
+                                  }}
+                                >
+                                  <FilePenLine size={11} />
+                                  {t('reviewReport.qualitative.writeback')}
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>

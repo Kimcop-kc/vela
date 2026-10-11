@@ -10,6 +10,8 @@
  * 调用方只需从本文件导入即可使用全部能力。
  */
 export * from './types'
+export { buildImpactReport } from './impact-analysis'
+export type { ImpactReport, ImpactReportItem } from './impact-analysis'
 export { CanonStore, canonStore } from './canon-store'
 export {
   buildCanonContext,

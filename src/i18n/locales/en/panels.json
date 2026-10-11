@@ -63,7 +63,37 @@
     "waitingResponse": "Waiting for response...",
     "workflowComplete": "Entire workflow completed",
     "viewHistoryOutput": "Click to view this step's history",
-    "aiOutput": "AI Output"
+    "aiOutput": "AI Output",
+    "contextPreviewTitle": "Context for this run",
+    "contextPreviewTotals": "{{chars}} chars ≈ {{tokens}} tokens (budget {{budget}})",
+    "contextPreviewSectionChars": "{{chars}} chars ≈ {{tokens}} tokens",
+    "contextPreviewItems": "{{count}} items",
+    "contextPreviewTruncated": "truncated to limit",
+    "contextPreviewSection": {
+      "architecture": "Architecture",
+      "canon": "Canon (dynamic)",
+      "chapterInfo": "Chapter info",
+      "futureBlueprints": "Upcoming chapters",
+      "previousEnding": "Previous ending",
+      "knowledge": "Knowledge base",
+      "guidance": "Global guidance",
+      "userGuidance": "Chapter guidance",
+      "style": "Writing style"
+    },
+    "contextPreviewBreakdown": {
+      "timeline": "timeline",
+      "characterStates": "character states",
+      "plotLines": "plot lines",
+      "facts": "facts"
+    },
+    "contextPreviewWarning": {
+      "no-knowledge": "Knowledge base returned nothing (no reference material injected)",
+      "over-budget": "Prompt exceeds the context budget; consider trimming architecture or synopsis"
+    },
+    "contextPreviewNote": {
+      "first-chapter": "Chapter 1: no knowledge search, no previous ending or dynamic canon",
+      "truncated": "Some sections hit the length limit and were truncated"
+    }
   },
   "bottomPanel": {
     "tabs": {

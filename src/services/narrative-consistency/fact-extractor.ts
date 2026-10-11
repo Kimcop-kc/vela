@@ -16,6 +16,7 @@
  */
 import type {
   CanonWriteback,
+  CanonWritebackResult,
   TimelineEvent,
   CharacterStateDelta,
   Fact,
@@ -367,6 +368,7 @@ export function extractCanonWriteback(params: ExtractParams): CanonWriteback {
     chapterNumber,
     chapterTitle: cleanTitle,
     chapterSummary: summary,
+    chapterContent: params.chapterContent,
     newEvents: events,
     characterDeltas,
     plotLineChanges,
@@ -378,11 +380,11 @@ export function extractCanonWriteback(params: ExtractParams): CanonWriteback {
  * 便捷方法：执行提取 + 写回（调用 CanonStore）
  * 任何异常都不会抛出，最多重置 ok=false。
  */
-export async function extractAndWriteback(params: ExtractParams): Promise<{ ok: boolean; errors: string[]; conflicts: string[] }> {
+export async function extractAndWriteback(params: ExtractParams): Promise<CanonWritebackResult> {
   try {
     const payload = extractCanonWriteback(params)
     return await canonStore.writeback(payload)
   } catch (err) {
-    return { ok: false, errors: [String(err)], conflicts: [] }
+    return { ok: false, errors: [String(err)], conflicts: [], impactCandidates: [] }
   }
 }

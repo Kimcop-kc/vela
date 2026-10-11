@@ -71,6 +71,13 @@ export interface PlotLine {
   lastAdvancedAt: number
   /** 解决章节号（status=resolved 时有效） */
   resolvedAt?: number
+  /**
+   * 线索类型：plot=剧情线；foreshadow=伏笔（埋设与回收需要台账跟踪）。
+   * 未标记时按 plot 处理。
+   */
+  kind?: 'plot' | 'foreshadow'
+  /** 伏笔的预计回收阶段（「中期」「第三卷末」这类自由文本，可为空） */
+  plannedResolveAt?: string
   /** 涉及角色 */
   characters: string[]
   /** 当前进度描述 */
@@ -97,6 +104,13 @@ export interface Fact {
   evidence?: string
   /** 记忆状态；未标记时按 active 处理 */
   status?: FactStatus
+  /**
+   * 作者确认时间（ISO 字符串）。
+   * 为 null / 未设置表示这条事实是 AI 提取、还没有经过作者确认。
+   */
+  confirmedAt?: string | null
+  /** 最后一次变更时间（状态、确认、写回都会更新） */
+  updatedAt?: string | null
 }
 
 /** 生成前注入的 CanonContext —— 按固定优先级排序 */
@@ -117,6 +131,12 @@ export interface CanonContext {
   chapterGoal: string
   /** 已知事实摘要（短文本） */
   knownFacts: Fact[]
+  /** 物品流转台账（获得 / 转交 / 丢失 / 损毁 / 消耗），用于防止道具凭空出现或消失 */
+  itemLedger?: string
+  /** 境界阶梯（由低到高：能做到什么 / 做不到什么 / 怎么突破），用于约束战斗与突破描写 */
+  realmLadder?: string
+  /** 地点与空间关系（区域 / 势力 / 距离 / 通行耗时），用于约束人物移动 */
+  locationMap?: string
   /** 上一章结尾（用于衔接） */
   previousEnding: string
   /** RAG 检索结果（最低优先级） */
@@ -182,6 +202,12 @@ export interface CanonWriteback {
   chapterNumber: number
   chapterTitle: string
   chapterSummary: string
+  /**
+   * 本章正文。
+   * 写回时用它把「本章沿用了哪些既有事实」匹配出来落库（canon_fact_usage），
+   * 这样以后修改前文时才能精确列出受影响的后续章节。
+   */
+  chapterContent?: string
   /** 本章新增事件 */
   newEvents: Omit<TimelineEvent, 'id' | 'createdAt'>[]
   /** 角色状态变更 */
@@ -194,6 +220,92 @@ export interface CanonWriteback {
   }
   /** 新增事实 */
   newFacts: Omit<Fact, 'id'>[]
+}
+
+/**
+ * 因本次重写而消失（被删或被替换）的事实，以及引用过它的后续章节。
+ *
+ * 只用于**报告**：让作者知道改这一章会牵动后面哪些内容，
+ * 系统不会自动去改后续章节。
+ */
+export interface FactImpactCandidate {
+  fact: Fact
+  usedBy: Array<{ chapterNumber: number; evidence: string }>
+}
+
+/** 写回结果（含影响分析所需的候选） */
+export interface CanonWritebackResult {
+  ok: boolean
+  errors: string[]
+  conflicts: string[]
+  impactCandidates: FactImpactCandidate[]
+}
+
+/** 物品流转的动作类型 */
+export type ItemEventAction = 'obtained' | 'transferred' | 'lost' | 'destroyed' | 'consumed'
+
+/**
+ * 物品流转记录：某件道具在第几章被谁获得 / 转交 / 丢失 / 损毁 / 消耗。
+ *
+ * 由作者（或助手）显式登记，不做自动推断——道具的去向属于「作者说了算」的信息，猜错比不记更糟。
+ * 登记结果会进入 Canon 上下文，防止道具凭空出现或消失。
+ */
+export interface ItemEvent {
+  id?: number
+  /** 物品名（与事实里 item 类目的名称对应） */
+  item: string
+  action: ItemEventAction
+  chapterNumber: number
+  /** 相关角色（获得者 / 交出者 / 接手者） */
+  actor?: string
+  note?: string
+  createdAt?: string
+}
+
+/** 章节摘要（用于 recentChapterSummaries） */
+/**
+ * 地点与空间关系：区域、势力、与别处的距离、通行方式与耗时。
+ *
+ * 目的是让模型知道「A 到 B 有多远、怎么去」——避免人物在没有交通或特殊能力的情况下
+ * 突然出现在远距离地点（现有的地点连续性检查只能事后发现，这里是事前给约束）。
+ */
+export interface Location {
+  id?: number
+  /** 地点名（如「黑水渡口」） */
+  name: string
+  /** 所属区域（如「云州西部」） */
+  region?: string
+  /** 控制此地的势力（如「周家」） */
+  faction?: string
+  /** 与哪些地方相邻 / 有多远 */
+  distanceNote?: string
+  /** 怎么去、大概要多久 */
+  travelNote?: string
+  notes?: string
+  createdAt?: string
+}
+
+/** 章节摘要（用于 recentChapterSummaries） */
+/**
+ * 境界台阶：修仙/玄幻的等级规则。
+ *
+ * 由作者维护一张阶梯表（练气 → 筑基 → …），写明每阶能做到什么、做不到什么、怎么突破。
+ * 它会进入 Canon 上下文，让模型在写战斗与突破时守住规则（越级要有条件，突破要有代价）。
+ */
+export interface Realm {
+  id?: number
+  /** 境界名（如「筑基中期」） */
+  name: string
+  /** 由低到高的阶数，用于判断越级 */
+  rankOrder: number
+  /** 该境界能做到什么 */
+  abilities?: string
+  /** 做不到什么 / 代价与限制 */
+  limits?: string
+  /** 突破所需条件 */
+  breakthrough?: string
+  notes?: string
+  createdAt?: string
 }
 
 /** 章节摘要（用于 recentChapterSummaries） */

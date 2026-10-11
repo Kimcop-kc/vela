@@ -32,7 +32,7 @@ import {
 } from '../workflow-utils'
 import type { ChapterInfo } from '../chapter-workflow'
 import type { StepCallbacks } from '../../../stores/workflow-store'
-import { extractAndWriteback, runConsistencyGate, buildCanonContext, isTemporaryDescriptorName } from '../../narrative-consistency'
+import { extractAndWriteback, runConsistencyGate, buildCanonContext, isTemporaryDescriptorName, buildImpactReport } from '../../narrative-consistency'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -98,7 +98,7 @@ async function callLLMForPostProcess(
 function currentGenerationBudgets() {
   const llmStore = useLLMStore.getState()
   const model = llmStore.modelForPurpose('chapter_notes')
-  return resolveGenerationBudgets(model?.maxTokens)
+  return resolveGenerationBudgets(model?.maxTokens, model?.maxOutputTokens)
 }
 
 /** 容错 JSON 解析（剥离 Markdown 代码块 + 自动截取有效 JSON 边界） */
@@ -264,6 +264,25 @@ export function buildFinalizePostProcessSteps(
             count: result.conflicts.length,
             details: result.conflicts.slice(0, 3).join('；'),
           }))
+        }
+        // 修改影响分析：本次重写让哪些事实消失、它们被后面哪些章节引用过。
+        // 只报告，不自动改后续章节。
+        if (result.impactCandidates.length > 0) {
+          const report = buildImpactReport({ chapterNumber, candidates: result.impactCandidates })
+          if (report.items.length > 0) {
+            callbacks.log(t('finalize.impactDetected', {
+              facts: report.items.length,
+              chapters: report.affectedChapterCount,
+            }))
+            for (const item of report.items) {
+              callbacks.log(t('finalize.impactItem', {
+                statement: item.statement,
+                chapters: item.affectedChapters.join('、'),
+                severity: t(item.severity === 'high' ? 'finalize.impactSeverityHigh' : 'finalize.impactSeverityMedium'),
+              }))
+            }
+            callbacks.log(t('finalize.impactHint'))
+          }
         }
       } catch (e) {
         callbacks.log(t('finalize.canonWritebackError', { error: String(e) }))

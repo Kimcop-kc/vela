@@ -149,6 +149,8 @@ const MAX_STATEMENT_LEN = 500
 const MAX_EVIDENCE_LEN = 500
 const MAX_NAME_LEN = 200
 const MAX_SUMMARY_LEN = 5000
+/** 章节正文（写回时用于匹配「本章沿用了哪些既有事实」） */
+const MAX_CHAPTER_CONTENT_LEN = 200_000
 const MAX_LIST_SIZE = 1000
 const MAX_OBJECTS_PER_REQUEST = 1000
 
@@ -245,6 +247,7 @@ export function validateCanonWritebackPayload(v: unknown, path = 'payload') {
   }
   return {
     chapterNumber: checkNumberRange(v.chapterNumber, `${path}.chapterNumber`, { min: 1, max: 1e9, integer: true }),
+    chapterContent: checkStringLength(v.chapterContent ?? '', `${path}.chapterContent`, { max: MAX_CHAPTER_CONTENT_LEN }),
     newEvents: checkArray(
       v.newEvents,
       `${path}.newEvents`,

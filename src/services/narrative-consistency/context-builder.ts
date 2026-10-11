@@ -211,9 +211,89 @@ function formatCharacterStates(states: CharacterStateSnapshot[]): string {
 function formatOpenPlotLines(lines: PlotLine[]): string {
   if (lines.length === 0) return ''
   return lines
-    .map(l => `- [${l.status}] ${escapeTemplateVars(l.name)}（起始第${l.startedAt}章，最近推进第${l.lastAdvancedAt}章）` +
-      `：${escapeTemplateVars(l.currentState)} | 涉及：${(l.characters || []).join('、') || '—'}`)
+    .map(l => {
+      // 伏笔单独标出并带上预计回收阶段：让模型知道这条是要回收的伏笔，而不是随便推进的支线
+      const kindTag = l.kind === 'foreshadow' ? '伏笔 ' : ''
+      const plan = l.kind === 'foreshadow' && l.plannedResolveAt
+        ? `，预计回收：${escapeTemplateVars(l.plannedResolveAt)}`
+        : ''
+      return `- [${l.status}] ${kindTag}${escapeTemplateVars(l.name)}（起始第${l.startedAt}章，最近推进第${l.lastAdvancedAt}章${plan}）` +
+        `：${escapeTemplateVars(l.currentState)} | 涉及：${(l.characters || []).join('、') || '—'}`
+    })
     .join('\n')
+}
+
+/**
+ * 境界阶梯：按阶数从低到高列出「能做到 / 做不到 / 怎么突破」。
+ * 写战斗与突破时，模型据此判断越级是否成立、代价是否交够，避免随手越阶。
+ */
+async function buildRealmLadder(): Promise<string> {
+  try {
+    const realms = await canonStore.getRealms()
+    if (realms.length === 0) return ''
+    return realms
+      .map(realm => {
+        const parts: string[] = []
+        if (realm.abilities) parts.push(`能：${realm.abilities}`)
+        if (realm.limits) parts.push(`限：${realm.limits}`)
+        if (realm.breakthrough) parts.push(`突破：${realm.breakthrough}`)
+        return `- ${escapeTemplateVars(realm.name)}${parts.length ? `（${parts.join('；')}）` : ''}`
+      })
+      .join('\n')
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 地点与空间关系：把「A 在哪、归谁、离 B 多远、怎么去要多久」压成几行。
+ * 人物移动前先看这段，避免在没有交通或特殊能力时突然出现在远距离地点。
+ */
+async function buildLocationMap(): Promise<string> {
+  try {
+    const locations = await canonStore.getLocations()
+    if (locations.length === 0) return ''
+    return locations
+      .map(location => {
+        const head = [location.region, location.faction && `势力：${location.faction}`].filter(Boolean).join(' · ')
+        const parts = [location.distanceNote, location.travelNote].filter(Boolean)
+        return `- ${escapeTemplateVars(location.name)}${head ? `（${head}）` : ''}${parts.length ? `：${parts.map(part => escapeTemplateVars(part as string)).join('；')}` : ''}`
+      })
+      .join('\n')
+  } catch {
+    return ''
+  }
+}
+
+const ITEM_ACTION_LABEL: Record<string, string> = {
+  obtained: '获得', transferred: '转交', lost: '丢失', destroyed: '损毁', consumed: '消耗',
+}
+
+/**
+ * 物品流转台账：把「某件道具在第几章被谁获得 / 转交 / 丢失」压成几行，
+ * 让模型在动用道具前先看它还在不在谁手上（防止凭空出现或消失）。
+ * 只带去当前章节之前的记录。
+ */
+async function buildItemLedger(chapterNumber: number): Promise<string> {
+  try {
+    const events = (await canonStore.getItemEvents()).filter(event =>
+      event.chapterNumber > 0 && event.chapterNumber < chapterNumber)
+    if (events.length === 0) return ''
+    const byItem = new Map<string, string[]>()
+    for (const event of events) {
+      const label = ITEM_ACTION_LABEL[event.action] || event.action
+      const actor = event.actor ? `（${event.actor}）` : ''
+      const note = event.note ? `：${event.note}` : ''
+      byItem.set(event.item, [...(byItem.get(event.item) || []), `第${event.chapterNumber}章 ${label}${actor}${note}`])
+    }
+    // 只带最近有动静的 20 件，避免长篇后期台账把上下文撑长
+    return [...byItem.entries()]
+      .slice(-20)
+      .map(([item, steps]) => `- ${escapeTemplateVars(item)}：${steps.join(' → ')}`)
+      .join('\n')
+  } catch {
+    return ''
+  }
 }
 
 /** 把事实条目格式化为短文本 */
@@ -282,6 +362,9 @@ export async function buildCanonContext(params: BuildCanonContextParams): Promis
     openPlotLines: plotLines,
     chapterGoal: params.chapterGoal || '（无本章目标）',
     knownFacts: facts,
+    itemLedger: await buildItemLedger(params.chapterNumber),
+    realmLadder: await buildRealmLadder(),
+    locationMap: await buildLocationMap(),
     previousEnding: params.previousEnding || '（无上一章结尾）',
     ragContext: clampArchitectureField(params.ragContext, 4000) || '（无 RAG 检索结果）',
     writingStyle: params.writingStyle || '（无风格要求）',
@@ -364,6 +447,9 @@ export function renderCanonContext(ctx: CanonContext): string {
     { title: '【最近章节摘要】', content: ctx.recentChapterSummaries },
     { title: '【未结剧情线（必须在写作时考虑推进或避免冲突）】', content: formatOpenPlotLines(ctx.openPlotLines) },
     { title: '【关键事实条目（不可推翻）】', content: formatFacts(ctx.knownFacts) },
+    { title: '【物品流转（道具当前在谁手上 · 不可凭空出现或消失）】', content: ctx.itemLedger || '' },
+    { title: '【境界阶梯（越级需有条件 · 突破需交代价）】', content: ctx.realmLadder || '' },
+    { title: '【地点与空间关系（人物移动需符合距离与通行方式）】', content: ctx.locationMap || '' },
     { title: '【上一章结尾（必须自然衔接）】', content: ctx.previousEnding },
     { title: '【本章写作目标】', content: ctx.chapterGoal },
     { title: '【知识库参考（最低优先级 · 仅当与上述 canon 冲突时以 canon 为准）】', content: ctx.ragContext },

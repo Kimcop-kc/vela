@@ -302,7 +302,20 @@ export interface ModelProfile {
   apiKey: string
   baseUrl: string
   temperature: number
+  /**
+   * 上下文窗口（输入 + 输出一共能装多少 token）。
+   *
+   * 服务商目录里给的就是窗口值（deepseek-chat 65536、moonshot-v1-128k 131072 …）。
+   * 它决定「这次能喂多少上下文」的预算，不等于单次输出上限。
+   */
   maxTokens: number
+  /**
+   * 单次输出上限（可选，发给服务商的 `max_tokens`）。
+   *
+   * 不填就沿用旧行为：把 `maxTokens` 当输出上限用并收敛到 32768。
+   * 填了之后，预算按「窗口 − 输出」算，写作与审稿不会再被硬编码预算卡住。
+   */
+  maxOutputTokens?: number
   /** 该模型能胜任的用途（决定它出现在哪些用途下拉框里） */
   purposes: LLMPurposeCategory[]
   /** 是否启用；停用后不参与用途路由（缺省视为启用，兼容旧配置） */
@@ -352,6 +365,29 @@ import type { ReviewMeta, ReviewFull } from '../../electron/repositories/review-
 import type { ReviewDigestMeta } from '../../electron/repositories/review-digest-repository'
 import type { RehearsalContext } from './story-rehearsal'
 import type { PostProcessRunData, PostProcessStepData } from '../../electron/repositories/post-process-repository'
+import type {
+  BookAnalysisInput, BookAnalysisRecord,
+  PlotOutlineInput, PlotOutlineRecord,
+  SimilarityReportInput, SimilarityReportRecord,
+} from './reconstruct'
+
+// ===== 拆书创作系统（分析 / 剧情重构 / 相似度报告）=====
+export interface ReconstructChannels {
+  'db:book-analysis-list': { args: [bookId: string]; return: BookAnalysisRecord[] }
+  'db:book-analysis-get': { args: [id: number]; return: BookAnalysisRecord | null }
+  'db:book-analysis-get-many': { args: [ids: number[]]; return: BookAnalysisRecord[] }
+  'db:book-analysis-put': { args: [input: BookAnalysisInput]; return: { success: boolean; id?: number; error?: string } }
+  'db:book-analysis-remove': { args: [id: number]; return: { success: boolean; error?: string } }
+  'db:book-analysis-remove-book': { args: [bookId: string]; return: { success: boolean; removed?: number } }
+  'db:plot-outline-list': { args: []; return: PlotOutlineRecord[] }
+  'db:plot-outline-get': { args: [id: number]; return: PlotOutlineRecord | null }
+  'db:plot-outline-save': { args: [input: PlotOutlineInput]; return: { success: boolean; id?: number; error?: string } }
+  'db:plot-outline-remove': { args: [id: number]; return: { success: boolean; error?: string } }
+  'db:similarity-report-list': { args: [limit?: number]; return: SimilarityReportRecord[] }
+  'db:similarity-report-get': { args: [id: number]; return: SimilarityReportRecord | null }
+  'db:similarity-report-save': { args: [input: SimilarityReportInput]; return: { success: boolean; id?: number; error?: string } }
+  'db:similarity-report-remove': { args: [id: number]; return: { success: boolean; error?: string } }
+}
 
 // ===== 数据库操作 =====
 export interface DatabaseChannels {
@@ -449,10 +485,28 @@ export interface DatabaseChannels {
   'db:canon-plot-add': { args: [line: CanonPlotLineInput]; return: { success: boolean; id?: number; error?: string } }
   'db:canon-plot-advance': { args: [id: number, currentState: string, lastAdvancedAt: number]; return: { success: boolean } }
   'db:canon-plot-resolve': { args: [id: number, chapterNumber: number]; return: { success: boolean } }
+  /** 更新剧情线/伏笔的台账信息（类型、预计回收阶段） */
+  'db:canon-plot-update-meta': { args: [id: number, patch: { kind?: 'plot' | 'foreshadow'; plannedResolveAt?: string }]; return: { success: boolean; error?: string } }
   'db:canon-fact-list': { args: []; return: CanonFact[] }
   'db:canon-fact-add': { args: [fact: CanonFactInput]; return: { success: boolean; id?: number; error?: string } }
   'db:canon-fact-clear-chapter': { args: [chapterNumber: number]; return: { success: boolean } }
   'db:canon-fact-mark-status': { args: [id: number, status: 'active' | 'outdated' | 'contradicted' | 'tentative']; return: { success: boolean; error?: string } }
+  /** 作者确认 / 取消确认（多条一次提交；确认 tentative 事实时顺带提升为 active） */
+  'db:canon-fact-confirm': { args: [ids: number[], confirmed: boolean]; return: { success: boolean; count?: number; error?: string } }
+  /** 某条事实的变更历史（最近的在前） */
+  'db:canon-fact-history': { args: [factId: number]; return: Array<{ id: number; factId: number; action: string; before: string; after: string; at: string }> }
+  /** 物品流转台账 */
+  'db:canon-item-events-list': { args: [item?: string]; return: Array<{ id: number; item: string; action: string; chapterNumber: number; actor: string; note: string; createdAt: string }> }
+  'db:canon-item-event-add': { args: [event: { item: string; action: string; chapterNumber: number; actor?: string; note?: string }]; return: { success: boolean; id?: number; error?: string } }
+  'db:canon-item-event-remove': { args: [id: number]; return: { success: boolean; error?: string } }
+  /** 境界阶梯（能力范围 / 限制 / 突破条件） */
+  'db:canon-realms-list': { args: []; return: Array<{ id: number; name: string; rankOrder: number; abilities: string; limits: string; breakthrough: string; notes: string; createdAt: string }> }
+  'db:canon-realm-upsert': { args: [realm: { id?: number; name: string; rankOrder: number; abilities?: string; limits?: string; breakthrough?: string; notes?: string }]; return: { success: boolean; id?: number; error?: string } }
+  'db:canon-realm-remove': { args: [id: number]; return: { success: boolean; error?: string } }
+  /** 地点与空间关系 */
+  'db:canon-locations-list': { args: []; return: Array<{ id: number; name: string; region: string; faction: string; distanceNote: string; travelNote: string; notes: string; createdAt: string }> }
+  'db:canon-location-upsert': { args: [location: { id?: number; name: string; region?: string; faction?: string; distanceNote?: string; travelNote?: string; notes?: string }]; return: { success: boolean; id?: number; error?: string } }
+  'db:canon-location-remove': { args: [id: number]; return: { success: boolean; error?: string } }
   'db:canon-summary-get': { args: [chapterNumber: number]; return: CanonChapterSummary | null }
   'db:canon-summary-list-recent': { args: [limit?: number]; return: CanonChapterSummary[] }
   'db:canon-summary-list-up-to': { args: [maxChapter: number]; return: CanonChapterSummary[] }
@@ -818,7 +872,7 @@ export interface BackupChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & LogChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels & BackupChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & LogChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels & BackupChannels & ReconstructChannels
 export type AllEventChannels = LLMStreamEvents & KnowledgeBaseEvents & LogEvents
 
 /** 提取 invoke 频道名 */

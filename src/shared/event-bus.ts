@@ -22,6 +22,8 @@ export type GlobalEventType =
   | 'ARCH_FILE_UPDATED'
   // --- 定稿完成（替代原 vela:finalize-complete） ---
   | 'FINALIZE_COMPLETE'
+  // --- 拆书创作系统（分析 / 大纲 / 相似度报告有更新） ---
+  | 'RECONSTRUCT_UPDATED'
   // --- 项目级事件 ---
   | 'PROJECT_CHANGED'
   // --- 系统通知 ---
@@ -50,6 +52,11 @@ export interface EventPayloadMap {
   }
   'FINALIZE_COMPLETE': {
     chapterNumber: number
+  }
+  'RECONSTRUCT_UPDATED': {
+    kind: 'analysis' | 'outline' | 'similarity'
+    /** 分析类事件带上书籍 id，界面据此只刷新受影响的列表 */
+    bookId?: string
   }
   'PROJECT_CHANGED': {
     projectPath: string

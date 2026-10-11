@@ -62,7 +62,7 @@ export class CompileStyleGuideCommand extends BaseWorkflowCommand<StyleGuide> {
 
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('compile_style_guide')
-    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
+    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens, defaultModel?.maxOutputTokens)
 
     // ── 分段归纳：参考文本可能很长，逐段归纳后合并规则 ──
     const chunks = splitStyleReference(referenceText, Math.max(2000, budgets.inputTokens - 2500))

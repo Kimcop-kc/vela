@@ -40,6 +40,13 @@ export {
   parseObservations,
   type RawObservation,
 } from './continuity-observer'
+export {
+  WRITEBACK_OUTLINE_CLASSES,
+  buildAppendEdit,
+  buildOutlineAdjustmentBlock,
+  buildWritebackPrefill,
+  canWriteBackToOutline,
+} from './outline-writeback'
 
 import i18n from '../../i18n'
 import { detectAiTraces } from './ai-trace-detector'

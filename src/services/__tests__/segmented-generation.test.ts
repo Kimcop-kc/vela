@@ -43,6 +43,27 @@ describe('生成预算与 token 估算', () => {
     expect(resolveGenerationBudgets(131072).outputTokens).toBe(32768)
   })
 
+  it('窗口与输出上限分开配置时，按真实窗口算输入预算', () => {
+    // 128K 窗口 + 8K 输出：以前会被当成 8192 的输出上限、20480 的输入预算，
+    // 好内容被无谓截断；现在按窗口推导。
+    const budgets = resolveGenerationBudgets(131072, 8192)
+    expect(budgets.outputTokens).toBe(8192)
+    expect(budgets.inputTokens).toBe(122880)
+  })
+
+  it('输出上限仍收敛到服务商安全值，且不会超过窗口', () => {
+    expect(resolveGenerationBudgets(65536, 65536).outputTokens).toBe(32768)
+    expect(resolveGenerationBudgets(65536, 65536).inputTokens).toBeGreaterThanOrEqual(4000)
+    // 窗口比输出上限还小时，退回保守估算而不是给出负数预算
+    const tight = resolveGenerationBudgets(4096, 8192)
+    expect(tight.outputTokens).toBe(8192)
+    expect(tight.inputTokens).toBe(20480)
+  })
+
+  it('荒谬的大窗口有兜底，不会把单次请求撑到几百万 token', () => {
+    expect(resolveGenerationBudgets(1000000, 8192).inputTokens).toBeLessThanOrEqual(128000)
+  })
+
   it('按中文字符 1 token、英文约 0.25 token 估算', () => {
     expect(estimateTokens('中文四字')).toBe(4)
     expect(estimateTokens('abcde')).toBeGreaterThan(0)

@@ -71,7 +71,7 @@ export class InvokeSkillCommand extends BaseWorkflowCommand<string> {
     // 目标文本可能超过上下文：按模型预算切段，逐段应用同一套方法
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('invoke_skill')
-    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
+    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens, defaultModel?.maxOutputTokens)
     const chunkBudget = resolveChunkBudget(budgets, 3000)
     const chunks = splitTextByTokenBudget(target, chunkBudget)
     const effectiveChunks = chunks.length > 0 ? chunks : [target]

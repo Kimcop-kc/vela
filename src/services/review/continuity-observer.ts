@@ -15,6 +15,7 @@ import {
   type ObservationEvidence,
   type ObservationSeverity,
   type ReviewObservation,
+  type OutlineClass,
 } from './types'
 import { locateQuote } from '../text-analysis'
 
@@ -23,12 +24,41 @@ const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'co
 /** 模型返回的原始观察（字段全部宽松，需归一化） */
 export interface RawObservation {
   dimension?: unknown
+  /** 大纲分类（仅 outline-deviation 用）：done / pending / deviated / missing / creative / conflict */
+  classification?: unknown
+  outlineClass?: unknown
   severity?: unknown
   title?: unknown
   detail?: unknown
   evidence?: unknown
   suggestion?: unknown
   relatedChapters?: unknown
+}
+
+/**
+ * 大纲分类关键词表。
+ *
+ * 模型可能给枚举值（done）、中文（已完成）或整句（大纲要求的情节已完成），
+ * 所以按关键词顺序匹配；识别不到就当没给分类（宁可没有分类，也不要错分类）。
+ */
+const OUTLINE_CLASS_KEYWORDS: Array<{ outlineClass: OutlineClass; keywords: string[] }> = [
+  { outlineClass: 'conflict', keywords: ['conflict', 'contradict', '冲突', '矛盾'] },
+  { outlineClass: 'creative', keywords: ['creative', 'beyond', 'extra', '创新', '合理新增', '超出大纲', '大纲未规定'] },
+  { outlineClass: 'missing', keywords: ['missing', 'omit', '遗漏', '漏掉', '缺失'] },
+  { outlineClass: 'deviated', keywords: ['deviat', 'drift', 'off-track', '偏离', '跑偏', '不符'] },
+  { outlineClass: 'pending', keywords: ['pending', 'not-yet', 'incomplete', '未完成', '尚未', '还没', '待写'] },
+  { outlineClass: 'done', keywords: ['done', 'complete', 'fulfilled', '已完成', '完成', '符合'] },
+]
+
+/** 归一化大纲分类；识别失败返回 undefined（只丢这个字段，不丢整条观察） */
+export function normalizeOutlineClass(value: unknown): OutlineClass | undefined {
+  if (typeof value !== 'string') return undefined
+  const lower = value.trim().toLowerCase()
+  if (!lower) return undefined
+  for (const { outlineClass, keywords } of OUTLINE_CLASS_KEYWORDS) {
+    if (keywords.some(keyword => lower.includes(keyword))) return outlineClass
+  }
+  return undefined
 }
 
 const DIMENSION_KEYWORDS: Array<{ dimension: ObservationDimension; keywords: string[] }> = [
@@ -145,9 +175,14 @@ export function parseObservations(
     }
     const detail = typeof rawItem.detail === 'string' ? rawItem.detail.trim() : ''
     const suggestion = typeof rawItem.suggestion === 'string' ? rawItem.suggestion.trim() : ''
+    // 大纲分类只对 outline-deviation 维度有意义，其它维度带上会误导读者
+    const outlineClass = dimension === 'outline-deviation'
+      ? normalizeOutlineClass(rawItem.classification ?? rawItem.outlineClass)
+      : undefined
     observations.push({
       id: observationId(dimension, title),
       dimension,
+      ...(outlineClass ? { outlineClass } : {}),
       severity: normalizeSeverity(rawItem.severity),
       title,
       detail,

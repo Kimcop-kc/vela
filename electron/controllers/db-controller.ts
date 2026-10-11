@@ -18,6 +18,7 @@ import { ReviewRepository } from '../repositories/review-repository'
 import { ReviewDigestRepository } from '../repositories/review-digest-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
 import { ChapterRollbackRepository } from '../repositories/chapter-rollback-repository'
+import { ReconstructRepository } from '../repositories/reconstruct-repository'
 
 // 沿用的旧表
 import { LLMHistoryRepository } from '../repositories/llm-repository'
@@ -633,6 +634,15 @@ ipcMain.handle('db:revision-create', async (_event, params: {
     CanonRepository.resolvePlotLine(id, chapterNumber)
     return { success: true }
   })
+  ipcMain.handle('db:canon-plot-update-meta', async (_event, id: number, patch: { kind?: 'plot' | 'foreshadow'; plannedResolveAt?: string }) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的剧情线 id' }
+      CanonRepository.updatePlotLineMeta(id, patch ?? {})
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
 
   // 事实
   ipcMain.handle('db:canon-fact-list', async () => {
@@ -656,6 +666,232 @@ ipcMain.handle('db:revision-create', async (_event, params: {
     try {
       CanonRepository.markFactStatus(id, status)
       return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:canon-fact-confirm', async (_event, ids: number[], confirmed: boolean) => {
+    try {
+      if (!Array.isArray(ids) || ids.length === 0) return { success: false, error: '未指定事实' }
+      if (ids.length > 5000) return { success: false, error: '一次最多确认 5000 条' }
+      const count = CanonRepository.setFactsConfirmed(ids, confirmed === true)
+      return { success: true, count }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:canon-fact-history', async (_event, factId: number) => {
+    try {
+      return CanonRepository.getFactHistory(factId).map(row => ({
+        id: row.id,
+        factId: row.fact_id,
+        action: row.action,
+        before: row.before_json,
+        after: row.after_json,
+        at: row.at,
+      }))
+    } catch (err) {
+      console.warn('[db:canon-fact-history] failed:', err)
+      return []
+    }
+  })
+  // 物品流转台账
+  ipcMain.handle('db:canon-item-events-list', async (_event, item?: string) => {
+    try {
+      return CanonRepository.getItemEvents(item)
+    } catch (err) {
+      console.warn('[db:canon-item-events-list] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:canon-item-event-add', async (_event, event: { item: string; action: string; chapterNumber: number; actor?: string; note?: string }) => {
+    try {
+      if (!event || typeof event.item !== 'string' || !event.item.trim()) {
+        return { success: false, error: '请填写物品名' }
+      }
+      if (!['obtained', 'transferred', 'lost', 'destroyed', 'consumed'].includes(event.action)) {
+        return { success: false, error: '无效的流转类型' }
+      }
+      const id = CanonRepository.addItemEvent(event as Parameters<typeof CanonRepository.addItemEvent>[0])
+      return { success: true, id }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:canon-item-event-remove', async (_event, id: number) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的 id' }
+      return { success: CanonRepository.removeItemEvent(id) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  // 境界阶梯
+  ipcMain.handle('db:canon-realms-list', async () => {
+    try {
+      return CanonRepository.getRealms()
+    } catch (err) {
+      console.warn('[db:canon-realms-list] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:canon-realm-upsert', async (_event, realm: { name: string; rankOrder: number; abilities?: string; limits?: string; breakthrough?: string; notes?: string }) => {
+    try {
+      if (!realm || typeof realm.name !== 'string' || !realm.name.trim()) {
+        return { success: false, error: '请填写境界名' }
+      }
+      const id = CanonRepository.upsertRealm(realm as Parameters<typeof CanonRepository.upsertRealm>[0])
+      return { success: true, id }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:canon-realm-remove', async (_event, id: number) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的 id' }
+      return { success: CanonRepository.removeRealm(id) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  // 地点与空间关系
+  ipcMain.handle('db:canon-locations-list', async () => {
+    try {
+      return CanonRepository.getLocations()
+    } catch (err) {
+      console.warn('[db:canon-locations-list] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:canon-location-upsert', async (_event, location: { id?: number; name: string; region?: string; faction?: string; distanceNote?: string; travelNote?: string; notes?: string }) => {
+    try {
+      if (!location || typeof location.name !== 'string' || !location.name.trim()) {
+        return { success: false, error: '请填写地点名' }
+      }
+      const id = CanonRepository.upsertLocation(location as Parameters<typeof CanonRepository.upsertLocation>[0])
+      return { success: true, id }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:canon-location-remove', async (_event, id: number) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的 id' }
+      return { success: CanonRepository.removeLocation(id) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // ============================================================
+  // 拆书创作系统（逐章分析 / 原创大纲 / 相似度报告）
+  // ============================================================
+  ipcMain.handle('db:book-analysis-list', async (_event, bookId: string) => {
+    try {
+      return ReconstructRepository.listAnalyses(String(bookId ?? ''))
+    } catch (err) {
+      console.warn('[db:book-analysis-list] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:book-analysis-get', async (_event, id: number) => {
+    try {
+      return Number.isSafeInteger(id) ? ReconstructRepository.getAnalysis(id) : null
+    } catch (err) {
+      console.warn('[db:book-analysis-get] failed:', err)
+      return null
+    }
+  })
+  ipcMain.handle('db:book-analysis-get-many', async (_event, ids: number[]) => {
+    try {
+      return ReconstructRepository.getAnalyses(Array.isArray(ids) ? ids : [])
+    } catch (err) {
+      console.warn('[db:book-analysis-get-many] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:book-analysis-put', async (_event, input: Parameters<typeof ReconstructRepository.upsertAnalysis>[0]) => {
+    try {
+      return { success: true, id: ReconstructRepository.upsertAnalysis(input) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:book-analysis-remove', async (_event, id: number) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的 id' }
+      return { success: ReconstructRepository.removeAnalysis(id) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:book-analysis-remove-book', async (_event, bookId: string) => {
+    try {
+      return { success: true, removed: ReconstructRepository.removeAnalysesByBook(String(bookId ?? '')) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:plot-outline-list', async () => {
+    try {
+      return ReconstructRepository.listOutlines()
+    } catch (err) {
+      console.warn('[db:plot-outline-list] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:plot-outline-get', async (_event, id: number) => {
+    try {
+      return Number.isSafeInteger(id) ? ReconstructRepository.getOutline(id) : null
+    } catch (err) {
+      console.warn('[db:plot-outline-get] failed:', err)
+      return null
+    }
+  })
+  ipcMain.handle('db:plot-outline-save', async (_event, input: Parameters<typeof ReconstructRepository.saveOutline>[0]) => {
+    try {
+      return { success: true, id: ReconstructRepository.saveOutline(input) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:plot-outline-remove', async (_event, id: number) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的 id' }
+      return { success: ReconstructRepository.removeOutline(id) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:similarity-report-list', async (_event, limit?: number) => {
+    try {
+      return ReconstructRepository.listSimilarityReports(limit ?? 20)
+    } catch (err) {
+      console.warn('[db:similarity-report-list] failed:', err)
+      return []
+    }
+  })
+  ipcMain.handle('db:similarity-report-get', async (_event, id: number) => {
+    try {
+      return Number.isSafeInteger(id) ? ReconstructRepository.getSimilarityReport(id) : null
+    } catch (err) {
+      console.warn('[db:similarity-report-get] failed:', err)
+      return null
+    }
+  })
+  ipcMain.handle('db:similarity-report-save', async (_event, input: Parameters<typeof ReconstructRepository.saveSimilarityReport>[0]) => {
+    try {
+      return { success: true, id: ReconstructRepository.saveSimilarityReport(input) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+  ipcMain.handle('db:similarity-report-remove', async (_event, id: number) => {
+    try {
+      if (!Number.isSafeInteger(id)) return { success: false, error: '无效的 id' }
+      return { success: ReconstructRepository.removeSimilarityReport(id) }
     } catch (err) {
       return { success: false, error: String(err) }
     }
@@ -685,6 +921,7 @@ ipcMain.handle('db:revision-create', async (_event, params: {
   // 原子写回（推荐路径：单次事务）
   ipcMain.handle('db:canon-writeback-atomic', async (_event, payload: {
     chapterNumber: number
+    chapterContent?: string
     newEvents: Omit<TimelineEvent, 'id' | 'createdAt'>[]
     characterDeltas: Array<{ character: string; after: Partial<CharacterStateSnapshot>; chapterNumber: number }>
     plotLineChanges?: {

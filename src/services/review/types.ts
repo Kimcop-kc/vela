@@ -42,6 +42,17 @@ export const OBSERVATION_DIMENSIONS: ObservationDimension[] = [
 export type ObservationSeverity = 'note' | 'watch' | 'concern'
 
 /**
+ * 大纲偏离的分类（只用于 outline-deviation 维度的观察）。
+ *
+ * 需求文档明确要求：**偏离不等于错误**。作者可能在创作中调整方向，
+ * 所以要区分「按大纲完成了」「还没写到」「确实跑偏了」「可能漏了」「大纲没写但写得合理」「和已确认设定冲突」。
+ */
+export type OutlineClass = 'done' | 'pending' | 'deviated' | 'missing' | 'creative' | 'conflict'
+
+/** 全部大纲分类（供界面分组、渲染顺序使用） */
+export const OUTLINE_CLASSES: OutlineClass[] = ['done', 'pending', 'deviated', 'missing', 'creative', 'conflict']
+
+/**
  * 文本证据位置。
  * start/end 为相对「被审正文」的字符偏移（1 基），无法定位时为 -1。
  */
@@ -61,6 +72,8 @@ export interface ReviewObservation {
   /** 稳定 id，便于追踪同一条观察在多轮审稿之间的变化 */
   id: string
   dimension: ObservationDimension
+  /** 仅 outline-deviation 维度：本条属于哪一类（已完成 / 未完成 / 偏差 / 遗漏 / 合理创新 / 冲突） */
+  outlineClass?: OutlineClass
   severity: ObservationSeverity
   /** 一句话标题 */
   title: string

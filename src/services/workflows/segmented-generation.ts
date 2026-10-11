@@ -5,7 +5,7 @@
  * 单次调用容易撞上模型的上下文/输出上限，导致结果被截断（JSON 不完整、后半段丢失）。
  *
  * 本模块提供三类能力，供各 Command 组合使用：
- * 1. 预算：根据模型 maxTokens 推导单次请求的输入/输出 token 预算；
+ * 1. 预算：根据模型配置（上下文窗口 + 单次输出上限）推导单次请求的输入/输出 token 预算；
  * 2. 切分：把超长正文按段落/句子边界切成多段，或把条目按预算分组；
  * 3. 合并：把分段生成的结果按主键合并成一份完整结果。
  */
@@ -31,14 +31,39 @@ function clampNumber(value: number, min: number, max: number): number {
 }
 
 /**
- * 从模型 maxTokens 推导单次请求预算。
- * 模型未配置时回退到 4096，保持与既有行为一致。
+ * 单次请求输入预算的硬上限。
+ *
+ * 作者把上下文窗口填成 1M 时，不该真的往单次请求里塞满整窗口：那既慢又贵，
+ * 而且多数任务用不到。这里只作为「荒谬值」的兜底，不参与日常估算。
  */
-export function resolveGenerationBudgets(modelMaxTokens?: number): GenerationBudgets {
-  // 注意：模型配置里的 maxTokens 往往是「上下文窗口」而不是「单次输出上限」，
+const MAX_INPUT_TOKENS = 128_000
+
+/**
+ * 从模型配置推导单次请求预算。
+ *
+ * 两个字段各管一件事：
+ * - `modelMaxTokens`：上下文窗口（输入 + 输出一共能装多少）；
+ * - `maxOutputTokens`：单次输出上限（就是发给服务商的 `max_tokens`）。
+ *
+ * 只配了窗口（旧配置的常态）时，按原来的「窗口即输出上限、再乘 2.5 估算输入」处理，
+ * 行为与之前完全一致；两个都配了才用真实窗口算输入预算，避免把 128K 的模型
+ * 当成 28K 用（内容被无谓截断），也避免把 8K 的模型当成 128K 用（请求必然失败）。
+ */
+export function resolveGenerationBudgets(modelMaxTokens?: number, maxOutputTokens?: number): GenerationBudgets {
+  const windowTokens = Math.floor(modelMaxTokens || 0)
+  const explicitOutput = Math.floor(maxOutputTokens || 0)
+
+  // 两个字段都给了，且窗口确实大于输出上限：按真实窗口推导输入预算
+  if (explicitOutput > 0 && windowTokens > explicitOutput) {
+    const outputTokens = clampNumber(explicitOutput, 512, 32768)
+    const inputTokens = clampNumber(windowTokens - outputTokens, 4000, MAX_INPUT_TOKENS)
+    return { outputTokens, inputTokens }
+  }
+
+  // 兼容旧配置：只有一个数字时，仍按「窗口即输出上限」的保守估算
   // 部分服务商（如智谱/火山）单次输出只接受 ≤32768，这里统一收敛到安全上限，
   // 与 provider 侧的 max_tokens 钳制保持一致。
-  const outputTokens = clampNumber(Math.floor(modelMaxTokens || 4096), 512, 32768)
+  const outputTokens = clampNumber(explicitOutput || windowTokens || 4096, 512, 32768)
   // 真实上下文窗口一般远大于输出上限，这里按 2.5 倍保守估算，并夹在 [4000, 48000]
   const inputTokens = clampNumber(Math.round(outputTokens * 2.5), 4000, 48000)
   return { outputTokens, inputTokens }

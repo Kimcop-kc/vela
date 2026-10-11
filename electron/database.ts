@@ -49,7 +49,68 @@ export function getCurrentProjectPath(): string | null {
 }
 
 /** 已执行的 schema 迁移版本号（用于幂等迁移） */
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 9
+
+/**
+ * 拆书创作系统的三张表（迁移与建表共用同一份 SQL，避免两处漂移）。
+ *
+ * - book_analyses：参考小说逐章分析结论。唯一索引保证「同一本书同一章只留一条」，
+ *   重新分析即覆盖，不会因为中途失败或重复点击堆出一堆半成品。
+ * - plot_outlines：原创剧情大纲（含可编辑的剧情节点 JSON）。
+ * - similarity_reports：相似度检查报告（只作提示，不作结论）。
+ */
+const RECONSTRUCT_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS book_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id TEXT NOT NULL,
+    book_name TEXT DEFAULT '',
+    chapter_number INTEGER NOT NULL,
+    chapter_title TEXT DEFAULT '',
+    doc_id TEXT DEFAULT '',
+    analysis_type TEXT NOT NULL DEFAULT 'chapter',
+    status TEXT NOT NULL DEFAULT 'done',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    model_id TEXT DEFAULT '',
+    error TEXT DEFAULT '',
+    source_hash TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_book_analyses_target
+    ON book_analyses(book_id, chapter_number, analysis_type);
+  CREATE INDEX IF NOT EXISTS idx_book_analyses_book ON book_analyses(book_id, chapter_number);
+
+  CREATE TABLE IF NOT EXISTS plot_outlines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    premise TEXT DEFAULT '',
+    protagonist_goal TEXT DEFAULT '',
+    central_conflict TEXT DEFAULT '',
+    character_changes TEXT DEFAULT '',
+    foreshadowing TEXT DEFAULT '',
+    continuity_notes TEXT DEFAULT '',
+    originality_notes TEXT DEFAULT '',
+    techniques_json TEXT NOT NULL DEFAULT '[]',
+    beats_json TEXT NOT NULL DEFAULT '[]',
+    sources_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_plot_outlines_status ON plot_outlines(status, id);
+
+  CREATE TABLE IF NOT EXISTS similarity_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chapter_number INTEGER,
+    draft_id INTEGER,
+    outline_id INTEGER,
+    book_ids TEXT DEFAULT '',
+    overall_risk TEXT NOT NULL DEFAULT 'undetermined',
+    report_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_similarity_reports_chapter ON similarity_reports(chapter_number, id);
+`
 
 /** 对老库执行 schema 迁移（加 UNIQUE/CHECK 约束等） */
 function migrateProjectDatabase(db: BetterSqlite3.Database): void {
@@ -125,6 +186,147 @@ function migrateProjectDatabase(db: BetterSqlite3.Database): void {
       } catch (e) {
         console.warn('[Vela DB] 添加 canon_facts.status 列失败:', e)
       }
+    }
+  }
+  // v2 → v3: 事实作者确认（confirmed_at）与变更时间（updated_at）+ 事实变更历史表
+  if (currentVersion < 3) {
+    const columns = db.prepare('PRAGMA table_info(canon_facts)').all() as Array<{ name: string }>
+    const hasColumn = (name: string) => columns.some(column => column.name === name)
+    if (!hasColumn('updated_at')) {
+      try {
+        db.exec(`ALTER TABLE canon_facts ADD COLUMN updated_at TEXT`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_facts.updated_at 列失败:', e)
+      }
+    }
+    if (!hasColumn('confirmed_at')) {
+      try {
+        // NULL 表示「AI 提取、尚未经作者确认」
+        db.exec(`ALTER TABLE canon_facts ADD COLUMN confirmed_at TEXT`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_facts.confirmed_at 列失败:', e)
+      }
+    }
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_fact_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fact_id INTEGER NOT NULL,
+          action TEXT NOT NULL,
+          before_json TEXT DEFAULT '',
+          after_json TEXT DEFAULT '',
+          at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_fact_history_fact ON canon_fact_history(fact_id, id);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_fact_history 表失败:', e)
+    }
+  }
+  // v3 → v4: 剧情线区分「剧情线 / 伏笔」，并记录伏笔的预计回收阶段
+  if (currentVersion < 4) {
+    const columns = db.prepare('PRAGMA table_info(canon_plot_lines)').all() as Array<{ name: string }>
+    const hasColumn = (name: string) => columns.some(column => column.name === name)
+    if (!hasColumn('kind')) {
+      try {
+        db.exec(`ALTER TABLE canon_plot_lines ADD COLUMN kind TEXT DEFAULT 'plot'`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_plot_lines.kind 列失败:', e)
+      }
+    }
+    if (!hasColumn('planned_resolve_at')) {
+      try {
+        // 文本而非章节号：作者可能只想写「中期 / 第三卷末」这类阶段
+        db.exec(`ALTER TABLE canon_plot_lines ADD COLUMN planned_resolve_at TEXT DEFAULT ''`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_plot_lines.planned_resolve_at 列失败:', e)
+      }
+    }
+  }
+  // v4 → v5: 事实引用关系（哪一章用了哪条既有事实）—— 修改影响分析的数据基础
+  if (currentVersion < 5) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_fact_usage (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fact_id INTEGER NOT NULL,
+          chapter_number INTEGER NOT NULL,
+          evidence TEXT DEFAULT '',
+          used_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_fact_usage_fact ON canon_fact_usage(fact_id, chapter_number);
+        CREATE INDEX IF NOT EXISTS idx_canon_fact_usage_chapter ON canon_fact_usage(chapter_number);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_fact_usage 表失败:', e)
+    }
+  }
+  // v5 → v6: 物品流转台账（获得 / 转交 / 丢失 / 损毁 / 消耗），防止道具凭空出现或消失
+  if (currentVersion < 6) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_item_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item TEXT NOT NULL,
+          action TEXT NOT NULL,
+          chapter_number INTEGER DEFAULT 0,
+          actor TEXT DEFAULT '',
+          note TEXT DEFAULT '',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_item_events_item ON canon_item_events(item COLLATE NOCASE, chapter_number);
+        CREATE INDEX IF NOT EXISTS idx_canon_item_events_chapter ON canon_item_events(chapter_number);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_item_events 表失败:', e)
+    }
+  }
+  // v6 → v7: 境界阶梯（能力范围 / 限制 / 突破条件），生成战斗与突破时据此约束
+  if (currentVersion < 7) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_realms (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          rank_order INTEGER DEFAULT 0,
+          abilities TEXT DEFAULT '',
+          limits TEXT DEFAULT '',
+          breakthrough TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_realms_rank ON canon_realms(rank_order, id);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_realms 表失败:', e)
+    }
+  }
+  // v7 → v8: 地点与空间关系（区域 / 势力 / 距离 / 通行耗时），避免人物凭空出现在远处
+  if (currentVersion < 8) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_locations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          region TEXT DEFAULT '',
+          faction TEXT DEFAULT '',
+          distance_note TEXT DEFAULT '',
+          travel_note TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_locations_name ON canon_locations(name COLLATE NOCASE);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_locations 表失败:', e)
+    }
+  }
+  // v8 → v9: 拆书创作系统（逐章分析 / 原创剧情大纲 / 相似度报告）
+  if (currentVersion < 9) {
+    try {
+      db.exec(RECONSTRUCT_SCHEMA_SQL)
+    } catch (e) {
+      console.warn('[Vela DB] 创建拆书创作系统表失败:', e)
     }
   }
   db.pragma(`user_version = ${SCHEMA_VERSION}`)
@@ -400,6 +602,8 @@ function createTables(db: BetterSqlite3.Database) {
       characters TEXT DEFAULT '[]',
       current_state TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      kind TEXT DEFAULT 'plot',                     -- plot=剧情线 / foreshadow=伏笔
+      planned_resolve_at TEXT DEFAULT '',           -- 伏笔预计回收阶段（「中期」「第三卷末」这类）
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_canon_plot_status ON canon_plot_lines(status);
@@ -413,9 +617,75 @@ function createTables(db: BetterSqlite3.Database) {
       characters TEXT DEFAULT '[]',
       evidence TEXT DEFAULT '',
       status TEXT DEFAULT 'active',                -- active/outdated/contradicted/tentative
+      confirmed_at TEXT,                           -- NULL = AI 提取、未经作者确认
+      updated_at TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_canon_facts_category ON canon_facts(category);
+
+    -- 事实变更历史（作者确认 / 改状态 / 写回时留痕）
+    CREATE TABLE IF NOT EXISTS canon_fact_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fact_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      before_json TEXT DEFAULT '',
+      after_json TEXT DEFAULT '',
+      at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_fact_history_fact ON canon_fact_history(fact_id, id);
+
+    -- 事实引用关系：哪一章沿用了哪条既有事实（写回时按正文匹配落库）
+    CREATE TABLE IF NOT EXISTS canon_fact_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fact_id INTEGER NOT NULL,
+      chapter_number INTEGER NOT NULL,
+      evidence TEXT DEFAULT '',
+      used_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_fact_usage_fact ON canon_fact_usage(fact_id, chapter_number);
+    CREATE INDEX IF NOT EXISTS idx_canon_fact_usage_chapter ON canon_fact_usage(chapter_number);
+
+    -- 物品流转台账：某件道具在第几章被谁获得 / 转交 / 丢失 / 损毁 / 消耗
+    CREATE TABLE IF NOT EXISTS canon_item_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item TEXT NOT NULL,
+      action TEXT NOT NULL,                -- obtained/transferred/lost/destroyed/consumed
+      chapter_number INTEGER DEFAULT 0,
+      actor TEXT DEFAULT '',
+      note TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_item_events_item ON canon_item_events(item COLLATE NOCASE, chapter_number);
+    CREATE INDEX IF NOT EXISTS idx_canon_item_events_chapter ON canon_item_events(chapter_number);
+
+    -- 境界阶梯：各境界的能力范围、限制与突破条件
+    CREATE TABLE IF NOT EXISTS canon_realms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      rank_order INTEGER DEFAULT 0,        -- 由低到高的阶数
+      abilities TEXT DEFAULT '',           -- 该境界能做到什么
+      limits TEXT DEFAULT '',              -- 做不到什么 / 代价与限制
+      breakthrough TEXT DEFAULT '',        -- 突破所需条件
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_realms_rank ON canon_realms(rank_order, id);
+
+    -- 地点与空间关系：区域归属、势力、与别处的距离、通行方式与耗时
+    CREATE TABLE IF NOT EXISTS canon_locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      region TEXT DEFAULT '',
+      faction TEXT DEFAULT '',
+      distance_note TEXT DEFAULT '',        -- 与哪些地方相邻 / 有多远
+      travel_note TEXT DEFAULT '',          -- 怎么去、大概要多久
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_locations_name ON canon_locations(name COLLATE NOCASE);
+
+    -- 拆书创作系统：逐章分析 / 原创剧情大纲 / 相似度报告
+    ${RECONSTRUCT_SCHEMA_SQL}
 
     -- 章节摘要（结构化）
     CREATE TABLE IF NOT EXISTS canon_chapter_summaries (

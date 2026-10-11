@@ -63,7 +63,37 @@
     "waitingResponse": "Ожидание ответа...",
     "workflowComplete": "Весь пайплайн завершён",
     "viewHistoryOutput": "Нажмите для просмотра истории этого шага",
-    "aiOutput": "Вывод ИИ"
+    "aiOutput": "Вывод ИИ",
+    "contextPreviewTitle": "Контекст этого запуска",
+    "contextPreviewTotals": "{{chars}} симв. ≈ {{tokens}} токенов (бюджет {{budget}})",
+    "contextPreviewSectionChars": "{{chars}} симв. ≈ {{tokens}} токенов",
+    "contextPreviewItems": "{{count}} шт.",
+    "contextPreviewTruncated": "обрезано по лимиту",
+    "contextPreviewSection": {
+      "architecture": "Архитектура",
+      "canon": "Канон (динамика)",
+      "chapterInfo": "Информация о главе",
+      "futureBlueprints": "Следующие главы",
+      "previousEnding": "Конец прошлой главы",
+      "knowledge": "База знаний",
+      "guidance": "Общие требования",
+      "userGuidance": "Указания к главе",
+      "style": "Стиль"
+    },
+    "contextPreviewBreakdown": {
+      "timeline": "таймлайн",
+      "characterStates": "состояния персонажей",
+      "plotLines": "сюжетные линии",
+      "facts": "факты"
+    },
+    "contextPreviewWarning": {
+      "no-knowledge": "База знаний ничего не вернула (справочные материалы не подставлены)",
+      "over-budget": "Промпт превышает бюджет контекста: сократите архитектуру или синопсис"
+    },
+    "contextPreviewNote": {
+      "first-chapter": "Глава 1: поиск по базе знаний не выполняется, конец прошлой главы и динамический канон не подставляются",
+      "truncated": "Часть разделов обрезана по лимиту длины"
+    }
   },
   "bottomPanel": {
     "tabs": {

@@ -1,0 +1,26 @@
+{
+  "id": "character-knowledge",
+  "title": "人物认知：A 知道不等于 B 知道",
+  "focus": ["character-memory"],
+  "semanticOnly": true,
+  "chapterNumber": 40,
+  "blueprint": {
+    "title": "对账",
+    "purpose": "三人同桌，信息差造成误判",
+    "keyEvents": "顾野已经知道井台底下有入口；老邵怀疑但没证据；阿禾完全不知情；三人讨论下一步时，阿禾提出去井台取水",
+    "characters": ["顾野", "老邵", "阿禾"],
+    "suspenseHook": "阿禾提到井台时，老邵看了顾野一眼"
+  },
+  "precedingSummary": "第 39 章：顾野独自下过井，把入口的事压在心里，没有告诉任何人。",
+  "canonFacts": [
+    { "category": "event", "statement": "顾野独自下过井，知道封泥下有入口", "introducedAt": 39, "characters": ["顾野"] },
+    { "category": "relationship", "statement": "老邵怀疑井台有问题，但没有证据", "introducedAt": 38, "characters": ["老邵"] }
+  ],
+  "mustInclude": ["阿禾对入口毫不知情", "老邵只看不说", "顾野主动岔开话题"],
+  "mustNotInclude": ["阿禾说出入口或封泥", "老邵直接点破入口", "顾野当众承认下过井"],
+  "manualChecks": [
+    "阿禾的台词里不出现只有顾野知道的信息",
+    "老邵的怀疑只通过观察行为体现，不靠旁白宣告",
+    "顾野岔开话题的动作具体（递水、问别的、起身），不是「他转移了话题」这种总结"
+  ]
+}

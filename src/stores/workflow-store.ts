@@ -35,6 +35,11 @@ export interface WorkflowRun {
   currentStepIndex: number
   createdAt: string
   completedAt?: string
+  /**
+   * 步骤间共享数据的快照（每个步骤结束后同步一次）。
+   * 供界面只读展示，例如写稿的「本次上下文」预览（data.contextPreview）。
+   */
+  data?: Record<string, unknown>
 }
 
 /** 工作流类型 */
@@ -272,7 +277,9 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
       // 标记当前步骤为运行中
       updateStepById(set, run.id, i, { status: 'running', startedAt: new Date().toISOString() })
-      updateRunById(set, run.id, { currentStepIndex: i })
+      // data 先挂上上下文对象的引用：步骤执行过程中写入的内容（如写稿的「本次上下文」预览）
+      // 会随流式重渲染立刻出现在界面上，不必等到步骤结束
+      updateRunById(set, run.id, { currentStepIndex: i, data: context.data })
       get().addLog('info', i18n.t('workflow.stepRunning', { ns: 'stores', title: definition.title, step: stepDef.name }))
 
       // 创建步骤回调
@@ -301,6 +308,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           progress: 100,
           result: result || get().activeRuns.find(r => r.id === run.id)?.steps[i].result,
         })
+        // 把共享数据快照挂到运行上，界面（如「本次上下文」预览）才有东西可读
+        updateRunById(set, run.id, { data: { ...context.data } })
         get().addLog('info', i18n.t('workflow.stepComplete', { ns: 'stores', title: definition.title, step: stepDef.name }))
 
         // 步进模式：非最后一步，且未取消 → 暂停等待用户确认

@@ -16,6 +16,9 @@ import {
   ARCHITECTURE_FIELD_LIMITS,
 } from '../../narrative-consistency'
 import { validateChapterPrewrite } from '../prewrite-validator'
+import { buildContextPreview } from '../context-preview'
+import { resolveGenerationBudgets } from '../segmented-generation'
+import { useLLMStore } from '../../../stores/llm-store'
 import i18n from '../../../i18n'
 
 export class GenerateDraftCommand extends BaseWorkflowCommand {
@@ -114,12 +117,16 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       .withNovelConfig(project.novelConfig)
       .withWordNumber(project.novelConfig.wordsPerChapter)
 
+    // 这两个值也会进「本次上下文」预览，所以在分支外先占位
+    let previousEnding = ''
+    let kbResultCount = 0
+    let filteredContext = ''
+
     if (!isFirstChapter) {
       // 从蓝图 JSON 的 notes 字段读取章节要点时间线（按序拼装，利于前缀缓存）
       const chapterTimeline = await this.readChapterNotesTimeline(project.path, this.chapterInfo.chapterNumber)
       callbacks.log(i18n.t('generateDraft.loadedNotesTimeline', { ns: 'commands', count: chapterTimeline.length }))
 
-      let previousEnding = ''
       try {
         const prevNum = this.chapterInfo.chapterNumber - 1
         const meta = await ipc.invoke('db:draft-get-finalized', prevNum)
@@ -129,7 +136,6 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         }
       } catch { /* 忽略 */ }
 
-      let filteredContext = ''
       try {
         callbacks.log(i18n.t('generateDraft.searchingKB', { ns: 'commands' }))
         let searchQuery = `${this.chapterInfo.title} ${this.chapterInfo.keyEvents} ${this.chapterInfo.characters.join(' ')}`
@@ -140,6 +146,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         // 知识库只取最相关的 3 条、每条截到 800 字：RAG 属于最低优先级上下文，
         // 全文注入既费 token 又容易把真正关键的角色状态挤出去。
         const results = await ipc.invoke('kb:search', searchQuery, 3)
+        kbResultCount = results.length
         filteredContext = results.length > 0
           ? results.map((r: { fileName: string; score: number; text: string }, i: number) => i18n.t('generateDraft.kbResultLine', { ns: 'commands', index: i + 1, file: r.fileName, score: (r.score * 100).toFixed(0), text: clampArchitectureField(r.text, 800) })).join('\n\n')
           : i18n.t('generateDraft.kbNoContent', { ns: 'commands' })
@@ -183,7 +190,11 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       callbacks.log(i18n.t('common.promptMissingVars', { ns: 'commands', template: template.name, vars: promptBuilder.missingVariables.join('、') }))
     }
     const estimatedTokens = Math.ceil(prompt.length / 1.5)
-    const TOKEN_BUDGET = 28000
+    // 预算按本次实际使用的模型算，不再写死 28000：
+    // 写死的话，128K 窗口的模型也被当成 28K 用（好内容被无谓截断），
+    // 8K 窗口的模型反而被当成 28K 用（日志说没问题、请求必然失败）。
+    const budgetModel = useLLMStore.getState().modelForPurpose('generate_draft')
+    const TOKEN_BUDGET = resolveGenerationBudgets(budgetModel?.maxTokens, budgetModel?.maxOutputTokens).inputTokens
     if (estimatedTokens > TOKEN_BUDGET) {
       callbacks.log(i18n.t('generateDraft.tokenBudgetWarning', { ns: 'commands', tokens: estimatedTokens, budget: TOKEN_BUDGET }))
     }
@@ -193,6 +204,33 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       canon: canonRendered.length,
       tokens: estimatedTokens,
     }))
+
+    // 把「这次喂了什么」落成结构化数据，供 AI 输出面板的「本次上下文」预览使用
+    context.data.contextPreview = buildContextPreview({
+      chapterNumber: this.chapterInfo.chapterNumber,
+      firstChapter: isFirstChapter,
+      prompt,
+      tokenBudget: TOKEN_BUDGET,
+      architecture,
+      globalGuidance: mergedGuidance,
+      writingStyle: project.novelConfig.writingStyle || '',
+      renderedCanon: canonRendered || null,
+      canonCounts: canonForValidation
+        ? {
+            timeline: canonForValidation.timeline.length,
+            characterStates: canonForValidation.characterStates.length,
+            plotLines: canonForValidation.openPlotLines.length,
+            facts: canonForValidation.knownFacts.length,
+            summaries: canonForValidation.recentChapterSummaries ? 1 : 0,
+          }
+        : undefined,
+      chapterInfo: JSON.stringify(this.chapterInfo, null, 2),
+      futureBlueprints: futureBlueprintsStr,
+      previousEnding: previousEnding || '',
+      knowledgeContext: filteredContext,
+      knowledgeCount: kbResultCount,
+      userGuidance: this.chapterInfo.userGuidance?.trim() || i18n.t('generateDraft.noUserGuidance', { ns: 'commands' }),
+    })
 
     callbacks.log(i18n.t('generateDraft.callingAI', { ns: 'commands' }))
 

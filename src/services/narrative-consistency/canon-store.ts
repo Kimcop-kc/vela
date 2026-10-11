@@ -18,6 +18,11 @@ import type {
   Fact,
   ChapterSummary,
   CanonWriteback,
+  CanonWritebackResult,
+  FactImpactCandidate,
+  ItemEvent,
+  Realm,
+  Location,
 } from './types'
 
 interface CanonIpcClient {
@@ -130,6 +135,17 @@ export class CanonStore {
     try { await this.ipcClient.invoke('db:canon-plot-resolve', id, chapterNumber) } catch { /* 忽略 */ }
   }
 
+  /** 更新剧情线/伏笔的台账信息（类型、预计回收阶段） */
+  async updatePlotLineMeta(id: number, patch: { kind?: 'plot' | 'foreshadow'; plannedResolveAt?: string }): Promise<boolean> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-plot-update-meta', id, patch) as { success?: boolean } | undefined
+      return r?.success === true
+    } catch (err) {
+      console.warn('[CanonStore] updatePlotLineMeta 失败:', err)
+      return false
+    }
+  }
+
   // ============================================================
   // Facts
   // ============================================================
@@ -155,6 +171,155 @@ export class CanonStore {
 
   async clearChapterFacts(chapterNumber: number): Promise<void> {
     try { await this.ipcClient.invoke('db:canon-fact-clear-chapter', chapterNumber) } catch { /* 忽略 */ }
+  }
+
+  /**
+   * 作者确认 / 取消确认事实（可批量）。
+   * 确认一条 tentative 事实时，主进程会顺带把它提升为 active。
+   */
+  async confirmFacts(ids: number[], confirmed: boolean): Promise<number> {
+    const valid = (ids || []).filter(id => Number.isSafeInteger(id))
+    if (valid.length === 0) return 0
+    try {
+      const r = await this.ipcClient.invoke('db:canon-fact-confirm', valid, confirmed) as { success?: boolean; count?: number } | undefined
+      return r?.success ? (r.count ?? 0) : 0
+    } catch (err) {
+      console.warn('[CanonStore] confirmFacts 失败:', err)
+      return 0
+    }
+  }
+
+  /** 某条事实的变更历史（最近的在前） */
+  async getFactHistory(factId: number): Promise<Array<{ id: number; action: string; at: string }>> {
+    try {
+      const rows = await this.ipcClient.invoke('db:canon-fact-history', factId) as
+        Array<{ id: number; action: string; at: string }> | undefined
+      return rows ?? []
+    } catch (err) {
+      console.warn('[CanonStore] getFactHistory 失败:', err)
+      return []
+    }
+  }
+
+  /** 物品流转台账（可按物品过滤） */
+  async getItemEvents(item?: string): Promise<ItemEvent[]> {
+    try {
+      const rows = await this.ipcClient.invoke('db:canon-item-events-list', item) as ItemEvent[] | undefined
+      return rows ?? []
+    } catch (err) {
+      console.warn('[CanonStore] getItemEvents 失败:', err)
+      return []
+    }
+  }
+
+  /** 登记一条物品流转 */
+  async addItemEvent(event: ItemEvent): Promise<number | null> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-item-event-add', {
+        item: event.item,
+        action: event.action,
+        chapterNumber: event.chapterNumber,
+        actor: event.actor || '',
+        note: event.note || '',
+      }) as { success?: boolean; id?: number } | undefined
+      return r?.success ? r.id ?? null : null
+    } catch (err) {
+      console.warn('[CanonStore] addItemEvent 失败:', err)
+      return null
+    }
+  }
+
+  /** 删除一条物品流转记录 */
+  async removeItemEvent(id: number): Promise<boolean> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-item-event-remove', id) as { success?: boolean } | undefined
+      return r?.success === true
+    } catch (err) {
+      console.warn('[CanonStore] removeItemEvent 失败:', err)
+      return false
+    }
+  }
+
+  /** 境界阶梯（按阶数从低到高） */
+  async getRealms(): Promise<Realm[]> {
+    try {
+      const rows = await this.ipcClient.invoke('db:canon-realms-list') as Realm[] | undefined
+      return rows ?? []
+    } catch (err) {
+      console.warn('[CanonStore] getRealms 失败:', err)
+      return []
+    }
+  }
+
+  /** 保存一阶境界（同名视为更新） */
+  async upsertRealm(realm: Realm): Promise<number | null> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-realm-upsert', {
+        id: realm.id,
+        name: realm.name,
+        rankOrder: realm.rankOrder,
+        abilities: realm.abilities || '',
+        limits: realm.limits || '',
+        breakthrough: realm.breakthrough || '',
+        notes: realm.notes || '',
+      }) as { success?: boolean; id?: number } | undefined
+      return r?.success ? r.id ?? null : null
+    } catch (err) {
+      console.warn('[CanonStore] upsertRealm 失败:', err)
+      return null
+    }
+  }
+
+  /** 删除一阶境界 */
+  async removeRealm(id: number): Promise<boolean> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-realm-remove', id) as { success?: boolean } | undefined
+      return r?.success === true
+    } catch (err) {
+      console.warn('[CanonStore] removeRealm 失败:', err)
+      return false
+    }
+  }
+
+  /** 地点与空间关系 */
+  async getLocations(): Promise<Location[]> {
+    try {
+      const rows = await this.ipcClient.invoke('db:canon-locations-list') as Location[] | undefined
+      return rows ?? []
+    } catch (err) {
+      console.warn('[CanonStore] getLocations 失败:', err)
+      return []
+    }
+  }
+
+  /** 保存一个地点（同名或带 id 视为更新） */
+  async upsertLocation(location: Location): Promise<number | null> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-location-upsert', {
+        id: location.id,
+        name: location.name,
+        region: location.region || '',
+        faction: location.faction || '',
+        distanceNote: location.distanceNote || '',
+        travelNote: location.travelNote || '',
+        notes: location.notes || '',
+      }) as { success?: boolean; id?: number } | undefined
+      return r?.success ? r.id ?? null : null
+    } catch (err) {
+      console.warn('[CanonStore] upsertLocation 失败:', err)
+      return null
+    }
+  }
+
+  /** 删除一个地点 */
+  async removeLocation(id: number): Promise<boolean> {
+    try {
+      const r = await this.ipcClient.invoke('db:canon-location-remove', id) as { success?: boolean } | undefined
+      return r?.success === true
+    } catch (err) {
+      console.warn('[CanonStore] removeLocation 失败:', err)
+      return false
+    }
   }
 
   /** 更新事实的记忆状态（active / outdated / contradicted / tentative）。 */
@@ -217,9 +382,10 @@ export class CanonStore {
    *   - 摘要在事务外单独写入（失败不阻塞）
    *   - 单次 IPC 调用 vs 旧的 10+ 次 roundtrip
    */
-  async writeback(payload: CanonWriteback): Promise<{ ok: boolean; errors: string[]; conflicts: string[] }> {
+  async writeback(payload: CanonWriteback): Promise<CanonWritebackResult> {
     const errors: string[] = []
     const conflicts: string[] = []
+    let impactCandidates: FactImpactCandidate[] = []
 
     // 1) 摘要（独立写入，失败不阻塞定稿）
     if (payload.chapterSummary) {
@@ -237,21 +403,28 @@ export class CanonStore {
     try {
       const r = await this.ipcClient.invoke('db:canon-writeback-atomic', {
         chapterNumber: payload.chapterNumber,
+        chapterContent: payload.chapterContent || '',
         newEvents: payload.newEvents,
         characterDeltas: payload.characterDeltas,
         plotLineChanges: payload.plotLineChanges,
         newFacts: payload.newFacts,
-      }) as { success: boolean; error?: string; conflicts?: Array<{ reason: string }> } | undefined
+      }) as {
+        success: boolean
+        error?: string
+        conflicts?: Array<{ reason: string }>
+        impactCandidates?: FactImpactCandidate[]
+      } | undefined
       if (!r?.success) {
         errors.push(`writeback-atomic: ${r?.error || 'unknown'}`)
       } else if (r.conflicts?.length) {
         for (const conflict of r.conflicts) conflicts.push(conflict.reason)
       }
+      impactCandidates = r?.impactCandidates ?? []
     } catch (e) {
       errors.push(`writeback-atomic: ${String(e)}`)
     }
 
-    return { ok: errors.length === 0, errors, conflicts }
+    return { ok: errors.length === 0, errors, conflicts, impactCandidates }
   }
 }
 

@@ -3,7 +3,7 @@ import { create } from 'zustand'
 /** 左侧活动栏的视图类型 */
 export type SidebarView = 'home' | 'project' | 'knowledge' | 'books' | 'story-bible' | 'characters' | 'settings'
 
-export type StoryBibleSection = 'overview' | 'characters' | 'timeline' | 'plots' | 'facts'
+export type StoryBibleSection = 'overview' | 'characters' | 'timeline' | 'plots' | 'facts' | 'realms' | 'locations'
 
 /** 下方工具窗口 Tab */
 export type BottomTab = 'tasks' | 'log' | 'models'

@@ -760,6 +760,25 @@ function ModelForm({
                 if (!v || v < 1) up('maxTokens', 4096)
               }}
             />
+            <div className="mt-1 text-[0.68rem] leading-snug" style={{ color: 'var(--color-text-muted)' }}>
+              {t('models.maxTokensHint')}
+            </div>
+          </div>
+          <div>
+            <Label>{t('models.maxOutputTokens')}</Label>
+            <Input
+              type="number"
+              placeholder="8192"
+              value={model.maxOutputTokens === undefined ? '' : model.maxOutputTokens}
+              onChange={(e) => up('maxOutputTokens', (e.target.value === '' ? undefined : parseInt(e.target.value)) as number)}
+              onBlur={() => {
+                const v = Number(model.maxOutputTokens);
+                if (model.maxOutputTokens !== undefined && (!v || v < 1)) up('maxOutputTokens', undefined)
+              }}
+            />
+            <div className="mt-1 text-[0.68rem] leading-snug" style={{ color: 'var(--color-text-muted)' }}>
+              {t('models.maxOutputTokensHint')}
+            </div>
           </div>
         </div>
       )}

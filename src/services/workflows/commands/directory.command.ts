@@ -52,7 +52,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
     // 按「章节蓝图」用途取模型（未绑定时回落默认模型），用它的 maxTokens 动态计算每批次章节数
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('chapter_blueprint')
-    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
+    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens, defaultModel?.maxOutputTokens)
     const outputBudget = Math.floor(budgets.outputTokens * 0.6)  // 预留 40% 给 prompt + 思考
     const tokensPerChapter = 600
     const maxBatchSize = Math.min(20, Math.max(1, Math.floor(outputBudget / tokensPerChapter)))

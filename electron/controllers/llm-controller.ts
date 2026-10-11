@@ -120,7 +120,9 @@ export function registerLLMController() {
       const provider = LLMFactory.getProvider(model)
       const result = await provider.generate(model, request.messages, {
         temperature: request.temperature ?? model.temperature,
-        maxTokens: request.maxTokens ?? model.maxTokens,
+        // 单次输出上限优先用模型配置里的 maxOutputTokens；没配才退回 maxTokens
+        //（旧配置把上下文窗口填在这里，provider 侧仍会收敛到 32768 的安全上限）
+        maxTokens: request.maxTokens ?? model.maxOutputTokens ?? model.maxTokens,
         responseFormat: request.responseFormat,
         thinking: request.thinking,
       })
@@ -190,7 +192,7 @@ export function registerLLMController() {
     // We do not await this globally since it's streaming independently
     void provider.generateStream(model, request.messages, {
       temperature: request.temperature ?? model.temperature,
-      maxTokens: request.maxTokens ?? model.maxTokens,
+      maxTokens: request.maxTokens ?? model.maxOutputTokens ?? model.maxTokens,
       responseFormat: request.responseFormat,
       thinking: request.thinking,
       signal: abortController.signal,

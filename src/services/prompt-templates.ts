@@ -991,7 +991,7 @@ Requirements:
       global_guidance: '全局写作要求',
       word_number: '目标字数',
       writing_style: '文风描述（可选）',
-      user_guidance: '作者本章微操指导（可选）',
+      user_guidance: '作者本章微操指导（可选）：场景风格、节奏快慢、视角或描写比例等本章特例要求',
     },
     content: `请开始创作这本小说的第一章（破冰章）。
 
@@ -1015,8 +1015,10 @@ Requirements:
 
 【文风要求（如有，请严格遵循）】
 {{writing_style}}`,
-    systemSuffix: `★【作者对本步骤的额外指导（如有，最高优先级）】★：
+    systemSuffix: `★【作者本章微操指导（如有，最高优先级）】★：
 {{user_guidance}}
+
+说明：这段指导用于「场景风格 + 本章微调」——例如战斗场景重动作与距离、探索场景重环境与线索、日常场景重互动与生活感，或本章要更快/更慢、减少心理独白、增加对话、强化环境压迫感。它与全书文风（【文风要求】）叠加生效：本章要求优先于全书风格，但两者都不允许违背上面的 Canon 与全局禁忌。
 
 【具体生成要求】
 - 体量与节奏控制：大约 {{word_number}} 字左右。本章仅推演【本章信息】中规定的核心剧情，切忌注水！不要为了凑字数而撰写冗余的旁白科普或无意义的日常对话。达成首章目标后立刻留悬念断章，绝不可提前泄露后续情节。
@@ -1094,7 +1096,7 @@ Requirements:
       previous_ending: '上章结尾800字',
       chapter_info: '本章蓝图信息（JSON）',
       future_blueprints: '后续章节蓝图（防止剧情提前）',
-      user_guidance: '作者本章微操指导（可选）',
+      user_guidance: '作者本章微操指导（可选）：场景风格、节奏快慢、视角或描写比例等本章特例要求',
       filtered_context: '知识库检索结果',
       global_guidance: '全局写作要求',
       word_number: '目标字数',
@@ -1130,8 +1132,10 @@ Requirements:
 
 【文风要求（如有，请严格遵循）】
 {{writing_style}}`,
-    systemSuffix: `★【作者对本步骤的额外指导（如有，最高优先级）】★：
+    systemSuffix: `★【作者本章微操指导（如有，最高优先级）】★：
 {{user_guidance}}
+
+说明：这段指导用于「场景风格 + 本章微调」——例如战斗场景重动作与距离、探索场景重环境与线索、日常场景重互动与生活感，或本章要更快/更慢、减少心理独白、增加对话、强化环境压迫感。它与全书文风（【文风要求】）叠加生效：本章要求优先于全书风格，但两者都不允许违背上面的 Canon 与全局禁忌。
 
 【输出格式】
 - 体量与节奏控制：大约 {{word_number}} 字左右。本章仅推演【本章信息】中规定的核心冲突，切忌注水！达成目标即立刻断章，绝不可擅自拓展后续大纲的情节。
@@ -2761,6 +2765,7 @@ Requirements:
 - severity 只能是 note（记录）/ watch（值得留意）/ concern（可能影响读者理解），它表示阅读优先级，不是判定。
 - 没问题的维度不要为了凑数编造观察。
 - 观察要具体：说清楚「哪里、怎么了、为什么值得注意」，不要写「人物塑造略显单薄」这类空话。
+- 维度是 outline-deviation 的观察，必须额外给出 "classification"，取值只能是：done（大纲要求的情节已按计划完成）/ pending（大纲要求的部分还没写到）/ deviated（正文与大纲明显不符）/ missing（可能漏掉了大纲里的线索或人物行动）/ creative（大纲没规定、但属于合理的剧情发挥）/ conflict（与已确认设定冲突）。**偏离不等于错误**：作者可能在创作中调整方向，creative 与 deviated 要如实区分，不要一律当成问题。
 
 【输出格式】
 只输出 JSON，不要输出任何解释：
@@ -2768,6 +2773,7 @@ Requirements:
   "observations": [
     {
       "dimension": "character-memory",
+      "classification": "仅 outline-deviation 维度需要，取值 done/pending/deviated/missing/creative/conflict",
       "severity": "watch",
       "title": "一句话标题",
       "detail": "具体描述：观察到什么，为什么值得注意",
@@ -2806,6 +2812,7 @@ Requirements:
 - severity may only be note / watch / concern. It expresses reading priority, not a verdict.
 - If a dimension has no issue, do not invent an observation for it.
 - Be specific: say what, where, and why it matters. Avoid empty remarks like "the characterization feels thin".
+- Observations with dimension outline-deviation must also include "classification", one of: done / pending / deviated / missing / creative / conflict. **Deviation is not an error**: the author may be deliberately changing direction, so distinguish creative (a reasonable addition the blueprint never specified) from deviated (the text clearly contradicts the blueprint).
 
 【Output Format】
 Output JSON only, with no explanation:
@@ -2813,6 +2820,7 @@ Output JSON only, with no explanation:
   "observations": [
     {
       "dimension": "character-memory",
+      "classification": "only for outline-deviation: done/pending/deviated/missing/creative/conflict",
       "severity": "watch",
       "title": "One-line title",
       "detail": "What you observed and why it matters",
@@ -2850,6 +2858,7 @@ Output JSON only, with no explanation:
 - severity может быть только note / watch / concern. Это приоритет чтения, а не вердикт.
 - Если в измерении нет проблемы, не придумывайте наблюдение.
 - Будьте конкретны: что, где и почему это важно. Избегайте пустых формулировок.
+- Наблюдения с измерением outline-deviation обязаны содержать "classification" со значением из: done / pending / deviated / missing / creative / conflict. **Отклонение — не ошибка**: автор может сознательно менять направление, поэтому отличайте creative (разумное дополнение, которого не было в конспекте) от deviated (текст явно противоречит конспекту).
 
 【Формат вывода】
 Только JSON, без пояснений:
@@ -2857,6 +2866,7 @@ Output JSON only, with no explanation:
   "observations": [
     {
       "dimension": "character-memory",
+      "classification": "только для outline-deviation: done/pending/deviated/missing/creative/conflict",
       "severity": "watch",
       "title": "Заголовок в одну строку",
       "detail": "Что замечено и почему это важно",

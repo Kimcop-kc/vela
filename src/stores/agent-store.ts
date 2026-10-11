@@ -554,10 +554,12 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
 
       // LLM 生成函数（封装为非流式调用，Agent 专用参数）
       const generateFn = async (messages: LLMMessage[], mid: string): Promise<string> => {
+        const targetModel = llmStore.models.find(m => m.id === mid)
         const request = {
           modelId: mid,
           messages: messages.map(m => ({ role: m.role, content: m.content })),
-          maxTokens: Math.min(32768, llmStore.models.find(m => m.id === mid)?.maxTokens || 4096),
+          // 输出上限优先用独立的 maxOutputTokens；旧配置只有 maxTokens（往往是窗口）时仍退回后者
+          maxTokens: Math.min(32768, targetModel?.maxOutputTokens ?? targetModel?.maxTokens ?? 4096),
           temperature: 0.7,    // 创作场景适度随机
           thinking: false,
           responseFormat: { type: 'json_object' as const },

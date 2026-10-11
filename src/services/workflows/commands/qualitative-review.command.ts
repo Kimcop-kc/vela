@@ -59,7 +59,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
 
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
     const defaultModel = llmStore.modelForPurpose('qualitative_review')
-    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
+    const budgets = resolveGenerationBudgets(defaultModel?.maxTokens, defaultModel?.maxOutputTokens)
 
     // ── 读取静态架构 + 角色卡 + 既有 Canon ──
     let core: { premise?: string; charactersArch?: string; worldbuilding?: string; synopsis?: string } | null = null

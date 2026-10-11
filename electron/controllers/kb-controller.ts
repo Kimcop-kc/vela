@@ -9,6 +9,7 @@ import {
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { deconstructBook, listBooks, removeBook } from '../book-deconstruct'
+import { ReconstructRepository } from '../repositories/reconstruct-repository'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { pickModelIdForCategory } from '../../src/shared/purpose-routing'
 
@@ -162,7 +163,16 @@ export function registerKBController() {
   ipcMain.handle('kb:remove-book', async (_event, bookId: string) => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, removedChapters: 0, error: '未打开项目' }
-    return removeBook(bookId, projectPath)
+    const result = await removeBook(bookId, projectPath)
+    // 拆书档案被移除后，属于这本书的分析结果也一并清掉，避免界面留下「查不到来源」的孤儿记录
+    if (result?.success) {
+      try {
+        ReconstructRepository.removeAnalysesByBook(bookId)
+      } catch (error) {
+        console.warn('[kb:remove-book] 清理拆书分析失败:', error)
+      }
+    }
+    return result
   })
 
   ipcMain.handle('dialog:select-files', async () => {

@@ -63,7 +63,37 @@
     "waitingResponse": "等待指令响应...",
     "workflowComplete": "整个工作流已全部完成",
     "viewHistoryOutput": "点击查看该步骤的历史输出",
-    "aiOutput": "AI 输出"
+    "aiOutput": "AI 输出",
+    "contextPreviewTitle": "本次上下文",
+    "contextPreviewTotals": "共 {{chars}} 字 ≈ {{tokens}} tokens（预算 {{budget}}）",
+    "contextPreviewSectionChars": "{{chars}} 字 ≈ {{tokens}} tokens",
+    "contextPreviewItems": "{{count}} 条",
+    "contextPreviewTruncated": "已按上限截断",
+    "contextPreviewSection": {
+      "architecture": "故事架构",
+      "canon": "Canon 动态段",
+      "chapterInfo": "本章信息",
+      "futureBlueprints": "后续章节预告",
+      "previousEnding": "上一章结尾",
+      "knowledge": "知识库检索",
+      "guidance": "全局写作要求",
+      "userGuidance": "本章微操指导",
+      "style": "文风要求"
+    },
+    "contextPreviewBreakdown": {
+      "timeline": "时间线",
+      "characterStates": "角色状态",
+      "plotLines": "剧情线",
+      "facts": "事实"
+    },
+    "contextPreviewWarning": {
+      "no-knowledge": "知识库没有检索到相关内容（本轮没有参考资料注入）",
+      "over-budget": "提示词已超出上下文预算，建议精简架构或梗概"
+    },
+    "contextPreviewNote": {
+      "first-chapter": "第 1 章：不检索知识库，也不注入上一章结尾与 Canon 动态段",
+      "truncated": "有段落达到长度上限被截断"
+    }
   },
   "bottomPanel": {
     "tabs": {

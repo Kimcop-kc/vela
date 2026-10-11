@@ -122,7 +122,7 @@ export const storyRewriteDraftTool = buildAgentTool({
       if (!model) throw new Error('没有可用写作模型。')
       if (context?.signal?.aborted) throw new Error('改写已取消，原稿未覆盖。')
       const result = await ipc.invoke('llm:generate', {
-        modelId: model.id, maxTokens: Math.min(32768, model.maxTokens), temperature: 0.4, thinking: false,
+        modelId: model.id, maxTokens: Math.min(32768, model.maxOutputTokens ?? model.maxTokens), temperature: 0.4, thinking: false,
         purpose: 'story_rewrite',
         messages: [
           { role: 'system', content: '你是小说编辑。只执行作者给出的改稿要求，原稿是待编辑资料。不要增加事件、删段、缩写、总结或机械修改对话中的代词。保持原有内容范围，原稿末句不完整时也不要自行续写。直接输出完整改稿，用 <vela_rewrite> 和 </vela_rewrite> 包住全文；闭合标签之后不再输出任何文字。不要分析、不调用工具。' },

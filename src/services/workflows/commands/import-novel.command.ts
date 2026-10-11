@@ -59,7 +59,7 @@ interface InferSampleField {
 function currentGenerationBudgets() {
   const llmStore = useLLMStore.getState()
   const model = llmStore.modelForPurpose('infer_novel_config')
-  return resolveGenerationBudgets(model?.maxTokens)
+  return resolveGenerationBudgets(model?.maxTokens, model?.maxOutputTokens)
 }
 
 /** 按 token 预算把采样片段切成多组（分段推演：单组输入不超出上下文预算） */

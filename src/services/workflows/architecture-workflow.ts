@@ -196,7 +196,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 切段同时受「输入预算」和「输出预算」约束：本段要吐出的角色卡 JSON 规模由输入决定，
         // 只按输入预算切的话，输出必然撞上模型输出上限（finish_reason=length）。
         const model = llmStore.modelForPurpose('arch_characters')
-        const budgets = resolveGenerationBudgets(model?.maxTokens)
+        const budgets = resolveGenerationBudgets(model?.maxTokens, model?.maxOutputTokens)
         // 角色卡 JSON 往往比角色图谱本身更长，切段预算再按输出上限的膨胀系数收紧一次，
         // 把「一次要吐出的 JSON 超过模型输出上限」挡在第一次调用之前。
         const chunkBudget = resolveJsonChunkBudget(budgets)
