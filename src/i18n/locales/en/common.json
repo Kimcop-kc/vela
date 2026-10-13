@@ -64,6 +64,8 @@
   "sidebarRenderError": "Sidebar render failed",
   "editorRenderError": "Editor render failed",
   "aiPanelRenderError": "AI panel render failed",
+  "bottomPanelRenderError": "Bottom panel render failed",
+  "dialogRenderError": "Dialog render failed",
   "justNow": "just now",
   "minutesAgo": "{{count}} minutes ago",
   "hoursAgo": "{{count}} hours ago",

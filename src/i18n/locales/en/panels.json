@@ -93,6 +93,30 @@
     "contextPreviewNote": {
       "first-chapter": "Chapter 1: no knowledge search, no previous ending or dynamic canon",
       "truncated": "Some sections hit the length limit and were truncated"
+    },
+    "chapterPackTitle": "Chapter context preview",
+    "chapterPackTotals": "actual request ≈ {{used}} tokens (budget {{budget}})",
+    "chapterPackRound": "Round {{round}} ({{purpose}}): {{count}} messages ≈ {{tokens}} tokens",
+    "chapterPackSectionStats": "kept {{kept}} ≈ {{tokens}} tokens · priority {{priority}}",
+    "chapterPackConflictCount": "{{count}} conflicts",
+    "chapterPackMissingCount": "{{count}} missing",
+    "chapterPackDropped": "{{count}} omitted",
+    "chapterPackEmpty": "(missing data)",
+    "chapterPackTruncated": "{{count}} items omitted for budget reasons (reasons recorded, none silently dropped)",
+    "chapterPackNotCaptured": "No real request captured yet: this record shows the pre-generation context pack; the full request will appear here once the model call completes.",
+    "chapterPackShowRaw": "Show full raw request",
+    "chapterPackHideRaw": "Hide full raw request",
+    "chapterPackSection": {
+      "chapterGoal": "Chapter goal",
+      "scene": "Scene",
+      "characters": "Characters",
+      "knowledgeBounds": "Knowledge bounds",
+      "previousContext": "Previously",
+      "items": "Items & resources",
+      "plotLines": "Plot & foreshadowing",
+      "worldRules": "World rules",
+      "style": "Writing style",
+      "outputConstraints": "Output constraints"
     }
   },
   "bottomPanel": {

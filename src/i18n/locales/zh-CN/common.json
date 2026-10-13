@@ -64,6 +64,8 @@
   "sidebarRenderError": "侧边栏渲染失败",
   "editorRenderError": "编辑区渲染失败",
   "aiPanelRenderError": "AI 面板渲染失败",
+  "bottomPanelRenderError": "底部工具窗口渲染失败",
+  "dialogRenderError": "对话框渲染失败",
   "justNow": "刚刚",
   "minutesAgo": "{{count}}分钟前",
   "hoursAgo": "{{count}}小时前",

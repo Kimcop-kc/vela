@@ -8,6 +8,8 @@
     "zoomIn": "Zoom In (⌘+=)",
     "zoomInCtrl": "Zoom In (Ctrl+=)",
     "settings": "Settings",
+    "focusMode": "Focus Mode (⌘+⇧+F)",
+    "focusModeCtrl": "Focus Mode (Ctrl+Shift+F)",
     "themeGalaxy": "Galaxy",
     "themeOcean": "Ocean",
     "themePaper": "Paper",

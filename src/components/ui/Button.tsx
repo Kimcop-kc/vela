@@ -13,17 +13,24 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'btn-primary text-white',
+          /* 强调色底上的字色必须走 --color-on-accent：accent 是亮色的主题
+             （galaxy #5CB8F0 / dark #4CC2FF / ocean #38C8E8）用白字对比度只有 2.0~2.2，
+             而令牌里已经为每套主题配好了高对比的前景色（8.3~8.7）。 */
+          'btn-primary text-[var(--color-on-accent)]',
         ai:
-          'ai-glow text-white shadow-sm hover:shadow-md relative overflow-hidden',
+          /* .ai-glow 已改为 color: var(--color-on-accent)，
+             这里不能再叠 text-white 把它盖回去。 */
+          'ai-glow shadow-sm hover:shadow-md relative overflow-hidden',
         destructive:
-          'bg-[var(--color-error)] text-white shadow-sm hover:shadow-md hover:shadow-[var(--color-error)]/30 transition-all duration-150 hover:brightness-110 active:scale-[0.97]',
+          /* 同 default：--color-error 在 galaxy/dark/ocean 是亮色，白字只有 2.0~2.9 */
+          'bg-[var(--color-error)] text-[var(--color-on-error)] shadow-sm hover:shadow-md hover:shadow-[var(--color-error)]/30 transition-all duration-150 hover:brightness-110 active:scale-[0.97]',
         outline:
           'border border-[var(--color-border)] bg-transparent text-[var(--color-text)] hover:bg-[var(--color-hover)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all duration-150',
         ghost:
           'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] active:scale-[0.98] transition-all duration-150',
         success:
-          'bg-[var(--color-success)] text-white shadow-sm hover:shadow-md hover:shadow-[var(--color-success)]/30 transition-all duration-150 hover:brightness-110 active:scale-[0.97]',
+          /* 同 destructive；另需注意 paper 的 --color-success 已压暗到 #438361 才能过 AA */
+          'bg-[var(--color-success)] text-[var(--color-on-success)] shadow-sm hover:shadow-md hover:shadow-[var(--color-success)]/30 transition-all duration-150 hover:brightness-110 active:scale-[0.97]',
       },
       size: {
         default: 'h-7 px-3 py-1 rounded-[var(--radius-sm)]',    /* 28px 高 */

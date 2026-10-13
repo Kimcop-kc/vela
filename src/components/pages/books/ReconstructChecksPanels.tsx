@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Check, FileText, Loader2, Play, RefreshCw, Save, ShieldCheck, Trash2 } from 'lucide-react'
 import { Button } from '../../ui/Button'
 import { Input } from '../../ui/Input'
+import { NativeSelect } from '../../ui/NativeSelect'
 import { Textarea } from '../../ui/Textarea'
 import { EmptyState } from '../../ui/EmptyState'
 import { confirm } from '../../ui/Confirm'
@@ -11,6 +12,7 @@ import { toast } from '../../ui/Toast'
 import { globalEventBus } from '../../../shared/event-bus'
 import { getChapterTextPage } from '../../../services/book-service'
 import { canonStore } from '../../../services/narrative-consistency'
+import { type ChapterContextPack } from '../../../services/workflows/chapter-context-pack'
 import {
   buildSimilarityReport,
   checkDraftConsistency,
@@ -69,6 +71,8 @@ export function DraftGeneratePanel() {
   const [status, setStatus] = useState('')
   const [consistency, setConsistency] = useState<DraftConsistencyResult | null>(null)
   const [factResult, setFactResult] = useState('')
+  // 本章资料包：生成前建好，供「本章上下文预览」查看（含来源、选取理由、预算与缺失提示）
+  const [contextPack, setContextPack] = useState<ChapterContextPack | null>(null)
 
   const outline = useMemo(() => outlines.find(item => item.id === outlineId) ?? null, [outlines, outlineId])
 
@@ -101,6 +105,8 @@ export function DraftGeneratePanel() {
         targetWordsPerBeat: wordsPerBeat,
         onSegment: segment => setSegments(prev => [...prev, segment]),
         onProgress: (done, total) => setStatus(t('progress', { done, total })),
+        // 生成前建好的资料包：界面直接展示，不重新拼一份
+        onContextPack: pack => setContextPack(pack),
       })
       if (result.error) toast.error(result.error)
       else if (result.cancelled) toast.warning(t('cancelled'))
@@ -161,15 +167,16 @@ export function DraftGeneratePanel() {
     }
   }
 
-  const selectStyle = { background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <select className="px-2 py-1 rounded text-[0.7rem]" style={selectStyle} value={outlineId ?? ''} onChange={(e) => setOutlineId(Number(e.target.value) || null)}>
+        {/* 统一走 NativeSelect（此前是手写内联样式的原生 select），
+            与同一行的 Input 高度、边框、聚焦环保持一致。
+            组件默认 w-full，在 flex 工具条里要改回按内容宽度。 */}
+        <NativeSelect className="w-auto" value={outlineId ?? ''} onChange={(e) => setOutlineId(Number(e.target.value) || null)}>
           {outlines.length === 0 && <option value="">{t('noOutline')}</option>}
           {outlines.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>
+        </NativeSelect>
         <Input type="number" value={chapterNumber} onChange={(e) => setChapterNumber(Number(e.target.value) || 1)} className="max-w-[90px]" />
         <Input type="number" value={wordsPerBeat} onChange={(e) => setWordsPerBeat(Number(e.target.value) || 800)} className="max-w-[100px]" />
         <Button variant="outline" size="sm" disabled={running || !outline} onClick={() => { void generate() }}>
@@ -184,6 +191,46 @@ export function DraftGeneratePanel() {
         </Button>
         {status && <span className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{status}</span>}
       </div>
+
+      {/* 本章资料包预览：生成前建立，逐段展示来源、选取理由、预算与缺失/冲突 */}
+      {contextPack && (
+        <details className="rounded-md px-2 py-1.5" style={{ border: '1px solid var(--color-border)' }}>
+          <summary className="text-[0.68rem] cursor-pointer" style={{ color: 'var(--color-text-secondary)' }}>
+            {t('contextPackTitle')}
+            <span className="ml-2 font-mono" style={{ color: 'var(--color-text-muted)' }}>
+              {t('contextPackTotals', { used: contextPack.budget.usedTokens, budget: contextPack.budget.inputTokens || '∞' })}
+            </span>
+            {contextPack.notices.filter(n => n.kind === 'conflict').length > 0 && (
+              <span className="ml-2" style={{ color: 'var(--color-warning-text)' }}>
+                {t('contextPackConflicts', { count: contextPack.notices.filter(n => n.kind === 'conflict').length })}
+              </span>
+            )}
+          </summary>
+          <div className="mt-1 space-y-1">
+            {contextPack.sections.map(section => (
+              <div key={section.key} className="text-[0.66rem]">
+                <span style={{ color: 'var(--color-text)' }}>{t(`contextPackSection.${section.key}`)}</span>
+                <span className="ml-1 font-mono" style={{ color: 'var(--color-text-muted)' }}>
+                  {section.items.length} 条 ≈ {section.tokens} tokens（优先级 {section.priority}）
+                </span>
+                {section.dropped > 0 && (
+                  <span className="ml-1" style={{ color: 'var(--color-warning-text)' }}>省略 {section.dropped} 条</span>
+                )}
+                {section.items.slice(0, 4).map(item => (
+                  <div key={item.id} className="pl-3" style={{ color: 'var(--color-text-muted)' }}>
+                    · {item.title} — {item.reason}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {contextPack.notices.filter(n => n.kind !== 'info').map((notice, index) => (
+              <div key={index} className="text-[0.64rem]" style={{ color: notice.kind === 'conflict' ? 'var(--color-warning-text)' : 'var(--color-text-muted)' }}>
+                {notice.message}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {!outline ? (
         <EmptyState icon={<FileText size={20} />} message={t('noOutline')} opacity={0.55} />
@@ -322,15 +369,14 @@ export function SimilarityPanel({ books }: CommonProps) {
       <div className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('hint')}</div>
       <Textarea rows={6} placeholder={t('placeholder')} value={draftText} onChange={(e) => setDraftText(e.target.value)} />
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="px-2 py-1 rounded text-[0.7rem]"
-          style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+        <NativeSelect
+          className="w-auto"
           value={outlineId ?? ''}
           onChange={(e) => setOutlineId(Number(e.target.value) || null)}
         >
           <option value="">{t('noOutline')}</option>
           {outlines.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
-        </select>
+        </NativeSelect>
         <Button variant="outline" size="sm" disabled={running} onClick={() => { void run() }}>
           {running ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
           {t('run')}

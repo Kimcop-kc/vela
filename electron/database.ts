@@ -49,7 +49,7 @@ export function getCurrentProjectPath(): string | null {
 }
 
 /** 已执行的 schema 迁移版本号（用于幂等迁移） */
-const SCHEMA_VERSION = 9
+const SCHEMA_VERSION = 11
 
 /**
  * 拆书创作系统的三张表（迁移与建表共用同一份 SQL，避免两处漂移）。
@@ -327,6 +327,101 @@ function migrateProjectDatabase(db: BetterSqlite3.Database): void {
       db.exec(RECONSTRUCT_SCHEMA_SQL)
     } catch (e) {
       console.warn('[Vela DB] 创建拆书创作系统表失败:', e)
+    }
+  }
+  // v9 → v10: 第二阶段分层记忆与精准检索
+  //   - canon_character_state_history: 角色状态历史链（每次写回留痕，不覆盖）
+  //   - canon_arcs: 分卷/阶段记忆（卷名、起止章、本卷矛盾/人物发展/阶段性目标）
+  //   - canon_facts 增加 source_paragraph_index（事实在原文章节中的段落定位）
+  //   - canon_facts 增加 arc_id（所属分卷，可空）
+  //   - characters 增加 aliases_json（别名/称谓数组）
+  if (currentVersion < 10) {
+    // 角色状态历史链
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_character_state_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          character TEXT NOT NULL,
+          chapter_number INTEGER NOT NULL,
+          snapshot_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_csh_char_ch
+          ON canon_character_state_history(character, chapter_number);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_character_state_history 表失败:', e)
+    }
+    // 分卷/阶段记忆
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS canon_arcs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          start_chapter INTEGER DEFAULT 0,
+          end_chapter INTEGER DEFAULT 0,
+          main_conflict TEXT DEFAULT '',
+          character_development TEXT DEFAULT '',
+          key_events TEXT DEFAULT '',
+          stage_goal TEXT DEFAULT '',
+          sort_order INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_canon_arcs_range
+          ON canon_arcs(start_chapter, end_chapter);
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 canon_arcs 表失败:', e)
+    }
+    // canon_facts 增加段落定位和分卷关联
+    const factCols = db.prepare('PRAGMA table_info(canon_facts)').all() as Array<{ name: string }>
+    const hasFactCol = (name: string) => factCols.some(c => c.name === name)
+    if (!hasFactCol('source_paragraph_index')) {
+      try {
+        db.exec(`ALTER TABLE canon_facts ADD COLUMN source_paragraph_index INTEGER DEFAULT -1`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_facts.source_paragraph_index 列失败:', e)
+      }
+    }
+    if (!hasFactCol('arc_id')) {
+      try {
+        db.exec(`ALTER TABLE canon_facts ADD COLUMN arc_id INTEGER DEFAULT NULL`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 canon_facts.arc_id 列失败:', e)
+      }
+    }
+    // characters 增加别名/称谓
+    const charCols = db.prepare('PRAGMA table_info(characters)').all() as Array<{ name: string }>
+    if (!charCols.some(c => c.name === 'aliases_json')) {
+      try {
+        db.exec(`ALTER TABLE characters ADD COLUMN aliases_json TEXT DEFAULT '[]'`)
+      } catch (e) {
+        console.warn('[Vela DB] 添加 characters.aliases_json 列失败:', e)
+      }
+    }
+  }
+  // v10 → v11: 第四阶段写作流水线任务状态
+  //   - writing_pipeline: 按章节保存流水线任务（策划、场景、分段状态与错误信息），
+  //     用于「中途关闭程序后恢复生成」；一个章节一行，避免多行互相覆盖。
+  if (currentVersion < 11) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS writing_pipeline (
+          chapter_number INTEGER PRIMARY KEY,
+          outline_id INTEGER DEFAULT 0,
+          outline_fingerprint TEXT DEFAULT '',
+          mode TEXT DEFAULT 'outline-expand',
+          target_words INTEGER DEFAULT 0,
+          plan_json TEXT DEFAULT '{}',
+          scenes_json TEXT DEFAULT '[]',
+          segments_json TEXT DEFAULT '[]',
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+      `)
+    } catch (e) {
+      console.warn('[Vela DB] 创建 writing_pipeline 表失败:', e)
     }
   }
   db.pragma(`user_version = ${SCHEMA_VERSION}`)
@@ -697,5 +792,54 @@ function createTables(db: BetterSqlite3.Database) {
 
     -- 索引
     CREATE INDEX IF NOT EXISTS idx_llm_calls_time ON llm_calls(created_at);
+
+    -- ============================================================
+    -- 第二阶段分层记忆 (v10)
+    -- ============================================================
+    -- 角色状态历史链：每次写回留痕，不覆盖
+    CREATE TABLE IF NOT EXISTS canon_character_state_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      character TEXT NOT NULL,
+      chapter_number INTEGER NOT NULL,
+      snapshot_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_csh_char_ch
+      ON canon_character_state_history(character, chapter_number);
+
+    -- 分卷/阶段记忆
+    CREATE TABLE IF NOT EXISTS canon_arcs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      start_chapter INTEGER DEFAULT 0,
+      end_chapter INTEGER DEFAULT 0,
+      main_conflict TEXT DEFAULT '',
+      character_development TEXT DEFAULT '',
+      key_events TEXT DEFAULT '',
+      stage_goal TEXT DEFAULT '',
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_canon_arcs_range
+      ON canon_arcs(start_chapter, end_chapter);
+
+    -- ============================================================
+    -- 第四阶段写作流水线 (v11)
+    -- ============================================================
+    -- 按章节保存流水线任务：策划、场景设计、分段状态与错误信息。
+    -- 一个章节一行，中途关闭程序后可按章节号恢复，不会因为多行而产生覆盖歧义。
+    CREATE TABLE IF NOT EXISTS writing_pipeline (
+      chapter_number INTEGER PRIMARY KEY,
+      outline_id INTEGER DEFAULT 0,
+      outline_fingerprint TEXT DEFAULT '',
+      mode TEXT DEFAULT 'outline-expand',
+      target_words INTEGER DEFAULT 0,
+      plan_json TEXT DEFAULT '{}',
+      scenes_json TEXT DEFAULT '[]',
+      segments_json TEXT DEFAULT '[]',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `)
 }

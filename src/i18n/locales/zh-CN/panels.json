@@ -93,6 +93,30 @@
     "contextPreviewNote": {
       "first-chapter": "第 1 章：不检索知识库，也不注入上一章结尾与 Canon 动态段",
       "truncated": "有段落达到长度上限被截断"
+    },
+    "chapterPackTitle": "本章上下文预览",
+    "chapterPackTotals": "实际请求 ≈ {{used}} tokens（预算 {{budget}}）",
+    "chapterPackRound": "第 {{round}} 轮（{{purpose}}）：{{count}} 条消息 ≈ {{tokens}} tokens",
+    "chapterPackSectionStats": "保留 {{kept}} 条 ≈ {{tokens}} tokens · 优先级 {{priority}}",
+    "chapterPackConflictCount": "冲突 {{count}}",
+    "chapterPackMissingCount": "缺失 {{count}}",
+    "chapterPackDropped": "省略 {{count}} 条",
+    "chapterPackEmpty": "（资料缺失）",
+    "chapterPackTruncated": "共 {{count}} 条资料因超出预算被省略（原因已记录，未静默丢弃）",
+    "chapterPackNotCaptured": "尚未捕获到真实请求：本条记录来自生成前的资料包，模型调用完成后此处会显示实际发送的完整请求。",
+    "chapterPackShowRaw": "查看完整原始请求",
+    "chapterPackHideRaw": "收起完整原始请求",
+    "chapterPackSection": {
+      "chapterGoal": "本章写作目标",
+      "scene": "本章场景",
+      "characters": "出场人物",
+      "knowledgeBounds": "人物认知边界",
+      "previousContext": "前情回顾",
+      "items": "物品与资源",
+      "plotLines": "伏笔与剧情线",
+      "worldRules": "世界规则",
+      "style": "文风要求",
+      "outputConstraints": "输出约束"
     }
   },
   "bottomPanel": {

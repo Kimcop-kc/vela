@@ -5,6 +5,11 @@ import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../sto
 import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
 import type { ContextPreview } from '../../services/workflows/context-preview'
+import {
+  renderPreviewText,
+  type ChapterContextPreview,
+  type ContextSectionReport,
+} from '../../services/workflows/chapter-context-preview'
 
 /**
  * 右侧面板「AI 输出」视图
@@ -166,6 +171,147 @@ function ContextPreviewBlock({ run }: { run: WorkflowRun }) {
   )
 }
 
+/**
+ * 「本章上下文预览」（第三阶段）：展示真正发送给模型的完整请求，
+ * 并逐段列出每条记忆的来源、类型、为何被选中、哪些被排除及原因、预算使用与缺失/冲突提示。
+ *
+ * 数据来自 buildChapterContextPreview —— 它读的是 command 调用前登记的真实 messages，
+ * 因此这里显示的就是主进程实际收到的那一份，而不是另造一份展示文本。
+ */
+function ChapterContextPackBlock({ run }: { run: WorkflowRun }) {
+  const { t } = useTranslation('panels')
+  const [open, setOpen] = useState(false)
+  const [showRaw, setShowRaw] = useState(false)
+  const preview = run.data?.chapterContextPreview as ChapterContextPreview | undefined
+  const sections = run.data?.chapterContextSections as ContextSectionReport[] | undefined
+  if (!preview) return null
+
+  const pack = preview.pack
+  const conflicts = pack.notices.filter(notice => notice.kind === 'conflict')
+  const missing = pack.notices.filter(notice => notice.kind === 'missing')
+
+  return (
+    <div className="mb-2 rounded-md overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+      <button
+        className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs transition-colors"
+        style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-bg-elevated)' }}
+        onClick={() => setOpen(value => !value)}
+      >
+        <ChevronRight size={12} style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        <span className="font-medium">{t('aiPanel.chapterPackTitle')}</span>
+        {conflicts.length > 0 && (
+          <span className="font-mono text-[0.65rem]" style={{ color: 'var(--color-warning-text)' }}>
+            {t('aiPanel.chapterPackConflictCount', { count: conflicts.length })}
+          </span>
+        )}
+        {missing.length > 0 && (
+          <span className="font-mono text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+            {t('aiPanel.chapterPackMissingCount', { count: missing.length })}
+          </span>
+        )}
+        <span className="ml-auto font-mono text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+          {t('aiPanel.chapterPackTotals', {
+            used: preview.requestTokens,
+            budget: pack.budget.inputTokens || '∞',
+          })}
+        </span>
+      </button>
+      {open && (
+        <div className="px-2 py-1.5 space-y-1.5" style={{ borderTop: '1px solid var(--color-border)' }}>
+          {!preview.captured && (
+            <div className="text-[0.68rem]" style={{ color: 'var(--color-warning-text)' }}>
+              {t('aiPanel.chapterPackNotCaptured')}
+            </div>
+          )}
+
+          {/* 逐轮真实请求 */}
+          {preview.rounds.map(round => (
+            <div key={round.round} className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {t('aiPanel.chapterPackRound', {
+                round: round.round + 1,
+                purpose: round.purpose,
+                count: round.messageCount,
+                tokens: round.tokens,
+              })}
+            </div>
+          ))}
+
+          {/* 十段资料明细：来源 / 选取理由 / 排除原因 */}
+          {sections?.map(section => (
+            <div key={section.key} className="text-[0.68rem]">
+              <div className="flex items-baseline gap-2">
+                <span style={{ color: 'var(--color-text)' }}>{t(`aiPanel.chapterPackSection.${section.key}`)}</span>
+                <span className="font-mono" style={{ color: 'var(--color-text-muted)' }}>
+                  {t('aiPanel.chapterPackSectionStats', {
+                    kept: section.keptCount,
+                    tokens: section.tokens,
+                    priority: section.priority,
+                  })}
+                </span>
+                {section.droppedCount > 0 && (
+                  <span style={{ color: 'var(--color-warning-text)' }}>
+                    {t('aiPanel.chapterPackDropped', { count: section.droppedCount })}
+                  </span>
+                )}
+                {section.empty && (
+                  <span style={{ color: 'var(--color-text-muted)' }}>{t('aiPanel.chapterPackEmpty')}</span>
+                )}
+              </div>
+              {section.kept.map(item => (
+                <div key={item.id} className="pl-3" style={{ color: 'var(--color-text-muted)' }}>
+                  · {item.title} <span style={{ opacity: 0.7 }}>[{item.origin}]</span> — {item.reason}
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* 冲突：双方并列，由作者决定 */}
+          {conflicts.map((notice, index) => (
+            <div key={`conflict-${index}`} className="text-[0.68rem]" style={{ color: 'var(--color-warning-text)' }}>
+              ⚠ {notice.message}
+              {notice.sides?.map(side => (
+                <div key={side.label} className="pl-3" style={{ color: 'var(--color-text-muted)' }}>
+                  [{side.label}] {side.text}
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* 缺失项 */}
+          {missing.map((notice, index) => (
+            <div key={`missing-${index}`} className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+              · {notice.message}
+            </div>
+          ))}
+
+          {pack.budget.truncated && (
+            <div className="text-[0.65rem]" style={{ color: 'var(--color-warning-text)' }}>
+              {t('aiPanel.chapterPackTruncated', { count: pack.budget.droppedItems })}
+            </div>
+          )}
+
+          {/* 完整原始请求 */}
+          <button
+            className="text-[0.65rem] underline"
+            style={{ color: 'var(--color-text-muted)' }}
+            onClick={() => setShowRaw(value => !value)}
+          >
+            {showRaw ? t('aiPanel.chapterPackHideRaw') : t('aiPanel.chapterPackShowRaw')}
+          </button>
+          {showRaw && (
+            <pre
+              className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded p-1.5 text-[0.62rem] font-mono"
+              style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text-secondary)' }}
+            >
+              {renderPreviewText(preview)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function EmptyState() {
   const { t } = useTranslation('panels')
   return (
@@ -175,7 +321,6 @@ function EmptyState() {
     </div>
   )
 }
-
 
 // ===== 活跃任务视图（Cursor 风格） =====
 
@@ -282,6 +427,7 @@ function ActiveRunView({
       >
         {/* 步骤进度区及独立输出流 */}
         <div className="px-2 pt-2 pb-4">
+          <ChapterContextPackBlock run={run} />
           <ContextPreviewBlock run={run} />
           {run.steps.map((step, i) => (
             <StepOutputBlock

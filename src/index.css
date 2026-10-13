@@ -178,8 +178,11 @@
     --color-accent-rgb: 0, 120, 212;
     --color-accent-soft: rgba(0, 120, 212, 0.09);
     --color-accent-glow: rgba(0, 120, 212, 0.22);
+    --color-ai-glow-end: #7B709E;
     --color-sheen: rgba(255, 255, 255, 0.80);
     --color-on-accent: #FFFFFF;
+    --color-on-error: #FFFFFF;
+    --color-on-success: #FFFFFF;
 
     /* 品牌金 */
     --color-gold: #C9A76C;
@@ -189,7 +192,9 @@
     --color-success: #0F7B4B;
     --color-warning: #C93B00;
     --color-error: #C42B1C;
+    --color-error-text: #B8281A;
     --color-info: #0078D4;
+    --color-info-rgb: 0, 120, 212;
     --color-success-rgb: 15, 123, 75;
     --color-warning-rgb: 201, 59, 0;
     --color-error-rgb: 196, 43, 28;
@@ -321,8 +326,11 @@
     --color-accent-rgb: 92, 184, 240;
     --color-accent-soft: rgba(92, 184, 240, 0.12);
     --color-accent-glow: rgba(92, 184, 240, 0.26);
+    --color-ai-glow-end: #9B8EC8;
     --color-sheen: rgba(255, 255, 255, 0.045);
     --color-on-accent: #0B1622;
+    --color-on-error: #0B1622;
+    --color-on-success: #0B1622;
 
     --color-gold: #C9A76C;
     --color-gold-rgb: 201, 167, 108;
@@ -330,7 +338,9 @@
     --color-success: #4FBE84;
     --color-warning: #E8A33D;
     --color-error: #E0787E;
+    --color-error-text: #E27F84;
     --color-info: #5CB8F0;
+    --color-info-rgb: 92, 184, 240;
     --color-success-rgb: 79, 190, 132;
     --color-warning-rgb: 232, 163, 61;
     --color-error-rgb: 224, 120, 126;
@@ -399,32 +409,44 @@
     --color-border-rgb: 220, 212, 196;
 
     --color-text: #2E2820;
-    --color-text-secondary: #6E6255;
-    --color-text-muted: #8A7C6B;
-    --color-text-muted-rgb: 138, 124, 107;
+    --color-text-secondary: #6B5F52;
+    --color-text-muted: #786C5D;
+    --color-text-muted-rgb: 120, 108, 93;
     --color-border: #DCD4C4;
 
-    --color-accent: #7C6FAE;
+  /* 语义前景色（text-muted / info-text / warning-text / accent）按「合成后的淡色底」重新取过值：
+     纸色底 #F4F0E7 上，muted 3.57、info-text 4.39、warning-text 4.35、accent 3.61 均未达 AA 4.5；
+     徽章还要再压一层 10%~12% 的同色系淡底。这里取满足 4.5 的最小压暗量。 */
+    --color-accent: #6C6198;
     --color-accent-hover: #6E609F;
-    --color-accent-rgb: 124, 111, 174;
-    --color-accent-soft: rgba(124, 111, 174, 0.12);
-    --color-accent-glow: rgba(124, 111, 174, 0.24);
+    --color-accent-rgb: 108, 97, 152;
+    --color-accent-soft: rgba(108, 97, 152, 0.12);
+    --color-accent-glow: rgba(108, 97, 152, 0.24);
+    --color-ai-glow-end: #7B709E;
     --color-sheen: rgba(255, 255, 255, 0.60);
     --color-on-accent: #FFFFFF;
+    --color-on-error: #FFFFFF;
+    --color-on-success: #FFFFFF;
 
     --color-gold: #C9A76C;
     --color-gold-rgb: 201, 167, 108;
 
-    --color-success: #4F9A72;
+    /* 语义色。success / error 是「实底按钮」的前景承载色（Button.tsx 的 success / error 变体），
+       paper 原本的 #4F9A72 / #C05757 配白字只有 3.39 / 4.43，未达 AA 4.5；
+       这里按「能通过 AA 的最小压暗量」调整，同时抬升同色系图标在纸色底上的对比度。
+       warning 从不做底色，仍保留原值。 */
+    --color-success: #438361;
     --color-warning: #C48A3A;
-    --color-error: #C05757;
+    --color-error: #BE5656;
+    --color-error-text: #9E4848;
     --color-info: #7C92C0;
-    --color-success-rgb: 79, 154, 114;
+    --color-info-rgb: 124, 146, 192;
+    --color-success-rgb: 67, 131, 97;
     --color-warning-rgb: 196, 138, 58;
-    --color-error-rgb: 192, 87, 87;
+    --color-error-rgb: 190, 86, 86;
     --color-success-text: #37724F;
-    --color-warning-text: #8F6520;
-    --color-info-text: #566C9B;
+    --color-warning-text: #8C631F;
+    --color-info-text: #4D608B;
 
     --color-violet: #8F80BD;
     --color-mint: #5FAE85;
@@ -497,8 +519,11 @@
     --color-accent-rgb: 76, 194, 255;
     --color-accent-soft: rgba(76, 194, 255, 0.10);
     --color-accent-glow: rgba(76, 194, 255, 0.22);
+    --color-ai-glow-end: #9B8EC8;
     --color-sheen: rgba(255, 255, 255, 0.035);
     --color-on-accent: #0B1B29;
+    --color-on-error: #0B1B29;
+    --color-on-success: #0B1B29;
 
     --color-gold: #C9A76C;
     --color-gold-rgb: 201, 167, 108;
@@ -506,7 +531,9 @@
     --color-success: #6CCB5F;
     --color-warning: #FCE100;
     --color-error: #FF99A4;
+    --color-error-text: #FF99A4;
     --color-info: #4CC2FF;
+    --color-info-rgb: 76, 194, 255;
     --color-success-rgb: 108, 203, 95;
     --color-warning-rgb: 252, 225, 0;
     --color-error-rgb: 255, 153, 164;
@@ -585,8 +612,11 @@
     --color-accent-rgb: 56, 200, 232;
     --color-accent-soft: rgba(56, 200, 232, 0.12);
     --color-accent-glow: rgba(56, 200, 232, 0.28);
+    --color-ai-glow-end: #9B8EC8;
     --color-sheen: rgba(255, 255, 255, 0.05);
     --color-on-accent: #062028;
+    --color-on-error: #062028;
+    --color-on-success: #062028;
 
     --color-gold: #C9A76C;
     --color-gold-rgb: 201, 167, 108;
@@ -594,7 +624,9 @@
     --color-success: #3FBF9F;
     --color-warning: #E8A33D;
     --color-error: #E0787E;
+    --color-error-text: #E28288;
     --color-info: #38C8E8;
+    --color-info-rgb: 56, 200, 232;
     --color-success-rgb: 63, 191, 159;
     --color-warning-rgb: 232, 163, 61;
     --color-error-rgb: 224, 120, 126;
@@ -643,6 +675,37 @@
     --shadow-tooltip: 0 4px 12px rgba(0, 0, 0, 0.5);
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
     --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.45), 0 18px 40px -16px rgba(0, 0, 0, 0.75);
+  }
+
+  /* ===== 编辑画布外观预设 =====
+     由 theme-store.editorAppearance 驱动，属性挂在 EditorArea 的编辑区主体容器上，
+     覆盖仅在该子树内生效 —— 因此不能挂到 html / body：
+     --color-editor-bg 同时被欢迎页、知识库、设置弹窗等非编辑器页面引用。
+
+     'follow'（跟随工作台）刻意不写规则，直接沿用当前主题的值。
+     --color-accent 也刻意不覆盖：光标、选区高亮与画布内的按钮要保持工作台品牌色一致。 */
+  [data-editor-appearance='paper'] {
+    --color-editor-bg: #F8F3EA;
+    --color-editor-line-highlight: rgba(124, 111, 174, 0.04);
+    --color-editor-selection: rgba(124, 111, 174, 0.14);
+    --color-text: #2B2620;
+    --color-text-secondary: #5C5344;
+    --color-text-muted: #8B8172;
+    --color-border: rgba(43, 38, 32, 0.13);
+    --color-hover: rgba(43, 38, 32, 0.06);
+    --color-active: rgba(43, 38, 32, 0.11);
+  }
+
+  [data-editor-appearance='dark'] {
+    --color-editor-bg: #14161A;
+    --color-editor-line-highlight: rgba(120, 170, 255, 0.04);
+    --color-editor-selection: rgba(120, 170, 255, 0.22);
+    --color-text: #E6E8EC;
+    --color-text-secondary: #A9B0BB;
+    --color-text-muted: #767D88;
+    --color-border: rgba(255, 255, 255, 0.10);
+    --color-hover: rgba(255, 255, 255, 0.07);
+    --color-active: rgba(255, 255, 255, 0.12);
   }
 
   /* ===== 全局基础样式 ===== */
@@ -945,11 +1008,14 @@
     transform: translateY(0);
   }
 
-  /* ===== AI 极光按钮 ===== */
+  /* ===== AI 极光按钮 =====
+     前景色必须走 --color-on-accent：galaxy / dark / ocean 的 --color-accent 是亮色，
+     原来写死 #fff 时对比度只有 2.0~2.3。渐变终点同理拆成 --color-ai-glow-end，
+     亮色主题用压暗后的 #7B709E（白字 4.51），暗色主题保留 #9B8EC8（配深色字 5.9~6.2）。 */
   .ai-glow {
     position: relative;
-    background: linear-gradient(135deg, var(--color-accent), #9B8EC8);
-    color: #fff;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-ai-glow-end));
+    color: var(--color-on-accent);
     border: none;
     transition: box-shadow var(--transition-normal), transform 0.12s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
@@ -958,7 +1024,9 @@
     position: absolute;
     inset: -3px;
     border-radius: inherit;
-    background: linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.45), rgba(155, 142, 200, 0.45));
+    background: linear-gradient(135deg,
+      color-mix(in srgb, var(--color-accent) 45%, transparent),
+      color-mix(in srgb, var(--color-ai-glow-end) 45%, transparent));
     filter: blur(10px);
     opacity: 0;
     transition: opacity var(--transition-normal);
@@ -1160,6 +1228,12 @@
     background: var(--color-accent-soft);
     border: 1px solid rgba(var(--color-accent-rgb), 0.18);
   }
+  /* info 与 default 的区别：default 是品牌强调色（「主」），info 是中性告知色（「说明」）。 */
+  .vela-badge--info {
+    color: var(--color-info-text);
+    background: rgba(var(--color-info-rgb), 0.12);
+    border: 1px solid rgba(var(--color-info-rgb), 0.24);
+  }
   .vela-badge--success {
     color: var(--color-success-text);
     background: rgba(var(--color-success-rgb), 0.10);
@@ -1171,7 +1245,7 @@
     border: 1px solid rgba(var(--color-warning-rgb), 0.22);
   }
   .vela-badge--error {
-    color: var(--color-error);
+    color: var(--color-error-text);
     background: rgba(var(--color-error-rgb), 0.10);
     border: 1px solid rgba(var(--color-error-rgb), 0.20);
   }

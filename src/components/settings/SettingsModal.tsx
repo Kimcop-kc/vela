@@ -3,19 +3,28 @@ import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
   Languages, Heart, Coffee, Handshake, Bot, Waves, Sparkles, Boxes,
-  Brain, Wrench, Archive, Pencil,
+  Brain, Wrench, Archive, Pencil, Monitor, Moon, FileText,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
 import PromptSettings from './PromptSettings'
 import { useLLMStore } from '../../stores/llm-store'
-import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
+import {
+  useThemeStore, FONT_OPTIONS,
+  EDITOR_FONT_SIZE_MIN, EDITOR_FONT_SIZE_MAX,
+  EDITOR_LINE_HEIGHT_MIN, EDITOR_LINE_HEIGHT_MAX,
+  EDITOR_MAX_WIDTH_MIN, EDITOR_MAX_WIDTH_MAX,
+  EDITOR_PARAGRAPH_SPACING_MIN, EDITOR_PARAGRAPH_SPACING_MAX,
+  type FontId, type EditorAppearance,
+} from '../../stores/theme-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
 import type { ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { PURPOSE_CATEGORY_LABEL_KEY } from '../../shared/purpose-routing'
 import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
+import { Badge } from '../ui/Badge'
+import { EmptyState } from '../ui/EmptyState'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
@@ -69,8 +78,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center"
+      style={{ backgroundColor: 'var(--color-backdrop)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -105,7 +114,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               className={cn(
                 'flex items-center gap-2.5 mx-2 px-3 py-2.5 rounded-lg text-left text-sm transition-colors min-w-0',
                 section === s.id
-                  ? 'bg-[var(--color-accent)] text-white'
+                  ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
                   : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]',
               )}
             >
@@ -347,19 +356,18 @@ function LLMSection({
           </div>
 
           {filtered.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
+            /* 统一走 EmptyState（此前是手写 dashed 框）；可操作按钮通过 children 传入 */
+            <EmptyState
+              icon={<Zap size={28} />}
+              message={t('models.noModels', { label: purposeLabel })}
+              className="py-16 rounded-xl"
               style={{ border: '1.5px dashed var(--color-border)' }}
             >
-              <Zap size={28} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
-              <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                {t('models.noModels', { label: purposeLabel })}
-              </span>
               <Button size="sm" variant="outline" onClick={handleAdd}>
                 <Plus size={13} />
                 {t('models.addFirstModel', { label: purposeLabel })}
               </Button>
-            </div>
+            </EmptyState>
           ) : (
             <div className="space-y-2">
               {filtered.map((model) => (
@@ -431,17 +439,15 @@ function ModelCard({
             {model.name || model.modelName}
           </span>
           {isDefault && (
-            <span className="text-[0.7rem] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white flex-shrink-0">
+            /* solid 变体用 --color-on-accent，替代原先硬编码的 text-white */
+            <Badge variant="solid" className="flex-shrink-0">
               {t('models.default')}
-            </span>
+            </Badge>
           )}
           {!isEnabled && (
-            <span
-              className="text-[0.7rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
-            >
+            <Badge variant="outline" className="flex-shrink-0">
               {t('models.disabled')}
-            </span>
+            </Badge>
           )}
         </div>
         <p className="text-xs truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
@@ -479,7 +485,7 @@ function ModelCard({
         <button
           onClick={(event) => { event.stopPropagation(); onDelete() }}
           title={t('models.removeModel')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-400"
+          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)]"
         >
           <Trash2 size={14} />
         </button>
@@ -835,7 +841,20 @@ function ModelForm({
         <Button variant="ghost" onClick={onCancel}>{t('cancel', { ns: 'common' })}</Button>
       </div>
       {testResult && (
-        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'} break-all`}>
+        <div
+          className="text-xs p-2 rounded break-all"
+          style={testResult.success
+            ? {
+                backgroundColor: 'rgba(var(--color-success-rgb), 0.1)',
+                color: 'var(--color-success)',
+                border: '1px solid rgba(var(--color-success-rgb), 0.2)',
+              }
+            : {
+                backgroundColor: 'rgba(var(--color-error-rgb), 0.1)',
+                color: 'var(--color-error)',
+                border: '1px solid rgba(var(--color-error-rgb), 0.2)',
+              }}
+        >
           {testResult.success ? t('models.connectionSuccess') : t('models.connectionFailed', { error: testResult.error })}
         </div>
       )}
@@ -1066,8 +1085,79 @@ function FontSelect({
   )
 }
 
+// 编辑画布外观三选一。'follow' 对应「不写 CSS 规则、直接沿用当前主题」。
+const EDITOR_APPEARANCE_OPTIONS: {
+  id: EditorAppearance
+  labelKey: string
+  icon: React.ReactNode
+}[] = [
+  { id: 'follow', labelKey: 'appearance.appearanceFollow', icon: <Monitor size={13} strokeWidth={1.8} /> },
+  { id: 'paper', labelKey: 'appearance.appearancePaper', icon: <FileText size={13} strokeWidth={1.8} /> },
+  { id: 'dark', labelKey: 'appearance.appearanceDark', icon: <Moon size={13} strokeWidth={1.8} /> },
+]
+
+/** 设置区里的「标签 + 说明 + 读数 + 滑杆」一行 —— 阅读设置的四项共用同一套版式 */
+function SliderRow({
+  label,
+  desc,
+  value,
+  display,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string
+  desc: string
+  value: number
+  display: string
+  min: number
+  max: number
+  step: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{label}</p>
+          <p className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{desc}</p>
+        </div>
+        <span className="text-xs tabular-nums flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
+          {display}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={label}
+        className="w-full"
+        style={{ accentColor: 'var(--color-accent)' }}
+      />
+    </div>
+  )
+}
+
 function EditorSection() {
-  const { writingFont, setWritingFont, uiFont, setUiFont } = useThemeStore()
+  // 逐字段订阅：字体设置区块不该因为缩放/主题变化而重渲染。
+  const writingFont = useThemeStore(s => s.writingFont)
+  const setWritingFont = useThemeStore(s => s.setWritingFont)
+  const uiFont = useThemeStore(s => s.uiFont)
+  const setUiFont = useThemeStore(s => s.setUiFont)
+  const editorAppearance = useThemeStore(s => s.editorAppearance)
+  const setEditorAppearance = useThemeStore(s => s.setEditorAppearance)
+  const editorFontSize = useThemeStore(s => s.editorFontSize)
+  const setEditorFontSize = useThemeStore(s => s.setEditorFontSize)
+  const editorLineHeight = useThemeStore(s => s.editorLineHeight)
+  const setEditorLineHeight = useThemeStore(s => s.setEditorLineHeight)
+  const editorMaxWidth = useThemeStore(s => s.editorMaxWidth)
+  const setEditorMaxWidth = useThemeStore(s => s.setEditorMaxWidth)
+  const editorParagraphSpacing = useThemeStore(s => s.editorParagraphSpacing)
+  const setEditorParagraphSpacing = useThemeStore(s => s.setEditorParagraphSpacing)
   const { t } = useTranslation('settings')
 
   return (
@@ -1094,6 +1184,91 @@ function EditorSection() {
           </p>
         </div>
         <FontSelect value={writingFont} onChange={setWritingFont} />
+      </div>
+
+      {/* 编辑画布外观 */}
+      <div className="space-y-1.5">
+        <div>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{t('appearance.editorAppearance')}</p>
+          <p className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {t('appearance.editorAppearanceDesc')}
+          </p>
+        </div>
+        <div className="flex gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--color-hover)' }}>
+          {EDITOR_APPEARANCE_OPTIONS.map((opt) => {
+            const active = editorAppearance === opt.id
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setEditorAppearance(opt.id)}
+                aria-pressed={active}
+                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs transition-colors"
+                style={{
+                  backgroundColor: active ? 'var(--color-accent)' : 'transparent',
+                  color: active ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                }}
+              >
+                {opt.icon}
+                {t(opt.labelKey)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 阅读设置：字号 / 行高 / 纸面宽度 / 段落间距 —— 仅作用于正文（prose）编辑画布 */}
+      <div className="space-y-4 pt-1">
+        <p
+          className="text-xs font-semibold pb-1.5"
+          style={{ color: 'var(--color-text)', borderBottom: '1px solid var(--color-border)' }}
+        >
+          {t('appearance.readingGroup')}
+        </p>
+
+        <SliderRow
+          label={t('appearance.editorFontSize')}
+          desc={t('appearance.editorFontSizeDesc')}
+          value={editorFontSize}
+          display={`${editorFontSize}px`}
+          min={EDITOR_FONT_SIZE_MIN}
+          max={EDITOR_FONT_SIZE_MAX}
+          step={1}
+          onChange={setEditorFontSize}
+        />
+
+        <SliderRow
+          label={t('appearance.editorLineHeight')}
+          desc={t('appearance.editorLineHeightDesc')}
+          value={editorLineHeight}
+          display={editorLineHeight.toFixed(1)}
+          min={EDITOR_LINE_HEIGHT_MIN}
+          max={EDITOR_LINE_HEIGHT_MAX}
+          step={0.1}
+          onChange={setEditorLineHeight}
+        />
+
+        <SliderRow
+          label={t('appearance.editorMaxWidth')}
+          desc={t('appearance.editorMaxWidthDesc')}
+          value={editorMaxWidth}
+          display={`${editorMaxWidth}px`}
+          min={EDITOR_MAX_WIDTH_MIN}
+          max={EDITOR_MAX_WIDTH_MAX}
+          step={20}
+          onChange={setEditorMaxWidth}
+        />
+
+        <SliderRow
+          label={t('appearance.editorParagraphSpacing')}
+          desc={t('appearance.editorParagraphSpacingDesc')}
+          value={editorParagraphSpacing}
+          display={`${editorParagraphSpacing.toFixed(1)}em`}
+          min={EDITOR_PARAGRAPH_SPACING_MIN}
+          max={EDITOR_PARAGRAPH_SPACING_MAX}
+          step={0.1}
+          onChange={setEditorParagraphSpacing}
+        />
       </div>
 
       {/* 说明 */}

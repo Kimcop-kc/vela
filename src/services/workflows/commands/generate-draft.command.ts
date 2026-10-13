@@ -18,6 +18,8 @@ import {
 import { validateChapterPrewrite } from '../prewrite-validator'
 import { buildContextPreview } from '../context-preview'
 import { resolveGenerationBudgets } from '../segmented-generation'
+import { buildChapterContextPack } from '../chapter-context-pack'
+import { buildChapterContextPreview, buildSectionReport } from '../chapter-context-preview'
 import { useLLMStore } from '../../../stores/llm-store'
 import i18n from '../../../i18n'
 
@@ -184,17 +186,58 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       promptBuilder.withCanonContext(canonRendered)
     }
 
+    // Token 预算管控：先按本次实际使用的模型算出可用输入预算，
+    // 资料包按「重要性排序」裁剪而不是按数据库返回顺序截断。
+    const budgetModel = useLLMStore.getState().modelForPurpose('generate_draft')
+    const TOKEN_BUDGET = resolveGenerationBudgets(budgetModel?.maxTokens, budgetModel?.maxOutputTokens).inputTokens
+
+    // ==========================================
+    // [第三阶段] 生成前建立「本章资料包」
+    // 十类资料各自成段，每条带来源/类型/选取理由，超预算记录原因，缺失与冲突显式提示。
+    // 只读：不写库、不改正文、不改正式设定。
+    // ==========================================
+    const contextPack = canonForValidation
+      ? buildChapterContextPack({
+          chapterNumber: this.chapterInfo.chapterNumber,
+          canon: canonForValidation,
+          chapterGoal: [this.chapterInfo.title, this.chapterInfo.purpose, this.chapterInfo.keyEvents]
+            .filter(Boolean)
+            .join('\n'),
+          scene: {
+            time: '',
+            location: characterState.match(/(?:地点|位置)[:：]\s*(.+)/)?.[1]?.trim() || '',
+            environment: '',
+            transitions: '',
+          },
+          userGuidance: this.chapterInfo.userGuidance?.trim() || '',
+          writingStyle: project.novelConfig.writingStyle || '',
+          focusCharacters: this.chapterInfo.characters ?? [],
+          wordTarget: Number(project.novelConfig.wordsPerChapter) || undefined,
+          mustInclude: this.chapterInfo.keyEvents ? [this.chapterInfo.keyEvents] : [],
+          forbidden: [],
+          previousEnding,
+          inputTokens: TOKEN_BUDGET,
+        })
+      : null
+
+    if (contextPack) {
+      const packNotices = contextPack.notices
+      for (const notice of packNotices) {
+        if (notice.kind === 'missing') callbacks.log(`  ⚠️ [资料包] ${notice.message}`)
+        else if (notice.kind === 'conflict') callbacks.log(`  ⚠️ [资料包·冲突] ${notice.message}`)
+      }
+      if (contextPack.budget.truncated) {
+        callbacks.log(`  ⚠️ [资料包] 预算不足：已按优先级省略 ${contextPack.budget.droppedItems} 条资料（原因已记录）`)
+      }
+      context.data.chapterContextPack = contextPack
+    }
+
     // Token 预算管控：中文约 1.5 字符/token，预留 4K 给输出
     const prompt = promptBuilder.build()
     if (promptBuilder.missingVariables.length > 0) {
       callbacks.log(i18n.t('common.promptMissingVars', { ns: 'commands', template: template.name, vars: promptBuilder.missingVariables.join('、') }))
     }
     const estimatedTokens = Math.ceil(prompt.length / 1.5)
-    // 预算按本次实际使用的模型算，不再写死 28000：
-    // 写死的话，128K 窗口的模型也被当成 28K 用（好内容被无谓截断），
-    // 8K 窗口的模型反而被当成 28K 用（日志说没问题、请求必然失败）。
-    const budgetModel = useLLMStore.getState().modelForPurpose('generate_draft')
-    const TOKEN_BUDGET = resolveGenerationBudgets(budgetModel?.maxTokens, budgetModel?.maxOutputTokens).inputTokens
     if (estimatedTokens > TOKEN_BUDGET) {
       callbacks.log(i18n.t('generateDraft.tokenBudgetWarning', { ns: 'commands', tokens: estimatedTokens, budget: TOKEN_BUDGET }))
     }
@@ -249,6 +292,18 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       context,
     )
     const cleanDraftText = this.stripThinkingTags(draftText)
+
+    // 「本章上下文预览」必须来自真正发送的最终请求：
+    // callLLMWithContinuation 已在每轮调用前把真实 messages 登记到 context，
+    // 这里直接取出来渲染，而不是再拼一份「看起来相似」的文本。
+    if (contextPack) {
+      context.data.chapterContextPreview = buildChapterContextPreview(
+        contextPack,
+        context,
+        this.chapterInfo.chapterNumber,
+      )
+      context.data.chapterContextSections = buildSectionReport(contextPack)
+    }
 
     // ==========================================
     // [Canon] 生成后一致性 Gate + 自动修复

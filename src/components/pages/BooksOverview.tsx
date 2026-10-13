@@ -24,13 +24,14 @@ import {
 } from '../../services/book-service'
 import BookAnalysisPanel from './books/BookAnalysisPanel'
 import PlotReconstructPanel from './books/PlotReconstructPanel'
+import { WritingPipelinePanel } from './books/WritingPipelinePanel'
 import { ConsistencyPanel, DraftGeneratePanel, SimilarityPanel } from './books/ReconstructChecksPanels'
 
 const PREVIEW_CHUNKS = 32
 const FULL_READ_CHUNKS = 100
 
 /** 拆书页签：从「读参考书」到「写成自己的稿」的完整链路 */
-type BookView = 'reference' | 'analysis' | 'reconstruct' | 'draft' | 'consistency' | 'similarity'
+type BookView = 'reference' | 'analysis' | 'reconstruct' | 'draft' | 'pipeline' | 'consistency' | 'similarity'
 
 interface ChapterPageState {
   text: string
@@ -280,7 +281,10 @@ export default function BooksOverview() {
         style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
       >
         <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-[0.82rem] font-semibold truncate" style={{ color: 'var(--color-text)' }}>
+          {/* 页头标题统一走 .section-title：此前三页各自硬编码 text-[0.82rem] font-semibold
+              （13.12px），与 .section-title 的 13px 是同一个视觉规格的两套写法。
+              类里已含 color: var(--color-text)，故不再需要内联色。 */}
+          <span className="section-title truncate">
             {book ? book.name : t('title')}
           </span>
           {book && (
@@ -325,6 +329,7 @@ export default function BooksOverview() {
                   { id: 'analysis' as BookView, label: t('tabs.analysis'), icon: ListChecks },
                   { id: 'reconstruct' as BookView, label: t('tabs.reconstruct'), icon: GitBranch },
                   { id: 'draft' as BookView, label: t('tabs.draft'), icon: FileText },
+                  { id: 'pipeline' as BookView, label: t('tabs.pipeline'), icon: ScrollText },
                   { id: 'consistency' as BookView, label: t('tabs.consistency'), icon: ShieldCheck },
                   { id: 'similarity' as BookView, label: t('tabs.similarity'), icon: Search },
                 ]).map(item => {
@@ -351,6 +356,7 @@ export default function BooksOverview() {
             {view === 'analysis' && <BookAnalysisPanel book={book} chapters={book.chapters} />}
             {view === 'reconstruct' && <PlotReconstructPanel books={books} />}
             {view === 'draft' && <DraftGeneratePanel />}
+            {view === 'pipeline' && <WritingPipelinePanel />}
             {view === 'consistency' && <ConsistencyPanel />}
             {view === 'similarity' && <SimilarityPanel books={books} />}
             {view === 'reference' && (

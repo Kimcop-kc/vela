@@ -148,7 +148,7 @@ export default function AgentHeader() {
                 width: subView === 'main' ? 200 : 260,
                 backgroundColor: 'var(--color-sidebar)',
                 border: '1px solid var(--color-border)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                boxShadow: 'var(--shadow-popover)',
                 transition: 'width 0.15s ease',
               }}
             >
@@ -310,7 +310,7 @@ function MCPSubView({
                 </span>
               )}
               {server.status === 'error' && (
-                <span className="text-[0.65rem] text-red-400 truncate max-w-[80px]" title={server.error}>
+                <span className="text-[0.65rem] text-[var(--color-error)] truncate max-w-[80px]" title={server.error}>
                   {t('agent.error')}
                 </span>
               )}

@@ -673,6 +673,7 @@
     "aiRequirementLabel": "Instruction: ",
     "aiExtraLabel": "Extra instruction: ",
     "aiContextBeforeLabel": "[Preceding text (reference only, do not rewrite)]",
+    "aiCanonLabel": "[Canon facts and this chapter's context pack (must not be violated)]",
     "aiContextAfterLabel": "[Following text (reference only, do not rewrite)]",
     "aiSelectionLabel": "[Text to process]",
     "aiTruncated": "Output hit the length limit and may be incomplete.",

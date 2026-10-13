@@ -8,6 +8,8 @@
     "zoomIn": "Увеличить (⌘+=)",
     "zoomInCtrl": "Увеличить (Ctrl+=)",
     "settings": "Настройки",
+    "focusMode": "Режим фокусировки (⌘+⇧+F)",
+    "focusModeCtrl": "Режим фокусировки (Ctrl+Shift+F)",
     "themeGalaxy": "Галактика",
     "themeOcean": "Океан",
     "themePaper": "Бумага",

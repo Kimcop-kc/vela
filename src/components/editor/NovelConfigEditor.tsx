@@ -539,7 +539,7 @@ function Field({ label, tipItems, children }: { label: string; tipItems?: string
                   color: 'var(--color-text)',
                   background: 'var(--color-bg-elevated, var(--color-sidebar))',
                   border: '1px solid var(--color-border)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                  boxShadow: 'var(--shadow-tooltip)',
                   zIndex: Z_INDEX.tooltip,
                   width: 260,
                   pointerEvents: 'none',

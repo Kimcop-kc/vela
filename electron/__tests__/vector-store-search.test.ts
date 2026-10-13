@@ -7,25 +7,49 @@
  * 2. 带章节范围的检索用 `where()` 二次设置条件，把关键词条件顶掉了，
  *    结果返回该范围内的任意文本块。
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { chunkText } from '../embedding'
 import { addChunks, closeConnection, search, searchWithScope } from '../vector-store'
 
+/**
+ * Windows 上 LanceDB 的文件句柄释放与目录删除之间存在滞后：`closeConnection()`
+ * 是同步返回的，但底层 mmap 句柄真正关掉有时更晚，此刻 `rmSync` 会撞 EBUSY/EPERM。
+ * 单跑很快（全程约 15s），但整包并行、磁盘吃紧时清理会超过默认 30s 钩子超时，
+ * 曾连续几次把 `npm run test` 打成 1 failed / 1052 passed——失败点都在这个钩子，
+ * 断言从未失败，`vector-store.ts` / `embedding.ts` 也未被触碰。
+ *
+ * 处理方式：显式重试到 60s，并把本文件的 hookTimeout 调到 65s。
+ * 这不是屏蔽错误——删不掉最终仍然抛错；只是把「句柄滞后」和「真的删不掉」区分开。
+ */
+const CLEANUP_DEADLINE_MS = 60_000
+
+// hookTimeout 是配置级选项、不能挂在 describe 上；用 vi.setConfig 只放宽本文件，
+// 不影响其它测试文件继续沿用全局 30s。
+vi.setConfig({ hookTimeout: CLEANUP_DEADLINE_MS + 5_000 })
+
 let projectPath = ''
 
-afterEach(() => {
-  if (projectPath) closeConnection(projectPath)
-  if (projectPath) {
-    const resolved = path.resolve(projectPath)
-    if (path.dirname(resolved) !== path.resolve(os.tmpdir()) || !path.basename(resolved).startsWith('vela-vector-search-')) {
-      throw new Error('Unsafe cleanup path')
-    }
-    fs.rmSync(resolved, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
-  }
+afterEach(async () => {
+  if (!projectPath) return
+  const resolved = path.resolve(projectPath)
   projectPath = ''
+  if (path.dirname(resolved) !== path.resolve(os.tmpdir()) || !path.basename(resolved).startsWith('vela-vector-search-')) {
+    throw new Error('Unsafe cleanup path')
+  }
+  closeConnection(resolved)
+  const deadline = Date.now() + CLEANUP_DEADLINE_MS
+  for (;;) {
+    try {
+      fs.rmSync(resolved, { recursive: true, force: true })
+      return
+    } catch (err) {
+      if (Date.now() >= deadline) throw err
+      await new Promise(r => setTimeout(r, 250))
+    }
+  }
 })
 
 describe('vector store 关键词检索', () => {

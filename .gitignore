@@ -5,6 +5,9 @@ node_modules
 dist
 dist-electron
 release
+tools/theme-preview/dist
+tools/theme-preview/shots
+storybook-static
 
 # 日志
 logs

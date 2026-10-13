@@ -512,11 +512,76 @@ export interface DatabaseChannels {
   'db:canon-summary-list-up-to': { args: [maxChapter: number]; return: CanonChapterSummary[] }
   'db:canon-summary-upsert': { args: [summary: CanonChapterSummary]; return: { success: boolean; error?: string } }
 
+  /** [P0-6] 压缩摘要：多章合并的长摘要写入独立表（不再用 chapter_number=-1 污染 summary 表） */
+  'db:canon-compressed-summary-upsert': { args: [data: { upToChapter: number; content: string; createdAt: string }]; return: { success: boolean; error?: string } }
+
   // 原子写回（推荐路径：单次事务）
   'db:canon-writeback-atomic': {
     args: [payload: CanonWritebackPayload]
     return: { success: boolean; error?: string; timelineIds?: number[]; characterStatesWritten?: number; plotIds?: number[]; factIds?: number[]; conflicts?: Array<{ aId: number; bId: number; reason: string }> }
   }
+
+  // ===== [v10] 第二阶段：分层记忆与精准检索 =====
+  /** 统一检索入口 */
+  'db:canon-search': { args: [params: { query: string; types?: string[]; character?: string; chapterRange?: { from?: number; to?: number }; item?: string; includeHistorical?: boolean; limit?: number }]; return: { hits: unknown[]; total: number; degraded: boolean; degradeReason?: string; elapsedMs: number } }
+
+  /** 分卷列表 */
+  'db:canon-arcs-list': { args: []; return: Array<{ id: number; title: string; startChapter: number; endChapter: number; mainConflict: string; characterDevelopment: string; keyEvents: string; stageGoal: string; sortOrder: number }> }
+  /** 按章节获取分卷 */
+  'db:canon-arc-get-for-chapter': { args: [chapterNumber: number]; return: { id: number; title: string; startChapter: number; endChapter: number; mainConflict: string; characterDevelopment: string; keyEvents: string; stageGoal: string; sortOrder: number } | null }
+  /** 保存分卷 */
+  'db:canon-arc-upsert': { args: [arc: { id?: number; title: string; startChapter: number; endChapter: number; mainConflict?: string; characterDevelopment?: string; keyEvents?: string; stageGoal?: string; sortOrder?: number }]; return: { success: boolean; id?: number; error?: string } }
+  /** 删除分卷 */
+  'db:canon-arc-remove': { args: [id: number]; return: { success: boolean; error?: string } }
+
+  /** 角色状态历史链 */
+  'db:canon-character-state-history': { args: [character: string, upToChapter?: number]; return: Array<{ id: number; character: string; chapterNumber: number; snapshot: unknown; createdAt: string }> }
+  /** 角色在某章的状态快照 */
+  'db:canon-character-state-at-chapter': { args: [character: string, chapterNumber: number]; return: unknown | null }
+
+  /** 获取章节正文段落列表（用于原文证据定位） */
+  'db:canon-chapter-paragraphs': { args: [chapterNumber: number]; return: string[] }
+
+  // ===== [v11] 第四阶段：写作流水线任务状态 =====
+  /** 取某章的流水线任务（null = 没有未完成任务） */
+  'db:pipeline-get': { args: [chapterNumber: number]; return: {
+    chapterNumber: number
+    outlineId: number
+    outlineFingerprint: string
+    mode: string
+    targetWords: number
+    plan: unknown
+    scenes: unknown
+    segments: unknown
+    createdAt: string
+    updatedAt: string
+  } | null }
+  /** 列出全部流水线任务（用于「恢复未完成任务」） */
+  'db:pipeline-list': { args: []; return: Array<{
+    chapterNumber: number
+    outlineId: number
+    outlineFingerprint: string
+    mode: string
+    targetWords: number
+    plan: unknown
+    scenes: unknown
+    segments: unknown
+    createdAt: string
+    updatedAt: string
+  }> }
+  /** 保存流水线任务状态 */
+  'db:pipeline-save': { args: [payload: {
+    chapterNumber: number
+    outlineId?: number
+    outlineFingerprint?: string
+    mode?: string
+    targetWords?: number
+    plan: unknown
+    scenes: unknown
+    segments: unknown
+  }]; return: { success: boolean; error?: string } }
+  /** 删除流水线任务状态 */
+  'db:pipeline-remove': { args: [chapterNumber: number]; return: { success: boolean } }
 }
 
 // CanonWritebackPayload 与主进程 CanonRepository.writebackAtomically 入参兼容
@@ -880,3 +945,254 @@ export type InvokeChannel = keyof AllInvokeChannels
 
 /** 提取 event 频道名 */
 export type EventChannel = keyof AllEventChannels
+
+
+// ============================================================
+// 运行时通道白名单（preload 闸门用）
+// ============================================================
+//
+// 上面的契约只活在编译期，preload 在运行时拿不到它。于是 preload 此前是
+// 「任意通道透传」：渲染进程可以调用全部通道，包括写文件、删项目这类高权限
+// 操作。一旦渲染层被注入（例如把外部文件当 HTML 渲染），主进程的能力就等于
+// 全部交出去。
+//
+// 这里把允许的通道固化成运行时清单。**清单必须与契约完全一致**：
+// 下面四条类型断言会在 `tsc --noEmit` 阶段强制这一点——往
+// AllInvokeChannels 加了通道却忘了加进清单，编译会直接失败，并且报错信息里
+// 会带上出问题的通道名，不需要人去比对两个列表。
+
+/** 渲染进程允许调用的 invoke 通道（与 AllInvokeChannels 的键一一对应） */
+export const INVOKE_CHANNEL_ALLOWLIST = [
+  'config:get',
+  'config:set',
+  'config:get-vela-home',
+  'project:create',
+  'project:open',
+  'project:save',
+  'project:update-config',
+  'project:recent-list',
+  'dialog:select-folder',
+  'fs:read-file',
+  'fs:write-file',
+  'fs:list-dir',
+  'fs:mkdir',
+  'fs:check-exists',
+  'fs:read-json',
+  'fs:write-json',
+  'llm:generate',
+  'llm:generate-stream',
+  'llm:cancel',
+  'llm:list-models',
+  'llm:ollama-models',
+  'llm:save-model',
+  'llm:delete-model',
+  'llm:set-default-model',
+  'llm:get-default-model',
+  'llm:set-default-embedding-model',
+  'llm:get-default-embedding-model',
+  'llm:get-purpose-models',
+  'llm:set-purpose-model',
+  'llm:autoconfig-plan',
+  'llm:autoconfig-apply',
+  'llm:provider-models',
+  'llm:test-connection',
+  'logs:list',
+  'logs:write',
+  'logs:clear',
+  'logs:open-folder',
+  'logs:export',
+  'agent:state-read',
+  'agent:state-write',
+  'story:index',
+  'story:read',
+  'story:apply',
+  'story:history',
+  'story:undo',
+  'db:rehearsal-context',
+  'db:close',
+  'db:project-core-get',
+  'db:project-core-update',
+  'db:blueprint-get-all',
+  'db:blueprint-get',
+  'db:blueprint-upsert',
+  'db:blueprint-commit',
+  'db:blueprint-upsert-many',
+  'db:blueprint-update-notes',
+  'db:character-get-all',
+  'db:character-upsert',
+  'db:character-save-all',
+  'db:character-delete',
+  'db:character-update-state',
+  'db:draft-create',
+  'db:draft-list',
+  'db:draft-get-meta',
+  'db:draft-get-full',
+  'db:draft-get-latest',
+  'db:draft-get-finalized',
+  'db:draft-get-max-finalized-chapter',
+  'db:draft-next-version',
+  'db:draft-update-status',
+  'db:draft-update-content',
+  'db:draft-unfinalize',
+  'db:draft-delete',
+  'db:draft-reset-chapter',
+  'db:chapter-rollback-capture',
+  'db:revision-create',
+  'db:revision-list',
+  'db:revision-get-pending',
+  'db:revision-get-full',
+  'db:revision-next-index',
+  'db:revision-mark-merged',
+  'db:revision-mark-discarded',
+  'db:review-create',
+  'db:review-list',
+  'db:review-get-latest',
+  'db:review-get-full',
+  'db:review-next-index',
+  'db:review-digest-get-latest-before',
+  'db:review-digest-get',
+  'db:review-digest-put',
+  'db:review-digest-invalidate-from',
+  'db:post-process-create-run',
+  'db:post-process-get-latest-run',
+  'db:post-process-get-steps',
+  'db:post-process-mark-step-ok',
+  'db:post-process-mark-step-failed',
+  'db:post-process-is-all-passed',
+  'db:log-llm-call',
+  'db:get-llm-stats',
+  'db:get-llm-history',
+  'db:save-summary-snapshot',
+  'db:get-latest-summary',
+  'db:canon-timeline-get',
+  'db:canon-timeline-get-chapter',
+  'db:canon-timeline-append',
+  'db:canon-timeline-clear-chapter',
+  'db:canon-character-state-get-all',
+  'db:canon-character-state-get',
+  'db:canon-character-state-upsert',
+  'db:canon-plot-list',
+  'db:canon-plot-add',
+  'db:canon-plot-advance',
+  'db:canon-plot-resolve',
+  'db:canon-plot-update-meta',
+  'db:canon-fact-list',
+  'db:canon-fact-add',
+  'db:canon-fact-clear-chapter',
+  'db:canon-fact-mark-status',
+  'db:canon-fact-confirm',
+  'db:canon-fact-history',
+  'db:canon-item-events-list',
+  'db:canon-item-event-add',
+  'db:canon-item-event-remove',
+  'db:canon-realms-list',
+  'db:canon-realm-upsert',
+  'db:canon-realm-remove',
+  'db:canon-locations-list',
+  'db:canon-location-upsert',
+  'db:canon-location-remove',
+  'db:canon-summary-get',
+  'db:canon-summary-list-recent',
+  'db:canon-summary-list-up-to',
+  'db:canon-summary-upsert',
+  'db:canon-compressed-summary-upsert',
+  'db:canon-writeback-atomic',
+  'db:canon-search',
+  'db:canon-arcs-list',
+  'db:canon-arc-get-for-chapter',
+  'db:canon-arc-upsert',
+  'db:canon-arc-remove',
+  'db:canon-character-state-history',
+  'db:canon-character-state-at-chapter',
+  'db:canon-chapter-paragraphs',
+  'db:pipeline-get',
+  'db:pipeline-list',
+  'db:pipeline-save',
+  'db:pipeline-remove',
+  'kb:import-document',
+  'kb:import-folder',
+  'kb:import-text',
+  'kb:search',
+  'kb:search-with-scope',
+  'kb:list-documents',
+  'kb:remove-document',
+  'kb:stats',
+  'dialog:select-files',
+  'dialog:select-import-folder',
+  'kb:get-vectorless-count',
+  'kb:backfill-vectors',
+  'kb:deconstruct-book',
+  'kb:list-books',
+  'kb:get-document-text',
+  'kb:get-document-text-page',
+  'kb:remove-book',
+  'dialog:select-novel-files',
+  'import:split-chapters',
+  'mcp:load-config',
+  'mcp:connect',
+  'mcp:disconnect',
+  'mcp:disconnect-all',
+  'mcp:list-tools',
+  'mcp:list-resources',
+  'mcp:call-tool',
+  'mcp:get-servers-status',
+  'mcp:get-config-path',
+  'skill:get-paths',
+  'skill:list-files',
+  'skill:read-file',
+  'skill:write-file',
+  'skill:delete-file',
+  'skill:copy-file',
+  'skill:get-disabled',
+  'skill:set-disabled',
+  'skill:import-file',
+  'skill:open-dir',
+  'skill:list-pipelines',
+  'skill:read-pipeline',
+  'skill:write-pipeline',
+  'skill:delete-pipeline',
+  'skill:inspect-package',
+  'skill:install-package',
+  'novel:export-epub',
+  'novel:write-zip',
+  'backup:list',
+  'backup:create',
+  'backup:restore',
+  'backup:delete',
+  'backup:open-folder',
+  'db:book-analysis-list',
+  'db:book-analysis-get',
+  'db:book-analysis-get-many',
+  'db:book-analysis-put',
+  'db:book-analysis-remove',
+  'db:book-analysis-remove-book',
+  'db:plot-outline-list',
+  'db:plot-outline-get',
+  'db:plot-outline-save',
+  'db:plot-outline-remove',
+  'db:similarity-report-list',
+  'db:similarity-report-get',
+  'db:similarity-report-save',
+  'db:similarity-report-remove',
+] as const
+
+/** 主进程允许推送给渲染进程的事件通道（与 AllEventChannels 的键一一对应） */
+export const EVENT_CHANNEL_ALLOWLIST = [
+  'logs:appended',
+  'kb:deconstruct-progress',
+  'llm:stream-chunk',
+  'llm:stream-done',
+  'llm:stream-truncated',
+  'llm:stream-error',
+] as const
+
+type MustBeNever<T extends never> = T
+
+/** 契约里有、清单里漏了的 invoke 通道 */
+export type InvokeAllowlistMissing = MustBeNever<Exclude<InvokeChannel, (typeof INVOKE_CHANNEL_ALLOWLIST)[number]>>
+/** 清单里有、契约里没有的 invoke 通道（拼错或已废弃） */
+export type InvokeAllowlistUnknown = MustBeNever<Exclude<(typeof INVOKE_CHANNEL_ALLOWLIST)[number], InvokeChannel>>
+/** 契约里有、清单里漏了的事件通道 */
+export type EventAllowlistMissing = MustBeNever<Exclude<EventChannel, (typeof EVENT_CHANNEL_ALLOWLIST)[number]>>
+/** 清单里有、契约里没有的事件通道 */
+export type EventAllowlistUnknown = MustBeNever<Exclude<(typeof EVENT_CHANNEL_ALLOWLIST)[number], EventChannel>>

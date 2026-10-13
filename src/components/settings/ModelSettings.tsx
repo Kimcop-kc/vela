@@ -114,7 +114,7 @@ export default function ModelSettings() {
                 <Button variant="ghost" size="icon" onClick={() => setEditingModel({ ...model })} title={t('models.editModel')}>
                   <Save size={14} />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => deleteModel(model.id)} title={t('models.removeModel')} className="hover:text-red-400">
+                <Button variant="ghost" size="icon" onClick={() => deleteModel(model.id)} title={t('models.removeModel')} className="hover:text-[var(--color-error)]">
                   <Trash2 size={14} />
                 </Button>
               </div>
@@ -122,7 +122,7 @@ export default function ModelSettings() {
             <div className="text-xs text-[var(--color-text-muted)]">
               {model.provider} · {model.modelName}
               {defaultModelId === model.id && (
-                <span className="ml-2 px-1.5 py-0.5 rounded text-[0.7rem] bg-[var(--color-accent)] text-white">
+                <span className="ml-2 px-1.5 py-0.5 rounded text-[0.7rem] bg-[var(--color-accent)] text-[var(--color-on-accent)]">
                   {t('models.default')}
                 </span>
               )}
@@ -279,7 +279,7 @@ function ModelForm({
         <Button variant="ghost" onClick={onCancel}>{t('cancel', { ns: 'common' })}</Button>
       </div>
       {testResult && (
-        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'} break-all`}>
+        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-[rgba(var(--color-success-rgb),0.10)] text-[var(--color-success)] border border-[rgba(var(--color-success-rgb),0.20)]' : 'bg-[rgba(var(--color-error-rgb),0.10)] text-[var(--color-error)] border border-[rgba(var(--color-error-rgb),0.20)]'} break-all`}>
           {testResult.success ? t('models.connectionSuccess') : t('models.connectionFailed', { error: testResult.error })}
         </div>
       )}

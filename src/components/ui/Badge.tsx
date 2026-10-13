@@ -20,6 +20,7 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: 'vela-badge--default',
+        info:    'vela-badge--info',
         success: 'vela-badge--success',
         warning: 'vela-badge--warning',
         error:   'vela-badge--error',
@@ -32,6 +33,9 @@ const badgeVariants = cva(
     },
   }
 )
+
+/** 语义变体名。供业务侧把「来源 / 状态」映射成变体时声明类型用。 */
+export type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLSpanElement>,

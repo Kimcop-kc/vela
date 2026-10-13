@@ -250,8 +250,8 @@ export default function ArchitectureConfirmDialog({
                     className={`text-[0.7rem] px-1.5 py-0.5 rounded flex-shrink-0 ${
                       exists
                         ? isChecked
-                          ? 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400'
-                          : 'bg-green-500/10 text-green-600 dark:text-green-400'
+                          ? 'bg-[rgba(var(--color-warning-rgb),0.15)] text-[var(--color-warning)]'
+                          : 'bg-[rgba(var(--color-success-rgb),0.10)] text-[var(--color-success)]'
                         : 'bg-[rgba(var(--color-accent-rgb),0.1)] text-[var(--color-accent)]'
                     }`}
                   >
@@ -298,15 +298,15 @@ export default function ArchitectureConfirmDialog({
           )}
 
           {noneSelected && (
-            <p className="text-xs px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 flex items-start gap-2">
-              <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-red-500" />
+            <p className="text-xs px-3 py-2 rounded-lg bg-[rgba(var(--color-error-rgb),0.10)] border border-[rgba(var(--color-error-rgb),0.20)] text-[var(--color-error)] flex items-start gap-2">
+              <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-[var(--color-error)]" />
               <span>{t('architectureConfirm.noStepSelected')}</span>
             </p>
           )}
           {/* 前置校验失败提示 */}
           {guardError && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400">
-              <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-yellow-500" />
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs bg-[rgba(var(--color-warning-rgb),0.10)] border border-[rgba(var(--color-warning-rgb),0.30)] text-[var(--color-warning)]">
+              <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-[var(--color-warning)]" />
               <span className="whitespace-pre-line">{guardError}</span>
             </div>
           )}

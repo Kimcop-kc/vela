@@ -11,6 +11,7 @@ import {
   type ProjectSnapshotInfo,
 } from '../../services/backup-service'
 import { Button } from '../ui/Button'
+import { Badge } from '../ui/Badge'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 
@@ -165,15 +166,11 @@ export default function BackupSettings() {
                   <span className="text-sm truncate" style={{ color: 'var(--color-text)' }}>
                     {new Date(snapshot.createdAt).toLocaleString()}
                   </span>
-                  <span
-                    className="text-[0.65rem] px-1.5 py-0.5 rounded-full"
-                    style={{
-                      backgroundColor: snapshot.trigger === 'manual' ? 'var(--color-accent-soft)' : 'var(--color-hover)',
-                      color: snapshot.trigger === 'manual' ? 'var(--color-info-text)' : 'var(--color-text-muted)',
-                    }}
-                  >
+                  {/* 手动/恢复前标记：原实现是 accent-soft 底 + info-text 文字（两套色系混用），
+                      改用 default 变体后底色不变、文字回到 accent，色系自洽 */}
+                  <Badge variant={snapshot.trigger === 'manual' ? 'default' : 'outline'}>
                     {snapshot.trigger === 'manual' ? t('backup.manual') : t('backup.beforeRestore')}
-                  </span>
+                  </Badge>
                 </div>
                 <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
                   {formatSize(snapshot.size)} · {snapshot.hasVectors ? t('backup.withVectors') : t('backup.databaseOnly')}

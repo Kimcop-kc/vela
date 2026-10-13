@@ -93,6 +93,30 @@
     "contextPreviewNote": {
       "first-chapter": "Глава 1: поиск по базе знаний не выполняется, конец прошлой главы и динамический канон не подставляются",
       "truncated": "Часть разделов обрезана по лимиту длины"
+    },
+    "chapterPackTitle": "Пакет контекста главы",
+    "chapterPackTotals": "фактический запрос ≈ {{used}} токенов (бюджет {{budget}})",
+    "chapterPackRound": "Раунд {{round}} ({{purpose}}): {{count}} сообщений ≈ {{tokens}} токенов",
+    "chapterPackSectionStats": "оставлено {{kept}} ≈ {{tokens}} токенов · приоритет {{priority}}",
+    "chapterPackConflictCount": "конфликтов: {{count}}",
+    "chapterPackMissingCount": "отсутствует: {{count}}",
+    "chapterPackDropped": "пропущено: {{count}}",
+    "chapterPackEmpty": "(данных нет)",
+    "chapterPackTruncated": "{{count}} элементов пропущено из-за бюджета (причины записаны, ничего не отброшено молча)",
+    "chapterPackNotCaptured": "Реальный запрос пока не перехвачен: здесь показан пакет контекста до генерации; полный запрос появится после вызова модели.",
+    "chapterPackShowRaw": "Показать полный запрос",
+    "chapterPackHideRaw": "Скрыть полный запрос",
+    "chapterPackSection": {
+      "chapterGoal": "Цель главы",
+      "scene": "Сцена",
+      "characters": "Персонажи",
+      "knowledgeBounds": "Границы знаний",
+      "previousContext": "Предыстория",
+      "items": "Предметы и ресурсы",
+      "plotLines": "Сюжет и предзнаменования",
+      "worldRules": "Правила мира",
+      "style": "Стиль",
+      "outputConstraints": "Ограничения вывода"
     }
   },
   "bottomPanel": {

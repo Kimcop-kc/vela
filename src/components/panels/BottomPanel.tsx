@@ -9,6 +9,7 @@ import { useLayoutStore, type BottomDock } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import { useLogStore } from '../../stores/log-store'
 import { Button } from '../ui/Button'
+import { NativeSelect } from '../ui/NativeSelect'
 import { toast } from '../ui/Toast'
 import type { AppLogLevel } from '../../shared/ipc-channels'
 
@@ -466,7 +467,7 @@ function WorkflowStepItem({
             {step.error && (
               <div
                 className="text-[0.7rem] px-2 py-1 rounded mb-1"
-                style={{ backgroundColor: 'rgba(192,57,74,0.08)', color: 'var(--color-error)' }}
+                style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.08)', color: 'var(--color-error)' }}
               >
                 {step.error}
               </div>
@@ -577,11 +578,11 @@ function LogsView() {
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
         <div className="flex items-center gap-1.5">
-          <select
+          {/* 统一走 NativeSelect（此前是原生 select），与右侧搜索框同高 h-6、同套边框与聚焦环 */}
+          <NativeSelect
             value={level}
             onChange={event => setLevel(event.target.value as 'all' | AppLogLevel)}
-            className="h-6 rounded px-1.5 text-[0.68rem] outline-none flex-shrink-0"
-            style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+            className="w-auto h-6 flex-shrink-0"
             title={t('logsPanel.level')}
           >
             <option value="all">{t('logsPanel.levelAll')}</option>
@@ -589,7 +590,7 @@ function LogsView() {
             <option value="info">INFO</option>
             <option value="warn">WARN</option>
             <option value="error">ERROR</option>
-          </select>
+          </NativeSelect>
           <div
             className="flex items-center gap-1 flex-1 min-w-0 h-6 px-2 rounded"
             style={{ backgroundColor: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}

@@ -225,10 +225,12 @@ export function buildFinalizePostProcessSteps(
   }
 
   // ─── 步骤 2.5: [Canon] 写回 —— 把本章提取为结构化时间线/角色/事实/剧情线 ────
+  // [P0-2 修复] 改为 critical: true — 写回失败意味着记忆系统丢失本章数据，
+  // 后续章节将无法正确引用本章信息，不应静默跳过
   steps.push({
     key: 'canon_writeback',
     label: t('finalize.canonWriteback'),
-    critical: false,
+    critical: true,
     executor: async (callbacks) => {
       try {
         const [allChars, blueprint] = await Promise.all([
@@ -310,12 +312,16 @@ export function buildFinalizePostProcessSteps(
             .map(s => '第' + s.chapterNumber + '章：' + (s.summary || '').slice(0, 80))
             .join(' | ');
           callbacks.log(t('finalize.compressionDone', { count: oldSummaries.length, length: compressed.length }));
-          // 写入压缩后的 canonical summary
-          await ipc.invoke('db:canon-summary-upsert', {
-            chapterNumber: -1, // 特殊标记：压缩摘要
-            title: t('finalize.compressionTitle', { chapter: chapterNumber }),
-            summary: compressed,
+          // [P0-6 修复] 不再写入 chapter_number=-1（污染 getSummariesUpTo 查询）
+          // 改为写入一个独立表 canon_compressed_summaries（通过 IPC 创建）
+          // 如果表不存在则跳过，不阻塞定稿
+          await ipc.invoke('db:canon-compressed-summary-upsert', {
+            upToChapter: chapterNumber,
+            content: compressed,
             createdAt: new Date().toISOString(),
+          }).catch(() => {
+            // 独立表可能不存在（旧库），静默跳过即可
+            callbacks.log('  ⚠️ [Canon] 压缩摘要表未就绪，跳过压缩（不影响定稿）');
           });
         } catch (e) {
           callbacks.log(t('finalize.compressionError', { error: String(e) }));

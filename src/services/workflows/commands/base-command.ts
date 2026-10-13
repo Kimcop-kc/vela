@@ -19,6 +19,47 @@ export interface CommandExecuteParams {
   callbacks: StepCallbacks
 }
 
+/** 一轮真实发送给模型的请求快照（用于「本章上下文预览」做到与发送同源） */
+export interface LLMRequestSnapshot {
+  /** 第几轮（0 = 首轮，>0 为截断续写轮） */
+  round: number
+  /** 用途标识（generate_draft 等） */
+  purpose: string
+  /** 真正发出去的 messages，一字不改 */
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+  /** 本轮思考链是否开启 */
+  thinking: boolean
+  /** 本轮输出上限（不是上下文窗口） */
+  maxTokens?: number
+}
+
+/**
+ * 全局请求快照收集器（第三阶段）。
+ *
+ * 「本章上下文预览」必须展示**真正发送给模型的最终请求**，而不是另一份「看起来相似」的
+ * 展示文本。做法：让每个 command 在调用前把真实 messages 登记到工作流上下文里，
+ * UI 直接读这份数据渲染。这里用 WeakMap 挂在 WorkflowContext 上，避免污染其类型定义，
+ * 也避免跨工作流串数据。
+ */
+const requestSnapshots = new WeakMap<object, LLMRequestSnapshot[]>()
+
+export function recordLLMRequestSnapshot(context: WorkflowContext | undefined, snapshot: LLMRequestSnapshot): void {
+  if (!context) return
+  const list = requestSnapshots.get(context as unknown as object) ?? []
+  list.push(snapshot)
+  requestSnapshots.set(context as unknown as object, list)
+}
+
+export function getLLMRequestSnapshots(context: WorkflowContext | undefined): LLMRequestSnapshot[] {
+  if (!context) return []
+  return [...(requestSnapshots.get(context as unknown as object) ?? [])]
+}
+
+export function clearLLMRequestSnapshots(context: WorkflowContext | undefined): void {
+  if (!context) return
+  requestSnapshots.delete(context as unknown as object)
+}
+
 /**
  * 工作流执行环节的抽象基类 (Command Pattern)
  * 将原本混乱的 workflow 闭包拆分为可独立测试、状态解耦的命令单元。
@@ -27,6 +68,12 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   
   /** 抽象执行入口 */
   abstract execute(params: CommandExecuteParams): Promise<TResult>
+
+  /**
+   * 当前续写轮次提示（0 = 首轮）。
+   * 仅为「请求快照」记录轮次服务，不做业务判断。
+   */
+  protected currentRoundHint = 0
 
   /** 获取 LLM 大模型连接代理（支持取消） */
   protected async callLLM(
@@ -66,11 +113,21 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         }
       }
 
+      const reqMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ]
+      // 记录真实请求：预览直接读这份数据，保证「预览 = 实际发送」
+      recordLLMRequestSnapshot(context, {
+        round: 0,
+        purpose: options?.purpose ?? this.constructor.name,
+        messages: reqMessages,
+        thinking: options?.thinking === true,
+        maxTokens: options?.maxTokens,
+      })
+
       llmStore.generateStream(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
+        reqMessages,
         {
           onChunk: (chunk) => {
             // 取消后不再追加输出
@@ -183,6 +240,15 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         resolve({ text: this.stripThinkingTags(text || fullContent), truncated })
       }
 
+      // 记录真实请求（含续写轮的 assistant 尾文与续写指令），预览与发送同源
+      recordLLMRequestSnapshot(context, {
+        round: this.currentRoundHint,
+        purpose: options?.purpose ?? this.constructor.name,
+        messages,
+        thinking: options?.thinking === true,
+        maxTokens: options?.maxTokens,
+      })
+
       llmStore.generateStream(
         messages,
         {
@@ -231,6 +297,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     const purpose = options?.purpose ?? this.constructor.name
     const outcome = await generateWithContinuation(
       async (ctx) => {
+        this.currentRoundHint = ctx.round
         const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },

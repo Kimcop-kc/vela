@@ -1,5 +1,5 @@
 import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ScrollText, ChevronLeft, ChevronRight, PenTool } from 'lucide-react'
-import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, useCallback, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
@@ -24,6 +24,7 @@ const StoryBibleOverview = lazy(() => import('../pages/StoryBibleOverview'))
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useThemeStore } from '../../stores/theme-store'
 
 
 import { ipc } from '../../services/ipc-client'
@@ -116,6 +117,7 @@ function ProseEditorWrapper({
           mode="prose"
           content={tab.content ?? ''}
           filePath={tab.filePath}
+          chapterNumber={tab.chapterNumber}
           hideStatusBar
           onCharCountChange={setWordCount}
           onChange={(text) => {
@@ -145,6 +147,12 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   const closeTab = useEditorStore(s => s.closeTab)
   const setActiveTab = useEditorStore(s => s.setActiveTab)
   const sidebarView = useLayoutStore((s) => s.sidebarView)
+  // 编辑画布外观：逐字段订阅，避免缩放等无关状态变化触发重渲染
+  const editorAppearance = useThemeStore((s) => s.editorAppearance)
+  const editorFontSize = useThemeStore((s) => s.editorFontSize)
+  const editorLineHeight = useThemeStore((s) => s.editorLineHeight)
+  const editorMaxWidth = useThemeStore((s) => s.editorMaxWidth)
+  const editorParagraphSpacing = useThemeStore((s) => s.editorParagraphSpacing)
 
 
 
@@ -606,8 +614,18 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
 
 
-      {/* 编辑区主体 */}
-      <div className="flex-1 overflow-hidden">
+      {/* 编辑区主体 —— 编辑画布外观（data-editor-appearance）与阅读设置在此注入，
+          仅覆盖本子树，Tab 条与工作台其余部分保持当前主题 */}
+      <div
+        className="flex-1 overflow-hidden"
+        data-editor-appearance={editorAppearance}
+        style={{
+          '--editor-font-size': `${editorFontSize}px`,
+          '--editor-line-height': `${editorLineHeight}`,
+          '--editor-max-width': `${editorMaxWidth}px`,
+          '--editor-paragraph-spacing': `${editorParagraphSpacing}em`,
+        } as CSSProperties}
+      >
         <Suspense fallback={<EditorLoadingFallback />}>
         {activeTab?.type === 'chapter' && activeTab.filePath?.startsWith('vela://draft/') && (
           // 草稿文件：使用 DraftEditor（工具栏含修稿/审稿/定稿按鈕）

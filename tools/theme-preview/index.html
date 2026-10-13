@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Vela 主题走查（临时工具）</title>
+    <style>
+      html, body { margin: 0; padding: 0; }
+      /* 必须是主题底而不是占位灰：对话框 .glass 是 0.72 半透明 + 背景模糊，
+         挂在哪一级底色上决定了它的实际观感。用占位灰会让对比度测算整体失真。 */
+      body { background: var(--color-bg); }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <link rel="stylesheet" href="./dist/preview.css" />
+    <script type="module" src="./dist/preview.js"></script>
+  </body>
+</html>

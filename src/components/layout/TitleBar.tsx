@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, Waves } from 'lucide-react'
+import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, Waves, Maximize2, Minimize2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useOnboardingStore } from '../../stores/onboarding-store'
+import { isEditableTarget } from '../../shared/keyboard'
 
 /** 检测是否为 macOS */
 const isMac = navigator.userAgent.includes('Mac')
@@ -23,10 +24,19 @@ const themeOrder: Theme[] = ['ocean', 'galaxy', 'dark', 'light', 'paper']
 export default function TitleBar() {
   const { t } = useTranslation('layout')
   const projectName = useProjectStore((s) => s.currentProject?.name)
-  const { theme, setTheme } = useThemeStore()
-  const { zoom, zoomIn, zoomOut, zoomReset } = useThemeStore()
+  // 逐字段订阅：整店订阅会让标题栏在任何主题状态变化（如缩放）时都重渲染，
+  // 而这里只关心主题与缩放本身。
+  const theme = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
+  const zoom = useThemeStore((s) => s.zoom)
+  const zoomIn = useThemeStore((s) => s.zoomIn)
+  const zoomOut = useThemeStore((s) => s.zoomOut)
+  const zoomReset = useThemeStore((s) => s.zoomReset)
   // 是否有未保存的文档（任意 dirty tab）
   const hasDirty = useEditorStore((s) => s.tabs.some((t) => t.dirty))
+  // 专注模式：存在进入前的布局快照即为开启
+  const focusMode = useLayoutStore((s) => s.focusSnapshot !== null)
+  const toggleFocusMode = useLayoutStore((s) => s.toggleFocusMode)
 
   const ThemeIcon = themeIcons[theme] || Sun
   const cycleTheme = (e: React.MouseEvent) => {
@@ -76,6 +86,8 @@ export default function TitleBar() {
     const handleKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
+      // 同上：在输入框 / 编辑器内按缩放键时不应改变界面缩放
+      if (isEditableTarget(e)) return
       if (e.key === '=' || e.key === '+') {
         e.preventDefault()
         zoomIn()
@@ -199,6 +211,27 @@ export default function TitleBar() {
           style={{ width: 22, height: 22 }}
         >
           <ZoomIn size={12} strokeWidth={1.5} />
+        </button>
+
+        {/* 专注模式：进入后隐藏左右工具栏与三个面板，把宽度全部让给正文。
+            开启态用强调色 + 淡底标出，避免用户忘了自己为什么看不到侧栏。 */}
+        <button
+          onClick={toggleFocusMode}
+          title={t(isMac ? 'titleBar.focusMode' : 'titleBar.focusModeCtrl')}
+          aria-pressed={focusMode}
+          className="icon-btn"
+          style={{
+            width: 24,
+            height: 22,
+            ...(focusMode
+              ? {
+                  color: 'var(--color-accent)',
+                  backgroundColor: 'var(--color-accent-soft)',
+                }
+              : null),
+          }}
+        >
+          {focusMode ? <Minimize2 size={13} strokeWidth={1.5} /> : <Maximize2 size={13} strokeWidth={1.5} />}
         </button>
 
         {/* 分割线 */}

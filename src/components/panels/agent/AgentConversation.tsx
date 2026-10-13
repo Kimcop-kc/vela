@@ -40,7 +40,10 @@ export default function AgentConversation() {
 
 function EmptyState() {
   const { t } = useTranslation('panels')
-  const { conversations, selectConversation } = useAgentStore()
+  // 逐字段订阅：空状态只需要会话列表与选中动作，整店订阅会让它在任何
+  // agent 状态变化（生成中、历史面板开关等）时都重渲染。
+  const conversations = useAgentStore(s => s.conversations)
+  const selectConversation = useAgentStore(s => s.selectConversation)
   const projectPath = useProjectStore(s => s.currentProject?.path)
   // 取最近 3 条历史会话（不包含当前空会话）
   const recentConvs = conversations
@@ -251,7 +254,12 @@ function AgentToolbar() {
 
 function AgentHistoryPanel() {
   const { t } = useTranslation('panels')
-  const { conversations, activeConversationId, selectConversation, deleteConversation, setShowHistory } = useAgentStore()
+  // 逐字段订阅：历史面板不关心生成中/消息内容，只要会话列表本身。
+  const conversations = useAgentStore(s => s.conversations)
+  const activeConversationId = useAgentStore(s => s.activeConversationId)
+  const selectConversation = useAgentStore(s => s.selectConversation)
+  const deleteConversation = useAgentStore(s => s.deleteConversation)
+  const setShowHistory = useAgentStore(s => s.setShowHistory)
   const projectPath = useProjectStore(s => s.currentProject?.path)
 
   // 按更新时间倒序排列

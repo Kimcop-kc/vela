@@ -673,6 +673,7 @@
     "aiRequirementLabel": "要求：",
     "aiExtraLabel": "补充要求：",
     "aiContextBeforeLabel": "【前文（仅作参考，不要改写）】",
+    "aiCanonLabel": "【正史设定与本章资料包（不可违背）】",
     "aiContextAfterLabel": "【后文（仅作参考，不要改写）】",
     "aiSelectionLabel": "【待处理文本】",
     "aiTruncated": "结果被长度上限截断，可能不完整。",

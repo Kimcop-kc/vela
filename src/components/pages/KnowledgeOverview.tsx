@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../ui/Button'
+import { Badge } from '../ui/Badge'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { useProjectStore } from '../../stores/project-store'
@@ -120,7 +121,9 @@ export default function KnowledgeOverview() {
         className="flex items-center justify-between gap-3 px-4 h-11 flex-shrink-0"
         style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
       >
-        <span className="text-[0.82rem] font-semibold truncate" style={{ color: 'var(--color-text)' }}>
+        {/* 页头标题统一走 .section-title（原为硬编码 text-[0.82rem] font-semibold），
+            与拆书 / 故事圣经两页对齐 */}
+        <span className="section-title truncate">
           {t('title')}
         </span>
         <span className="text-[0.68rem] flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
@@ -161,13 +164,19 @@ export default function KnowledgeOverview() {
         {/* ===== 向量回填卡片 ===== */}
         {vectorlessCount > 0 && (
           <div
-            className="rounded-xl border border-amber-500/20 mb-6 overflow-hidden"
-            style={{ backgroundColor: 'rgba(245, 158, 11, 0.06)' }}
+            className="rounded-xl mb-6 overflow-hidden"
+            style={{
+              backgroundColor: 'rgba(var(--color-warning-rgb), 0.06)',
+              border: '1px solid rgba(var(--color-warning-rgb), 0.25)',
+            }}
           >
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                  <Zap size={16} className="text-amber-400" />
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.15)' }}
+                >
+                  <Zap size={16} className="text-[var(--color-warning)]" />
                 </div>
                 <div>
                   <div className="text-sm font-medium text-[var(--color-warning-text)]">{t('indexUpgrade')}</div>
@@ -178,7 +187,7 @@ export default function KnowledgeOverview() {
               </div>
               <Button
                 variant="outline"
-                className="text-xs border-amber-500/30 text-[var(--color-warning-text)] hover:bg-amber-500/20"
+                className="text-xs border-[rgba(var(--color-warning-rgb),0.3)] text-[var(--color-warning-text)] hover:bg-[rgba(var(--color-warning-rgb),0.2)]"
                 onClick={handleBackfill}
                 disabled={backfilling}
               >
@@ -191,8 +200,8 @@ export default function KnowledgeOverview() {
             </div>
             {/* 进度条（回填时显示） */}
             {backfilling && (
-              <div className="h-1 w-full bg-amber-500/10">
-                <div className="h-full bg-gradient-to-r from-amber-500 to-amber-300 animate-pulse rounded-full w-full" />
+              <div className="h-1 w-full bg-[rgba(var(--color-warning-rgb),0.1)]">
+                <div className="h-full bg-gradient-to-r from-[var(--color-warning)] to-[var(--color-amber)] animate-pulse rounded-full w-full" />
               </div>
             )}
           </div>
@@ -206,15 +215,10 @@ export default function KnowledgeOverview() {
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
             <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
             <span className="text-sm font-semibold text-[var(--color-text)]">{t('semanticSearch')}</span>
-            {/* 检索模式标签 */}
-            <span className={cn(
-              'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium',
-              hasVectors
-                ? 'bg-emerald-500/15 text-[var(--color-success-text)]'
-                : 'bg-blue-500/15 text-[var(--color-info-text)]'
-            )}>
+            {/* 检索模式标签 —— 走 Badge 的 success（已建索引）/ info（基础检索）变体 */}
+            <Badge variant={hasVectors ? 'success' : 'info'}>
               {searchMode}
-            </span>
+            </Badge>
             <span className="text-[0.7rem] text-[var(--color-text-muted)] ml-auto">
               {hasVectors ? t('hybridHint') : t('basicHint')}
             </span>
@@ -277,8 +281,8 @@ export default function KnowledgeOverview() {
                       </span>
                       <span className={cn(
                         'text-[0.7rem] px-1.5 py-0.5 rounded font-mono',
-                        r.score > 0.8 ? 'bg-green-500/20 text-[var(--color-success-text)]' :
-                        r.score > 0.6 ? 'bg-yellow-500/20 text-[var(--color-warning-text)]' :
+                        r.score > 0.8 ? 'bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success-text)]' :
+                        r.score > 0.6 ? 'bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning-text)]' :
                         'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
                       )}>
                         {r.score === 0.5 ? t('fullTextMatch') : t('similarity', { score: (r.score * 100).toFixed(1) })}
@@ -327,8 +331,8 @@ function StatCell({ icon, label, value, note, noteTone }: {
               borderRadius: 'var(--radius-pill)',
               color: noteTone === 'success' ? 'var(--color-success-text)' : 'var(--color-info-text)',
               backgroundColor: noteTone === 'success'
-                ? 'rgba(16, 185, 129, 0.12)'
-                : 'rgba(59, 130, 246, 0.12)',
+                ? 'rgba(var(--color-success-rgb), 0.12)'
+                : 'rgba(var(--color-accent-rgb), 0.12)',
             }}
           >
             {note}

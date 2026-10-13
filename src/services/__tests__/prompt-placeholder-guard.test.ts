@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { BasePromptBuilder, ChapterPromptBuilder } from '../prompts/prompt-builder'
-import { BUILTIN_PROMPTS, renderPrompt } from '../prompt-templates'
+import { BUILTIN_PROMPTS, EDITABLE_PROMPT_KEYS, renderPrompt } from '../prompt-templates'
 
 const firstChapter = BUILTIN_PROMPTS.find(p => p.key === 'first_chapter_draft')!
 const nextChapter = BUILTIN_PROMPTS.find(p => p.key === 'next_chapter_draft')!
@@ -23,6 +23,7 @@ describe('提示词构建：占位符防护', () => {
       .withGlobalGuidance('全局要求')
       .withWritingStyle('冷峻文风')
       .withWordNumber(3000)
+      .withCanonContext('Canon：顾野此刻在后山，凝气三层，不知玉佩来历')
       .withChapterInfo({ chapterNumber: 1, title: '开局', keyEvents: '主角登场', characters: ['顾野'] })
       .withFutureBlueprints('第 2 章预告：主角遇到拾荒队')
       .withUserGuidance('本章要克制，不要提前抖出金手指')
@@ -34,6 +35,8 @@ describe('提示词构建：占位符防护', () => {
     expect(prompt).toContain('主角登场')
     expect(prompt).toContain('第 2 章预告：主角遇到拾荒队')
     expect(prompt).toContain('本章要克制，不要提前抖出金手指')
+    // 第 1 章同样必须注入 Canon（此前模板漏了 {{canon_context}}，命令赋了值也进不去）
+    expect(prompt).toContain('不知玉佩来历')
   })
 
   it('漏赋值时占位符会被移除，并记录到 missingVariables', () => {
@@ -81,14 +84,27 @@ describe('提示词构建：占位符防护', () => {
 describe('提示词模板变量的赋值覆盖', () => {
   const readSrc = (rel: string) => fs.readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
 
+  /**
+   * 模板正文所在的源文件。
+   *
+   * 拆分后内置模板按创作阶段分域存在 prompts/builtin/ 下（原先是一个 3000 行的数组字面量）。
+   * 切块必须**在单个文件内**进行：如果先把多个文件拼起来再切，上一个文件的最后一个模板
+   * 会把下一个文件的首个模板也算进自己的块里，从而多算出本不属于它的变量。
+   */
+  const builtinFiles = fs
+    .readdirSync(fileURLToPath(new URL('../prompts/builtin', import.meta.url)))
+    .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
+
   /** 模板 key → 该模板用到的变量名 */
   const templateVarsOf = (key: string): string[] => {
-    const tpl = readSrc('../prompt-templates.ts')
-    const keys = [...tpl.matchAll(/key: '([a-z_0-9]+)'/g)]
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i][1] !== key) continue
-      const chunk = tpl.slice(keys[i].index, i + 1 < keys.length ? keys[i + 1].index : tpl.length)
-      return [...new Set([...chunk.matchAll(/\{\{\s*([a-z_0-9]+)\s*\}\}/g)].map(m => m[1]))]
+    for (const file of builtinFiles) {
+      const src = readSrc(`../prompts/builtin/${file}`)
+      const keys = [...src.matchAll(/key: '([a-z_0-9]+)'/g)]
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i][1] !== key) continue
+        const chunk = src.slice(keys[i].index, i + 1 < keys.length ? keys[i + 1].index : src.length)
+        return [...new Set([...chunk.matchAll(/\{\{\s*([a-z_0-9]+)\s*\}\}/g)].map(m => m[1]))]
+      }
     }
     throw new Error(`未找到模板: ${key}`)
   }
@@ -150,5 +166,69 @@ describe('提示词模板变量的赋值覆盖', () => {
       }
     }
     expect(uncovered).toEqual([])
+  })
+
+  it('首章模板本身引用了 canon_context（不是「赋了值但模板不引用」）', () => {
+    // 这条锁的是第三阶段发现的具体缺陷：generate-draft 一直在给 Canon 赋值，
+    // 但 first_chapter_draft 模板里没有 {{canon_context}}，命令赋的值根本进不了提示词，
+    // 于是「预览显示有 Canon、实际请求里没有」——预览与实际发送不一致。
+    const content = firstChapter.content + (firstChapter.systemSuffix ?? '')
+    expect(content).toContain('{{canon_context}}')
+    expect(Object.keys(firstChapter.variables)).toContain('canon_context')
+    // 三语正文都要有，否则切语言后又漏
+    for (const [lang, body] of Object.entries(firstChapter.contentLocalized ?? {})) {
+      expect(body, `${lang} 正文缺少 {{canon_context}}`).toContain('{{canon_context}}')
+    }
+  })
+})
+
+// ============================================================
+// 内置模板清单：数量与顺序
+//
+// BUILTIN_PROMPTS 的顺序**就是** PromptSettings 的展示顺序 ——
+// 界面用 `BUILTIN_PROMPTS.filter(t => EDITABLE_PROMPT_KEYS.includes(t.key))` 渲染，
+// 所以顺序变了用户看到的列表就变了。
+//
+// 从单文件拆成 prompts/builtin/ 下 6 个分域文件时保持了原始顺序，
+// 这里把它锁住：以后重构如果顺手改了拼接顺序，会直接失败。
+// ============================================================
+describe('内置模板清单', () => {
+  const expectedOrder = [
+    'generate_global_config',
+    'premise',
+    'character_dynamics',
+    'world_building',
+    'synopsis',
+    'chapter_blueprint',
+    'chapter_blueprint_chunk',
+    'first_chapter_draft',
+    'next_chapter_draft',
+    'refine_chapter',
+    'consistency_check',
+    'analyze_writing_style',
+    'refine_from_review',
+    'generate_chapter_notes',
+    'update_character_cards',
+    'infer_novel_config',
+    'extract_initial_characters',
+    'infer_single_chapter_blueprint',
+    'infer_novel_config_with_vectors',
+    'qualitative_review',
+    'style_imitation',
+    'deai_revise',
+  ]
+
+  it('模板数量与顺序保持不变（影响提示词设置页的展示顺序）', () => {
+    expect(BUILTIN_PROMPTS.map(t => t.key)).toEqual(expectedOrder)
+  })
+
+  it('模板 key 不重复', () => {
+    const keys = BUILTIN_PROMPTS.map(t => t.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('EDITABLE_PROMPT_KEYS 里的 key 都能在内置模板里找到', () => {
+    const builtinKeys = new Set(BUILTIN_PROMPTS.map(t => t.key))
+    expect(EDITABLE_PROMPT_KEYS.filter(k => !builtinKeys.has(k))).toEqual([])
   })
 })

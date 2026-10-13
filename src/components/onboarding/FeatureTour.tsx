@@ -120,9 +120,11 @@ function TourBubbles() {
 
   return <Dialog.Root open onOpenChange={value => { if (!value) dismiss() }}>
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-[10000]" style={{ background: anchor ? 'transparent' : 'rgba(0,0,0,.42)' }} />
-      {anchor && <div aria-hidden="true" data-tour-spotlight className="fixed pointer-events-none z-[10001] rounded-lg" style={{ ...anchor, border: '2px solid var(--color-accent)', boxShadow: '0 0 0 9999px rgba(0,0,0,.42), 0 0 20px rgba(126,200,227,.3)' }} />}
-      <Dialog.Content ref={contentRef} data-tour-bubble className="fixed z-[10002] rounded-2xl outline-none text-[var(--color-text)]" style={{ left, top, width, maxHeight: viewport.height - 24, backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-border)', boxShadow: '0 16px 55px rgba(0,0,0,.35)' }}
+      {/* 走查浮层三层同属 modal 层：原先写 z-[10000~10002] 越出了 z-index.ts 的七层规范。
+          三者是 Portal 内的顺序兄弟节点，同层下按 DOM 顺序叠加（遮罩 < 聚光 < 气泡）。 */}
+      <Dialog.Overlay className="fixed inset-0 z-[var(--z-modal)]" style={{ background: anchor ? 'transparent' : 'var(--color-backdrop)' }} />
+      {anchor && <div aria-hidden="true" data-tour-spotlight className="fixed pointer-events-none z-[var(--z-modal)] rounded-lg" style={{ ...anchor, border: '2px solid var(--color-accent)', boxShadow: '0 0 0 9999px var(--color-backdrop), 0 0 20px rgba(var(--color-accent-rgb), 0.3)' }} />}
+      <Dialog.Content ref={contentRef} data-tour-bubble className="fixed z-[var(--z-modal)] rounded-2xl outline-none text-[var(--color-text)]" style={{ left, top, width, maxHeight: viewport.height - 24, backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-popover)' }}
         onPointerDownOutside={event => event.preventDefault()}
         onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLElement>('[data-tour="guide-entry"]')?.focus() }}>
         {side && <span aria-hidden="true" className="absolute w-3 h-3 rotate-45" style={{ backgroundColor: 'var(--color-bg)',

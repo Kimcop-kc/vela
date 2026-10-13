@@ -72,7 +72,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] py-1 select-none acrylic"
+      className="fixed z-[var(--z-dropdown)] py-1 select-none acrylic"
       style={{
         left,
         top,

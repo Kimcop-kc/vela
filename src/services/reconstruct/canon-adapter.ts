@@ -31,17 +31,16 @@ export async function loadChapterCanon(params: {
   keywords: string[]
 }): Promise<ChapterCanonContext> {
   const { chapterNumber, chapterGoal, keywords } = params
-  const [core, characters, timeline, states, plotLines, facts, summaries] = await Promise.all([
+  // 只需要架构与角色卡：时间线 / 状态 / 剧情线 / 事实 / 摘要全部交给 buildCanonContext，
+  // 由它统一做「不晚于本章」的历史边界过滤与角色状态合并。
+  // 之前这里用 getTimeline/getAllCharacterStates/getActivePlotLines 再覆盖一次，
+  // 会把 buildCanonContext 已经排除掉的「未来状态」重新塞回去（重写早章时泄漏后续剧情）。
+  const [core, characters] = await Promise.all([
     ipc.invoke('db:project-core-get').catch(() => null),
     ipc.invoke('db:character-get-all').catch(() => [] as Array<{ name: string; role: string; currentState?: Record<string, unknown> }>),
-    canonStore.getTimeline(Math.max(0, chapterNumber - 1)).catch(() => []),
-    canonStore.getAllCharacterStates().catch(() => []),
-    canonStore.getPlotLines('active').catch(() => []),
-    canonStore.getFacts().catch(() => []),
-    canonStore.getSummariesUpTo(Math.max(0, chapterNumber - 1)).catch(() => []),
   ])
 
-  const relevantFacts = filterRelevantFacts(facts, keywords)
+  const relevantFacts = filterRelevantFacts(await canonStore.getFacts().catch(() => []), keywords)
   let canon: CanonContext | null = null
   let rendered = ''
   try {
@@ -67,15 +66,9 @@ export async function loadChapterCanon(params: {
       writingStyle: '',
       globalGuidance: '',
     })
-    // 只取与本章相关的事实，避免把整个事实库塞进提示词
+    // 只把「与本章关键词相关」的事实收窄，不覆盖时间线/状态/剧情线/摘要——
+    // 那些字段由 buildCanonContext 做过历史边界处理，覆盖会让未来的状态泄漏进来。
     canon.knownFacts = relevantFacts
-    canon.timeline = timeline ?? []
-    canon.characterStates = states ?? []
-    canon.openPlotLines = plotLines ?? []
-    canon.recentChapterSummaries = (summaries ?? [])
-      .slice(-3)
-      .map(summary => `第 ${summary.chapterNumber} 章：${summary.summary}`)
-      .join('\n')
     rendered = renderCanonContext(canon)
   } catch (error) {
     console.warn('[canon-adapter] 组装 Canon 上下文失败:', error)
@@ -86,17 +79,29 @@ export async function loadChapterCanon(params: {
     rendered,
     relevantFacts,
     counts: {
-      timeline: (timeline ?? []).length,
-      characterStates: (states ?? []).length,
-      plotLines: (plotLines ?? []).length,
+      timeline: canon?.timeline.length ?? 0,
+      characterStates: canon?.characterStates.length ?? 0,
+      plotLines: canon?.openPlotLines.length ?? 0,
       facts: relevantFacts.length,
     },
   }
 }
 
-/** 按关键词筛事实：命中陈述、角色名或证据即算相关；没有关键词时退化为「限量取用」。 */
+/**
+ * 按关键词筛事实：命中陈述、角色名或证据即算相关；没有关键词时退化为「限量取用」。
+ *
+ * 返回前按「作者确认优先 → 引入章节降序」排序，避免直接按数据库返回顺序截断——
+ * 否则早期的关键设定会被后续无关条目挤掉。
+ */
 export function filterRelevantFacts(facts: Fact[], keywords: string[], limit = 40): Fact[] {
-  const usable = facts.filter(fact => (fact.status ?? 'active') !== 'outdated')
+  const usable = facts
+    .filter(fact => (fact.status ?? 'active') !== 'outdated')
+    .sort((a, b) => {
+      const aConfirmed = a.confirmedAt ? 1 : 0
+      const bConfirmed = b.confirmedAt ? 1 : 0
+      if (aConfirmed !== bConfirmed) return bConfirmed - aConfirmed
+      return (b.introducedAt || 0) - (a.introducedAt || 0)
+    })
   const cleaned = keywords.map(keyword => keyword.trim()).filter(keyword => keyword.length >= 2)
   if (cleaned.length === 0) return usable.slice(0, limit)
   const matched = usable.filter(fact => {

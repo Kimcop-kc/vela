@@ -1,0 +1,47 @@
+# 行尾规范化 —— 本文件是行尾的唯一依据，不再依赖各人本机的 core.autocrlf。
+#
+# 背景：仓库此前没有 .gitattributes，469 个受跟踪文件全靠 `core.autocrlf=true`
+# （当前本机为 true）在检出时转成 CRLF。换个没开这个配置的机器，同一份工作区
+# 就会变成 LF，于是每次 diff 都显示「整个文件被改过」，且无法判断谁是真改动。
+#
+# 规则：
+#   1. `* text=auto` —— 文本文件入库归一为 LF，检出按平台转换（Windows CRLF / 其他 LF）。
+#      与当前实际状态一致（469 个文件已是 i/lf w/crlf），因此不会触发大规模重归一。
+#   2. 资源与产物显式声明 binary，避免被 text=auto 误判、也避免被任何工具改行尾。
+#   3. 构建产物不在这里声明 —— 已由 .gitignore 排除。
+
+# ---- 文本：默认按平台行尾 ----
+* text=auto
+
+# ---- 二进制：禁止任何行尾处理 ----
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.icns  binary
+*.webp  binary
+*.pdf   binary
+*.docx  binary
+*.doc   binary
+*.xlsx  binary
+*.pptx  binary
+*.zip   binary
+*.7z    binary
+*.gz    binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.exe   binary
+*.dll   binary
+*.node  binary
+*.wasm  binary
+
+# ---- 始终保持 LF（跨平台执行的脚本与 node 脚本）----
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.fish  text eol=lf

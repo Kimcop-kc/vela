@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels'
+import { useCallback, useEffect, useMemo } from 'react'
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle, useDefaultLayout } from 'react-resizable-panels'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore } from './stores/theme-store'
 import { useLayoutStore } from './stores/layout-store'
@@ -13,6 +13,7 @@ import TitleBar from './components/layout/TitleBar'
 import StatusBar from './components/layout/StatusBar'
 import LeftToolWindowBar from './components/layout/LeftToolWindowBar'
 import RightToolWindowBar from './components/layout/RightToolWindowBar'
+import { useAutoCollapseOnNarrowWindow } from './components/layout/useAutoCollapseOnNarrowWindow'
 import Sidebar from './components/panels/Sidebar'
 import EditorArea from './components/panels/EditorArea'
 import AIPanel from './components/panels/AIPanel'
@@ -26,6 +27,7 @@ import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { actionToast } from './components/ui/ActionToast'
 import { globalEventBus } from './shared/event-bus'
+import { isEditableTarget } from './shared/keyboard'
 import FeatureTour from './components/onboarding/FeatureTour'
 import SetupWizard from './components/onboarding/SetupWizard'
 
@@ -41,6 +43,8 @@ export default function App() {
   const rightView = useLayoutStore(s => s.rightView)
   const bottomPanelOpen = useLayoutStore(s => s.bottomPanelOpen)
   const bottomDock = useLayoutStore(s => s.bottomDock)
+  // 专注模式 = 存在进入前的布局快照（快照本身不参与渲染）
+  const focusMode = useLayoutStore(s => s.focusSnapshot !== null)
   const settingsOpen = useLayoutStore(s => s.settingsOpen)
   const closeSettings = useLayoutStore(s => s.closeSettings)
   const newProjectOpen = useLayoutStore(s => s.newProjectOpen)
@@ -96,12 +100,21 @@ export default function App() {
     }
   }, [initTheme, initLLM, loadRecentProjects, t])
 
-  // 全局快捷键: Cmd+N 新建项目，Cmd+O 打开项目
+  // 全局快捷键: Cmd+N 新建项目，Cmd+O 打开项目，Cmd+Shift+F 切换专注模式
   // 注意：Cmd+=/- 缩放已由 TitleBar.tsx 统一处理，此处不重复注册
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
+      // 专注模式必须放在「可编辑元素豁免」之前：最典型的使用场景就是光标正在正文里，
+      // 若在这里让回给输入，专注模式在写作时反而按不动。
+      if (e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        useLayoutStore.getState().toggleFocusMode()
+        return
+      }
+      // 焦点在输入框 / 正文编辑器里时让回给输入，避免写作途中被「新建项目」弹窗打断
+      if (isEditableTarget(e)) return
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault()
         useLayoutStore.getState().openNewProject()
@@ -122,6 +135,46 @@ export default function App() {
   const dockAgent = bottomPanelOpen && aiPanelOpen && bottomDock === 'agent'
   const dockFull = bottomPanelOpen && !dockSide && !dockAgent
 
+  // ===== 面板尺寸持久化 =====
+  // react-resizable-panels v4 移除了 v3 的 autoSaveId，改由 useDefaultLayout 承担：
+  // 它返回的 defaultLayout 交给 Group，onLayoutChanged 负责回存（默认写 localStorage）。
+  // panelIds 必须与「当前实际渲染的 Panel」一致 —— 侧栏 / 右栏 / 底部面板都是条件渲染的，
+  // 按 id 列表分组保存才能让每种组合各记一套布局，否则收起再展开会把尺寸错配到别的栏上。
+  const mainPanelIds = useMemo(() => {
+    const ids = ['editor']
+    if (sidebarOpen) ids.unshift('sidebar')
+    if (aiPanelOpen) ids.push('ai-panel')
+    return ids
+  }, [sidebarOpen, aiPanelOpen])
+  const sidebarPanelIds = useMemo(
+    () => (dockSide ? ['sidebar-main', 'bottom-docked-sidebar'] : ['sidebar-main']),
+    [dockSide],
+  )
+  const agentPanelIds = useMemo(
+    () => (dockAgent ? ['ai-main', 'bottom-docked-agent'] : ['ai-main']),
+    [dockAgent],
+  )
+  const rootPanelIds = useMemo(() => (dockFull ? ['top', 'bottom'] : ['top']), [dockFull])
+
+  const mainLayout = useDefaultLayout({ id: 'vela-columns', panelIds: mainPanelIds })
+  const sidebarLayout = useDefaultLayout({ id: 'vela-sidebar-column', panelIds: sidebarPanelIds })
+  const agentLayout = useDefaultLayout({ id: 'vela-agent-column', panelIds: agentPanelIds })
+  const rootLayout = useDefaultLayout({ id: 'vela-rows', panelIds: rootPanelIds })
+
+  // 窄窗口自动折叠侧栏 / 右栏（不覆盖用户的手动选择，见 hook 内注释）
+  useAutoCollapseOnNarrowWindow()
+
+  // 弹窗兜底层上的「关闭」：把仍标记为打开的全局面板关掉。
+  // 没有它，弹窗崩溃后错误层会盖住整个窗口、用户点不动任何东西，只能重启应用。
+  const closeAllDialogs = useCallback(() => {
+    const s = useLayoutStore.getState()
+    s.closeNewProject()
+    s.closeImportNovel()
+    s.closeChapterCreation()
+    s.closeExport()
+    s.closeSettings()
+  }, [])
+
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
       {/* 标题栏 */}
@@ -135,21 +188,36 @@ export default function App() {
       */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* 左侧工具窗口栏（全高） */}
-        <LeftToolWindowBar />
+        {/* 左侧工具窗口栏（全高）—— 专注模式下隐藏，把宽度全部让给正文 */}
+        {!focusMode && <LeftToolWindowBar />}
 
         {/* 纵向 PanelGroup：仅当底部面板选择「底部全宽」停靠时才出现下层 */}
-        <PanelGroup orientation="vertical" className="flex-1">
+        <PanelGroup
+          orientation="vertical"
+          className="flex-1"
+          defaultLayout={rootLayout.defaultLayout}
+          onLayoutChanged={rootLayout.onLayoutChanged}
+        >
 
           {/* 上层：侧边栏 | 编辑区 | AI 面板（水平分割） */}
           <Panel id="top" defaultSize={dockFull ? 72 : 100} minSize={30}>
-            <PanelGroup orientation="horizontal" className="flex-1 h-full">
+            <PanelGroup
+              orientation="horizontal"
+              className="flex-1 h-full"
+              defaultLayout={mainLayout.defaultLayout}
+              onLayoutChanged={mainLayout.onLayoutChanged}
+            >
 
               {/* 左侧边栏（底部面板停靠此列时，内部再上下分割） */}
               {sidebarOpen && (
                 <>
                   <Panel id="sidebar" defaultSize={20} minSize={10}>
-                    <PanelGroup orientation="vertical" className="flex-1 h-full">
+                    <PanelGroup
+                      orientation="vertical"
+                      className="flex-1 h-full"
+                      defaultLayout={sidebarLayout.defaultLayout}
+                      onLayoutChanged={sidebarLayout.onLayoutChanged}
+                    >
                       <Panel id="sidebar-main" defaultSize={62} minSize={20}>
                         <ErrorBoundary fallbackLabel={t('sidebarRenderError')}>
                           <Sidebar />
@@ -159,7 +227,9 @@ export default function App() {
                         <>
                           <PanelResizeHandle />
                           <Panel id="bottom-docked-sidebar" defaultSize={28} minSize={15}>
-                            <BottomPanel />
+                            <ErrorBoundary fallbackLabel={t('bottomPanelRenderError')}>
+                              <BottomPanel />
+                            </ErrorBoundary>
                           </Panel>
                         </>
                       )}
@@ -181,7 +251,12 @@ export default function App() {
                 <>
                   <PanelResizeHandle />
                   <Panel id="ai-panel" defaultSize={20} minSize={10}>
-                    <PanelGroup orientation="vertical" className="flex-1 h-full">
+                    <PanelGroup
+                      orientation="vertical"
+                      className="flex-1 h-full"
+                      defaultLayout={agentLayout.defaultLayout}
+                      onLayoutChanged={agentLayout.onLayoutChanged}
+                    >
                       <Panel id="ai-main" defaultSize={62} minSize={20}>
                         <ErrorBoundary fallbackLabel={t('aiPanelRenderError')}>
                           {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
@@ -191,7 +266,9 @@ export default function App() {
                         <>
                           <PanelResizeHandle />
                           <Panel id="bottom-docked-agent" defaultSize={28} minSize={15}>
-                            <BottomPanel />
+                            <ErrorBoundary fallbackLabel={t('bottomPanelRenderError')}>
+                              <BottomPanel />
+                            </ErrorBoundary>
                           </Panel>
                         </>
                       )}
@@ -207,43 +284,47 @@ export default function App() {
             <>
               <PanelResizeHandle />
               <Panel id="bottom" defaultSize={28} minSize={8}>
-                <BottomPanel />
+                <ErrorBoundary fallbackLabel={t('bottomPanelRenderError')}>
+                  <BottomPanel />
+                </ErrorBoundary>
               </Panel>
             </>
           )}
         </PanelGroup>
 
-        {/* 右侧工具窗口栏（全高） */}
-        <RightToolWindowBar />
+        {/* 右侧工具窗口栏（全高）—— 专注模式下隐藏 */}
+        {!focusMode && <RightToolWindowBar />}
       </div>
 
 
       {/* 状态栏（全宽） */}
       <StatusBar />
 
-      {/* 全局对话框 — 由 layout-store 控制开关，不再依赖 window.dispatchEvent */}
-      <NewProjectDialog
-        open={newProjectOpen}
-        onClose={closeNewProject}
-      />
-      <ImportNovelDialog
-        open={importNovelOpen}
-        onClose={closeImportNovel}
-      />
-      <ChapterCreationDialog
-        isOpen={chapterCreationOpen}
-        prefill={chapterCreationPrefill}
-        onClose={closeChapterCreation}
-      />
-      <ExportDialog
-        isOpen={exportOpen}
-        onClose={closeExport}
-      />
+      {/*
+        全局对话框 — 由 layout-store 控制开关，不再依赖 window.dispatchEvent。
+        每个弹窗单独兜底：弹窗在渲染期抛错会卸载整棵 React 树（白屏）。
+        variant="overlay" 让兜底层自己盖住窗口，onReset 负责把仍标记为打开的弹窗关掉。
+      */}
+      <ErrorBoundary variant="overlay" fallbackLabel={t('dialogRenderError')} onReset={closeAllDialogs}>
+        <NewProjectDialog open={newProjectOpen} onClose={closeNewProject} />
+      </ErrorBoundary>
+      <ErrorBoundary variant="overlay" fallbackLabel={t('dialogRenderError')} onReset={closeAllDialogs}>
+        <ImportNovelDialog open={importNovelOpen} onClose={closeImportNovel} />
+      </ErrorBoundary>
+      <ErrorBoundary variant="overlay" fallbackLabel={t('dialogRenderError')} onReset={closeAllDialogs}>
+        <ChapterCreationDialog
+          isOpen={chapterCreationOpen}
+          prefill={chapterCreationPrefill}
+          onClose={closeChapterCreation}
+        />
+      </ErrorBoundary>
+      <ErrorBoundary variant="overlay" fallbackLabel={t('dialogRenderError')} onReset={closeAllDialogs}>
+        <ExportDialog isOpen={exportOpen} onClose={closeExport} />
+      </ErrorBoundary>
       {/* 全屏设置弹窗 */}
-      <SettingsModal
-        open={settingsOpen}
-        onClose={closeSettings}
-      />
+      <ErrorBoundary variant="overlay" fallbackLabel={t('dialogRenderError')} onReset={closeAllDialogs}>
+        <SettingsModal open={settingsOpen} onClose={closeSettings} />
+      </ErrorBoundary>
       <FeatureTour />
       <SetupWizard />
 

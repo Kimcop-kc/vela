@@ -21,8 +21,15 @@ import type {
   ItemEvent,
   Realm,
   Location,
+  Arc,
+  CharacterStateHistoryEntry,
+  MemorySearchParams,
+  MemorySearchResult,
+  MemorySearchHit,
+  MemoryHitType,
 } from '../../src/services/narrative-consistency/types'
 import { detectFactConflict } from '../../src/services/narrative-consistency/fact-conflict'
+import { extractSearchTerms, countTermHits } from '../../src/shared/search-terms'
 
 interface TimelineRow {
   id: number
@@ -77,6 +84,8 @@ interface FactRow {
   confirmed_at?: string | null
   updated_at?: string | null
   created_at: string
+  source_paragraph_index?: number | null
+  arc_id?: number | null
 }
 
 /** 事实变更历史行 */
@@ -167,6 +176,8 @@ function rowToFact(row: FactRow): Fact {
     status: (row.status as Fact['status']) || 'active',
     confirmedAt: row.confirmed_at ?? null,
     updatedAt: row.updated_at ?? null,
+    sourceParagraphIndex: row.source_paragraph_index ?? -1,
+    arcId: row.arc_id ?? undefined,
   }
 }
 
@@ -620,6 +631,24 @@ export class CanonRepository {
     return db.prepare(`DELETE FROM canon_locations WHERE id = ?`).run(id).changes > 0
   }
 
+  /** 判断某表是否存在某列（用于兼容未完成 v10 迁移的旧库） */
+  private static columnCache = new Map<string, boolean>()
+  private static hasColumn(table: string, column: string): boolean {
+    const key = `${table}.${column}`
+    const cached = CanonRepository.columnCache.get(key)
+    if (cached != null) return cached
+    const db = getProjectDb()
+    if (!db) return false
+    try {
+      const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+      const exists = cols.some(c => c.name === column)
+      CanonRepository.columnCache.set(key, exists)
+      return exists
+    } catch {
+      return false
+    }
+  }
+
   static getFacts(): Fact[] {
     const db = getProjectDb()
     if (!db) return []
@@ -635,11 +664,13 @@ export class CanonRepository {
     const normalizedStatement = this.normalizeForDedup(fact.statement)
     if (!normalizedStatement) throw new Error('[CanonRepository] addFact: statement 不能为空')
     // 用 UNIQUE 索引 + INSERT OR IGNORE 处理重复（依赖 migration 添加的 idx_canon_facts_unique）
-    const r = db.prepare(`
-      INSERT OR IGNORE INTO canon_facts
-        (category, statement, introduced_at, characters, evidence, status, confirmed_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
+    // [v10] 额外持久化 source_paragraph_index（原文段落定位）与 arc_id（所属分卷）。
+    //       旧库若迁移失败缺列，退回不含这两列的写入，保证不阻塞定稿。
+    const hasParagraphCol = this.hasColumn('canon_facts', 'source_paragraph_index')
+    const hasArcCol = this.hasColumn('canon_facts', 'arc_id')
+    const columns = ['category', 'statement', 'introduced_at', 'characters', 'evidence', 'status', 'confirmed_at', 'updated_at']
+    const values = ['?', '?', '?', '?', '?', '?', '?', "datetime('now')"]
+    const args: unknown[] = [
       fact.category,
       normalizedStatement,
       fact.introducedAt || 0,
@@ -648,7 +679,14 @@ export class CanonRepository {
       fact.status || 'active',
       // confirmed_at 为 NULL 表示「AI 提取、尚未经作者确认」
       fact.confirmedAt ?? null,
-    )
+    ]
+    if (hasParagraphCol) { columns.push('source_paragraph_index'); values.push('?'); args.push(fact.sourceParagraphIndex ?? -1) }
+    if (hasArcCol) { columns.push('arc_id'); values.push('?'); args.push(fact.arcId ?? null) }
+    const r = db.prepare(`
+      INSERT OR IGNORE INTO canon_facts
+        (${columns.join(', ')})
+      VALUES (${values.join(', ')})
+    `).run(...args)
     if (r.changes > 0) return Number(r.lastInsertRowid)
     // 重复：返回已存在行的 id
     const row = db.prepare(
@@ -730,8 +768,11 @@ export class CanonRepository {
   /**
    * 记录「本章沿用了哪些既有事实」。
    *
-   * 匹配规则刻意保守：只用事实的证据短语（evidence）或事实原句在正文里精确出现来判定，
-   * 宁可漏记，也不要把「可能相关」写进依赖关系——影响报告的可信度全靠这一步。
+   * [P0-4 修复] 改进匹配策略：
+   *   - 原：仅用 evidence/statement 精确子串匹配 → 中文改写几乎全部漏记
+   *   - 新：1. 精确子串匹配（evidence ≥ 2 字 或 statement ≥ 4 字）
+   *         2. 关键词重叠匹配：从 statement 中提取 2-4 字关键词，若 ≥ 2 个命中则算引用
+   *         3. 角色名匹配：若事实涉及的角色在本章出现，也算弱引用（仅对 identity/relationship 类）
    */
   static recordFactUsage(chapterNumber: number, chapterContent: string, excludeFactIds?: Set<number>): number {
     const db = getProjectDb()
@@ -746,13 +787,39 @@ export class CanonRepository {
     const insert = db.prepare(`INSERT INTO canon_fact_usage (fact_id, chapter_number, evidence) VALUES (?, ?, ?)`)
     let count = 0
     for (const fact of candidates) {
+      // 策略1：精确子串匹配（原策略，保守可靠）
       const evidence = (fact.evidence || '').trim()
       const matched = evidence.length >= 2 && text.includes(evidence)
         ? evidence
         : (fact.statement.length >= 4 && text.includes(fact.statement) ? fact.statement : '')
-      if (!matched) continue
-      insert.run(fact.id, chapterNumber, matched.slice(0, 120))
-      count++
+      if (matched) {
+        insert.run(fact.id, chapterNumber, matched.slice(0, 120))
+        count++
+        continue
+      }
+      // 策略2：关键词重叠匹配
+      // 从 statement 中提取 2-4 字中文片段作为关键词
+      const keywords = [...new Set(
+        [...fact.statement.matchAll(/[\u4e00-\u9fa5]{2,4}/g)].map(m => m[0])
+      )].filter(kw => kw.length >= 2 && !['一个', '一种', '什么', '怎么', '可以', '已经', '这是', '那是'].includes(kw))
+      if (keywords.length >= 2) {
+        const hits = keywords.filter(kw => text.includes(kw))
+        if (hits.length >= Math.ceil(keywords.length * 0.4)) {
+          insert.run(fact.id, chapterNumber, `关键词匹配: ${hits.slice(0, 3).join('、')}`.slice(0, 120))
+          count++
+          continue
+        }
+      }
+      // 策略3：角色名匹配（仅对 identity/relationship 类）
+      if ((fact.category === 'identity' || fact.category === 'relationship') && fact.characters.length > 0) {
+        const charHits = fact.characters.filter(name => name.length >= 2 && text.includes(name))
+        if (charHits.length === fact.characters.length && charHits.length > 0) {
+          // 弱引用：角色名命中但无具体证据，仍记录但不标记为"精确引用"
+          insert.run(fact.id, chapterNumber, `角色名匹配: ${charHits.join('、')}`.slice(0, 120))
+          count++
+          continue
+        }
+      }
     }
     return count
   }
@@ -925,6 +992,32 @@ export class CanonRepository {
       // 本章作为「使用者」的引用记录重新计算；指向其它事实的旧记录保留（那是历史依赖证据）
       db.prepare(`DELETE FROM canon_fact_usage WHERE chapter_number = ?`).run(payload.chapterNumber)
 
+      // [v10] 清本章的角色状态历史（重写幂等：同章重新定稿不产生重复快照）
+      if (this.hasColumn('canon_character_state_history', 'chapter_number')) {
+        try { db.prepare(`DELETE FROM canon_character_state_history WHERE chapter_number = ?`).run(payload.chapterNumber) } catch { /* 老库无此表 */ }
+      }
+
+      // [v10] 预切分本章正文段落，用于给新事实定位原文出处（摘要不能替代原文）
+      const paragraphs = (payload.chapterContent || '')
+        .split(/\n+/).map(p => p.trim()).filter(p => p.length > 0)
+      const locateParagraph = (fact: { statement: string; evidence?: string }): number => {
+        if (paragraphs.length === 0) return -1
+        const ev = (fact.evidence || '').trim()
+        if (ev.length >= 2) { const i = paragraphs.findIndex(p => p.includes(ev)); if (i >= 0) return i }
+        const st = (fact.statement || '').trim()
+        if (st.length >= 4) { const i = paragraphs.findIndex(p => p.includes(st)); if (i >= 0) return i }
+        const terms = extractSearchTerms(fact.statement)
+        if (terms.length > 0) {
+          let best = -1, bestHits = 0
+          paragraphs.forEach((p, i) => {
+            const h = countTermHits(p, terms)
+            if (h > bestHits) { bestHits = h; best = i }
+          })
+          if (bestHits >= Math.max(1, Math.ceil(terms.length * 0.5))) return best
+        }
+        return -1
+      }
+
       const timelineIds: number[] = []
       for (const ev of payload.newEvents || []) {
         db.prepare(`
@@ -966,6 +1059,20 @@ export class CanonRepository {
           updatedAt: new Date().toISOString(),
         })
         characterStatesWritten++
+        // [v10] 留痕：把本章合并后的完整状态写入历史链（不覆盖旧快照），
+        //        使「第 50 章受伤、第 80 章痊愈」这类多阶段状态可回溯。
+        if (this.hasColumn('canon_character_state_history', 'snapshot_json')) {
+          try {
+            const merged = this.getCharacterState(delta.character)
+            if (merged) {
+              this.appendCharacterStateHistory({
+                character: delta.character,
+                chapterNumber: delta.chapterNumber,
+                snapshot: merged,
+              })
+            }
+          } catch { /* 老库无此表：忽略，不影响写回 */ }
+        }
       }
 
       const plotIds: number[] = []
@@ -981,8 +1088,14 @@ export class CanonRepository {
       }
 
       const factIds: number[] = []
+      // [v10] 给本章新事实关联所属分卷，并定位其在原文中的段落
+      const currentArc = this.getArcForChapter(payload.chapterNumber)
       for (const fact of payload.newFacts || []) {
-        const id = this.addFact(fact)
+        const id = this.addFact({
+          ...fact,
+          sourceParagraphIndex: locateParagraph(fact),
+          arcId: currentArc?.id ?? undefined,
+        })
         factIds.push(id)
       }
 
@@ -1039,5 +1152,503 @@ export class CanonRepository {
     })
 
     return tx()
+  }
+
+  // ============================================================
+  // 第二阶段：分层记忆 — 分卷（Arc）
+  // ============================================================
+
+  static getArcs(): Arc[] {
+    const db = getProjectDb()
+    if (!db) return []
+    const rows = db.prepare(
+      `SELECT * FROM canon_arcs ORDER BY sort_order ASC, start_chapter ASC`
+    ).all() as ArcRow[]
+    return rows.map(rowToArc)
+  }
+
+  static getArcForChapter(chapterNumber: number): Arc | null {
+    const db = getProjectDb()
+    if (!db) return null
+    const row = db.prepare(
+      `SELECT * FROM canon_arcs
+       WHERE start_chapter <= ? AND (end_chapter = 0 OR end_chapter >= ?)
+       ORDER BY sort_order ASC LIMIT 1`
+    ).get(chapterNumber, chapterNumber) as ArcRow | undefined
+    return row ? rowToArc(row) : null
+  }
+
+  static upsertArc(arc: Omit<Arc, 'createdAt' | 'updatedAt'>): number {
+    const db = getProjectDb()
+    if (!db) throw new Error('[CanonRepository] 数据库未连接')
+    if (arc.id != null) {
+      db.prepare(`UPDATE canon_arcs SET title=?, start_chapter=?, end_chapter=?, main_conflict=?, character_development=?, key_events=?, stage_goal=?, sort_order=?, updated_at=datetime('now') WHERE id=?`)
+        .run(arc.title, arc.startChapter, arc.endChapter, arc.mainConflict, arc.characterDevelopment, arc.keyEvents, arc.stageGoal, arc.sortOrder, arc.id)
+      return arc.id
+    }
+    const r = db.prepare(`INSERT INTO canon_arcs (title, start_chapter, end_chapter, main_conflict, character_development, key_events, stage_goal, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(arc.title, arc.startChapter, arc.endChapter, arc.mainConflict, arc.characterDevelopment, arc.keyEvents, arc.stageGoal, arc.sortOrder)
+    return Number(r.lastInsertRowid)
+  }
+
+  static removeArc(id: number): boolean {
+    const db = getProjectDb()
+    if (!db) return false
+    return db.prepare(`DELETE FROM canon_arcs WHERE id = ?`).run(id).changes > 0
+  }
+
+  // ============================================================
+  // 第二阶段：角色状态历史链
+  // ============================================================
+
+  static getCharacterStateHistory(character: string, upToChapter?: number): CharacterStateHistoryEntry[] {
+    const db = getProjectDb()
+    if (!db) return []
+    const rows = db.prepare(
+      `SELECT * FROM canon_character_state_history
+       WHERE character = ? ${upToChapter != null ? 'AND chapter_number <= ?' : ''}
+       ORDER BY chapter_number ASC, id ASC`
+    ).all(character, ...(upToChapter != null ? [upToChapter] : [])) as CSHRow[]
+    return rows.map(rowToCSH)
+  }
+
+  static getCharacterStateAtChapter(character: string, chapterNumber: number): CharacterStateSnapshot | null {
+    const db = getProjectDb()
+    if (!db) return null
+    const row = db.prepare(
+      `SELECT * FROM canon_character_state_history
+       WHERE character = ? AND chapter_number <= ?
+       ORDER BY chapter_number DESC, id DESC LIMIT 1`
+    ).get(character, chapterNumber) as CSHRow | undefined
+    if (!row) return null
+    try {
+      return JSON.parse(row.snapshot_json) as CharacterStateSnapshot
+    } catch {
+      return null
+    }
+  }
+
+  static appendCharacterStateHistory(entry: { character: string; chapterNumber: number; snapshot: CharacterStateSnapshot }): number {
+    const db = getProjectDb()
+    if (!db) throw new Error('[CanonRepository] 数据库未连接')
+    const r = db.prepare(
+      `INSERT INTO canon_character_state_history (character, chapter_number, snapshot_json) VALUES (?, ?, ?)`
+    ).run(entry.character, entry.chapterNumber, JSON.stringify(entry.snapshot))
+    return Number(r.lastInsertRowid)
+  }
+
+  // ============================================================
+  // 第二阶段：人物别名/称谓
+  // ============================================================
+
+  static getCharacterAliases(): Map<string, string[]> {
+    const db = getProjectDb()
+    const map = new Map<string, string[]>()
+    if (!db) return map
+    // 1) characters 表：主名 → 别名数组（含无别名的角色，值可能为 []）
+    try {
+      const rows = db.prepare(`SELECT name, aliases_json FROM characters`).all() as Array<{ name: string; aliases_json?: string | null }>
+      for (const row of rows) {
+        if (!row.name) continue
+        let aliases: string[] = []
+        if (row.aliases_json) {
+          try {
+            const parsed = JSON.parse(row.aliases_json) as unknown
+            if (Array.isArray(parsed)) aliases = parsed.filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
+          } catch { /* 损坏的 JSON：忽略别名，保留主名 */ }
+        }
+        map.set(row.name, aliases)
+      }
+    } catch { /* characters 表可能不存在 */ }
+    // 2) canon_character_state 表：即使没有角色卡，也能解析 canon 中出现过的角色主名
+    try {
+      const rows = db.prepare(`SELECT character FROM canon_character_state`).all() as Array<{ character: string }>
+      for (const row of rows) {
+        if (row.character && !map.has(row.character)) map.set(row.character, [])
+      }
+    } catch { /* 忽略 */ }
+    return map
+  }
+
+  /** 判断一个查询名是否匹配某个角色（含别名） */
+  static resolveCharacterName(query: string): string | null {
+    const aliases = CanonRepository.getCharacterAliases()
+    // 先精确匹配主名
+    for (const [name] of aliases) {
+      if (name === query) return name
+    }
+    // 再匹配别名
+    for (const [name, aliasList] of aliases) {
+      if (aliasList.includes(query)) return name
+    }
+    // 最后模糊匹配（包含关系）
+    for (const [name, aliasList] of aliases) {
+      if (name.includes(query) || query.includes(name) || aliasList.some(a => a.includes(query) || query.includes(a))) {
+        return name
+      }
+    }
+    return null
+  }
+
+  // ============================================================
+  // 第二阶段：统一精准检索入口
+  // ============================================================
+
+  /**
+   * 统一检索入口：跨表交叉检索人物/事件/物品/伏笔/章节/事实。
+   *
+   * 检索策略（不依赖向量，纯 SQLite + 关键词）：
+   *   1. 把查询文本拆成关键词（extractSearchTerms）
+   *   2. 在各 canon 表中按关键词命中数打分
+   *   3. 角色名/别名匹配额外加分
+   *   4. confirmed 事实额外加分
+   *   5. outdated/历史记忆按 includeHistorical 控制
+   *   6. 合并排序，返回带命中原因的结果
+   */
+  static searchCanon(params: MemorySearchParams): MemorySearchResult {
+    const start = Date.now()
+    const db = getProjectDb()
+    if (!db) return { hits: [], total: 0, degraded: false, elapsedMs: 0 }
+    const limit = Math.min(params.limit ?? 50, 200)
+    const terms = extractSearchTerms(params.query)
+    const types = params.types
+    const includeHistorical = params.includeHistorical ?? false
+
+    // 空查询且无任何过滤条件时，不返回任何命中——
+    // 避免"搜索空字符串"变成"导出全部 canon"（也符合"证据不足时明确未找到"）。
+    const hasFilter = !!params.character || !!params.item || !!params.chapterRange
+    if (terms.length === 0 && !hasFilter) {
+      return { hits: [], total: 0, degraded: false, elapsedMs: Date.now() - start }
+    }
+
+    // 角色名解析（含别名）
+    let resolvedChar: string | null = null
+    if (params.character) {
+      resolvedChar = CanonRepository.resolveCharacterName(params.character)
+    } else if (terms.length > 0) {
+      // 尝试从查询词中解析角色名
+      for (const t of terms) {
+        const r = CanonRepository.resolveCharacterName(t)
+        if (r) { resolvedChar = r; break }
+      }
+    }
+
+    const allHits: MemorySearchHit[] = []
+    const shouldSearch = (t: MemoryHitType) => !types || types.includes(t)
+
+    // --- 事实 ---
+    if (shouldSearch('fact')) {
+      const facts = CanonRepository.getFacts()
+      // [v10] 预计算冲突对（一次性两两检测，O(n²)），供每条事实标注「与谁冲突」。
+      //        规模过大时跳过，避免拖慢检索。
+      const conflictPeers = new Map<number, string[]>()
+      if (facts.length <= 2000) {
+        for (let i = 0; i < facts.length; i++) {
+          for (let j = i + 1; j < facts.length; j++) {
+            const a = facts[i], b = facts[j]
+            if (a.id == null || b.id == null) continue
+            // 不要求任一方已经是 contradicted：Vela 默认 AI 提取的事实是 tentative，
+            // 若在这里要求 contradicted，则「两条待确认事实互相矛盾」这一最常见情形永远标注不出来。
+            // 交给 detectFactConflict 自己做保守判定（同类 + 共享角色 + 一方否定 + 高相似）。
+            if (detectFactConflict(a, b)) {
+              if (!conflictPeers.has(a.id)) conflictPeers.set(a.id, [])
+              if (!conflictPeers.has(b.id)) conflictPeers.set(b.id, [])
+              conflictPeers.get(a.id)!.push(b.statement)
+              conflictPeers.get(b.id)!.push(a.statement)
+            }
+          }
+        }
+      }
+      for (const f of facts) {
+        if (!includeHistorical && (f.status ?? 'active') === 'outdated') continue
+        const reasons: string[] = []
+        let score = 0
+        const haystack = `${f.statement} ${f.evidence ?? ''} ${(f.characters ?? []).join(' ')}`
+        const hits = countTermHits(haystack, terms)
+        if (hits > 0) { score += 0.3 * (hits / terms.length); reasons.push(`关键词命中 ${hits}/${terms.length}`) }
+        if (resolvedChar && (f.characters ?? []).some(c => c === resolvedChar)) {
+          score += 0.25; reasons.push(`角色"${resolvedChar}"关联`)
+        }
+        if (params.item && f.category === 'item' && f.statement.includes(params.item)) {
+          score += 0.3; reasons.push(`物品"${params.item}"匹配`)
+        }
+        if (params.chapterRange) {
+          const inRange = (params.chapterRange.from == null || f.introducedAt >= params.chapterRange.from) &&
+                          (params.chapterRange.to == null || f.introducedAt <= params.chapterRange.to)
+          if (!inRange) continue
+        }
+        if (score === 0 && terms.length > 0) continue
+        // 置信度加分
+        if (f.confirmedAt) { score += 0.1; reasons.push('作者确认') }
+        if ((f.status ?? 'active') === 'active') { score += 0.05 }
+        if ((f.status ?? 'active') === 'contradicted') { score *= 0.5; reasons.push('⚠️存在冲突') }
+        if ((f.status ?? 'active') === 'tentative') { score *= 0.7; reasons.push('暂定（AI提取）') }
+        // 较新不等于正确：不因 introducedAt 高加分
+        allHits.push({
+          type: 'fact', id: f.id, title: f.statement, snippet: f.evidence || '',
+          chapterNumber: f.introducedAt, characters: f.characters,
+          status: f.status, confirmed: !!f.confirmedAt,
+          score, matchReasons: reasons,
+          isCurrent: (f.status ?? 'active') !== 'outdated',
+          conflictsWith: f.id != null ? conflictPeers.get(f.id)?.slice(0, 3) : undefined,
+          sourceLocation: f.sourceParagraphIndex != null && f.sourceParagraphIndex >= 0
+            ? { chapterNumber: f.introducedAt, paragraphIndex: f.sourceParagraphIndex } : undefined,
+        })
+      }
+    }
+
+    // --- 时间线事件 ---
+    if (shouldSearch('timeline')) {
+      const rows = db.prepare(
+        `SELECT * FROM canon_timeline_events
+         ${params.chapterRange ? 'WHERE chapter_number >= ? AND chapter_number <= ?' : ''}
+         ORDER BY chapter_number ASC, sequence ASC`
+      ).all(...(params.chapterRange ? [params.chapterRange.from ?? 0, params.chapterRange.to ?? 999999] : [])) as TimelineRow[]
+      for (const row of rows) {
+        const haystack = `${row.summary} ${row.impact} ${row.location} ${row.characters}`
+        const hits = countTermHits(haystack, terms)
+        const reasons: string[] = []
+        let score = 0
+        if (hits > 0) { score += 0.3 * (hits / terms.length); reasons.push(`关键词命中 ${hits}/${terms.length}`) }
+        if (resolvedChar) {
+          try {
+            const chars = JSON.parse(row.characters || '[]') as string[]
+            if (chars.includes(resolvedChar)) { score += 0.25; reasons.push(`角色"${resolvedChar}"出场`) }
+          } catch { /* skip */ }
+        }
+        if (score === 0 && terms.length > 0) continue
+        allHits.push({
+          type: 'timeline', id: row.id,
+          title: `第${row.chapter_number}章 事件#${row.sequence}`,
+          snippet: row.summary, chapterNumber: row.chapter_number,
+          score, matchReasons: reasons, isCurrent: true,
+        })
+      }
+    }
+
+    // --- 角色状态（当前） ---
+    if (shouldSearch('character_state')) {
+      const states = CanonRepository.getAllCharacterStates()
+      for (const s of states) {
+        const haystack = `${s.character} ${s.location} ${s.powerLevel} ${s.physicalState} ${s.mentalState} ${s.currentGoal} ${s.recentEvents} ${s.keyItems}`
+        const hits = countTermHits(haystack, terms)
+        const reasons: string[] = []
+        let score = 0
+        if (hits > 0) { score += 0.3 * (hits / terms.length); reasons.push(`关键词命中 ${hits}/${terms.length}`) }
+        if (resolvedChar && s.character === resolvedChar) { score += 0.35; reasons.push(`角色"${s.character}"精确匹配`) }
+        if (score === 0 && terms.length > 0) continue
+        allHits.push({
+          type: 'character_state', title: s.character,
+          snippet: `境界:${s.powerLevel} | 状态:${s.physicalState} | 目标:${s.currentGoal}`,
+          characters: [s.character], chapterNumber: s.updatedAtChapter,
+          score, matchReasons: reasons, isCurrent: true,
+        })
+      }
+    }
+
+    // --- 角色状态历史 ---
+    if (shouldSearch('character_history') && includeHistorical && resolvedChar) {
+      const history = CanonRepository.getCharacterStateHistory(resolvedChar)
+      for (const h of history) {
+        const haystack = JSON.stringify(h.snapshot)
+        const hits = countTermHits(haystack, terms)
+        if (hits === 0 && terms.length > 0) continue
+        const score = 0.15 * (hits / Math.max(terms.length, 1))
+        allHits.push({
+          type: 'character_history', id: h.id,
+          title: `${h.character} @ 第${h.chapterNumber}章`,
+          snippet: `境界:${h.snapshot.powerLevel} | 状态:${h.snapshot.physicalState}`,
+          characters: [h.character], chapterNumber: h.chapterNumber,
+          score, matchReasons: ['历史快照'], isCurrent: false,
+        })
+      }
+    }
+
+    // --- 剧情线/伏笔 ---
+    if (shouldSearch('plot_line')) {
+      const lines = CanonRepository.getPlotLines()
+      for (const p of lines) {
+        if (!includeHistorical && p.status === 'resolved') continue
+        const haystack = `${p.name} ${p.description} ${p.currentState} ${(p.characters ?? []).join(' ')}`
+        const hits = countTermHits(haystack, terms)
+        const reasons: string[] = []
+        let score = 0
+        if (hits > 0) { score += 0.3 * (hits / terms.length); reasons.push(`关键词命中 ${hits}/${terms.length}`) }
+        if (resolvedChar && (p.characters ?? []).includes(resolvedChar)) { score += 0.25; reasons.push(`角色"${resolvedChar}"关联`) }
+        if (p.kind === 'foreshadow') { score += 0.1; reasons.push('伏笔') }
+        // 章节范围过滤：剧情线按 [startedAt, lastAdvancedAt] 与请求范围求交。
+        // 范围外直接跳过，与事实/时间线/章节摘要的过滤口径保持一致，
+        // 避免用户限定 1-5 章却混进第 7 章的剧情线。
+        if (params.chapterRange) {
+          const from = params.chapterRange.from ?? 0
+          const to = params.chapterRange.to ?? 999999
+          const start = p.startedAt ?? 0
+          const end = p.lastAdvancedAt ?? start
+          const overlaps = start <= to && end >= from
+          if (!overlaps) continue
+        }
+        if (score === 0 && terms.length > 0) continue
+        allHits.push({
+          type: 'plot_line', id: p.id, title: p.name,
+          snippet: p.currentState || p.description,
+          chapterNumber: p.lastAdvancedAt, characters: p.characters,
+          status: p.status, score, matchReasons: reasons,
+          isCurrent: p.status === 'active',
+        })
+      }
+    }
+
+    // --- 物品流转 ---
+    if (shouldSearch('item_event')) {
+      const items = CanonRepository.getItemEvents(params.item)
+      for (const ie of items) {
+        const haystack = `${ie.item} ${ie.actor} ${ie.note}`
+        const hits = countTermHits(haystack, terms)
+        const reasons: string[] = []
+        let score = 0
+        if (hits > 0) { score += 0.3 * (hits / terms.length); reasons.push(`关键词命中 ${hits}/${terms.length}`) }
+        if (params.item && ie.item.toLowerCase() === params.item.toLowerCase()) { score += 0.4; reasons.push('物品名精确匹配') }
+        if (score === 0 && terms.length > 0 && !params.item) continue
+        allHits.push({
+          type: 'item_event', id: ie.id, title: `${ie.item} · ${ie.action}`,
+          snippet: ie.note || '', chapterNumber: ie.chapterNumber,
+          item: ie.item, characters: ie.actor ? [ie.actor] : undefined,
+          score, matchReasons: reasons,
+          isCurrent: !['destroyed', 'consumed', 'lost'].includes(ie.action),
+        })
+      }
+    }
+
+    // --- 章节摘要 ---
+    if (shouldSearch('chapter_summary')) {
+      const rows = db.prepare(
+        `SELECT * FROM canon_chapter_summaries
+         ${params.chapterRange ? 'WHERE chapter_number >= ? AND chapter_number <= ?' : ''}
+         ORDER BY chapter_number ASC`
+      ).all(...(params.chapterRange ? [params.chapterRange.from ?? 0, params.chapterRange.to ?? 999999] : [])) as ChapterSummaryRow[]
+      for (const row of rows) {
+        const haystack = `${row.title} ${row.summary}`
+        const hits = countTermHits(haystack, terms)
+        if (hits === 0 && terms.length > 0) continue
+        const score = 0.25 * (hits / terms.length)
+        allHits.push({
+          type: 'chapter_summary', title: `第${row.chapter_number}章 ${row.title || ''}`,
+          snippet: (row.summary || '').slice(0, 120), chapterNumber: row.chapter_number,
+          score, matchReasons: [`关键词命中 ${hits}/${terms.length}`], isCurrent: true,
+        })
+      }
+    }
+
+    // --- 分卷/阶段记忆 ---
+    if (shouldSearch('arc')) {
+      const arcs = CanonRepository.getArcs()
+      for (const a of arcs) {
+        const haystack = `${a.title} ${a.mainConflict} ${a.characterDevelopment} ${a.keyEvents} ${a.stageGoal}`
+        const hits = countTermHits(haystack, terms)
+        const reasons: string[] = []
+        let score = 0
+        if (hits > 0) { score += 0.3 * (hits / Math.max(terms.length, 1)); reasons.push(`关键词命中 ${hits}/${terms.length}`) }
+        if (params.chapterRange) {
+          const from = params.chapterRange.from ?? 0
+          const to = params.chapterRange.to ?? 999999
+          const overlaps = a.startChapter <= to && (a.endChapter === 0 || a.endChapter >= from)
+          if (overlaps) { score += 0.2; reasons.push('章节范围覆盖') }
+        }
+        if (score === 0 && terms.length > 0) continue
+        allHits.push({
+          type: 'arc', id: a.id, title: a.title,
+          snippet: a.mainConflict || a.stageGoal || a.characterDevelopment || '',
+          chapterNumber: a.startChapter,
+          score, matchReasons: reasons,
+          isCurrent: a.endChapter === 0,
+        })
+      }
+    }
+
+    // 排序：分数降序，同分按章节号升序
+    allHits.sort((a, b) => b.score - a.score || (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0))
+    const top = allHits.slice(0, limit)
+    return { hits: top, total: allHits.length, degraded: false, elapsedMs: Date.now() - start }
+  }
+
+  // ============================================================
+  // 第二阶段：原文证据定位
+  // ============================================================
+
+  /** 获取某章已定稿正文的段落列表（按换行分段） */
+  static getChapterParagraphs(chapterNumber: number): string[] {
+    const db = getProjectDb()
+    if (!db) return []
+    const draft = db.prepare(
+      `SELECT d.content_id FROM drafts d
+       WHERE d.chapter_number = ? AND d.status = 'finalized'
+       ORDER BY d.version DESC LIMIT 1`
+    ).get(chapterNumber) as { content_id: number } | undefined
+    if (!draft) return []
+    const content = db.prepare(`SELECT body FROM contents WHERE id = ?`).get(draft.content_id) as { body: string } | undefined
+    if (!content?.body) return []
+    return content.body.split(/\n+/).filter((p: string) => p.trim().length > 0)
+  }
+}
+
+// ============================================================
+// 行映射辅助函数（v10 新增类型）
+// ============================================================
+
+interface ArcRow {
+  id: number
+  title: string
+  start_chapter: number
+  end_chapter: number
+  main_conflict: string
+  character_development: string
+  key_events: string
+  stage_goal: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+function rowToArc(row: ArcRow): Arc {
+  return {
+    id: row.id,
+    title: row.title,
+    startChapter: row.start_chapter,
+    endChapter: row.end_chapter,
+    mainConflict: row.main_conflict,
+    characterDevelopment: row.character_development,
+    keyEvents: row.key_events,
+    stageGoal: row.stage_goal,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+interface CSHRow {
+  id: number
+  character: string
+  chapter_number: number
+  snapshot_json: string
+  created_at: string
+}
+
+function rowToCSH(row: CSHRow): CharacterStateHistoryEntry {
+  try {
+    return {
+      id: row.id,
+      character: row.character,
+      chapterNumber: row.chapter_number,
+      snapshot: JSON.parse(row.snapshot_json) as CharacterStateSnapshot,
+      createdAt: row.created_at,
+    }
+  } catch {
+    return {
+      id: row.id,
+      character: row.character,
+      chapterNumber: row.chapter_number,
+      snapshot: { character: row.character, location: '', powerLevel: '', physicalState: '', mentalState: '', keyItems: '', currentGoal: '', knowledge: [], relationships: {}, recentEvents: '', updatedAtChapter: row.chapter_number, updatedAt: row.created_at },
+      createdAt: row.created_at,
+    }
   }
 }

@@ -6,6 +6,7 @@
 import { useTranslation } from 'react-i18next'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sparkles, Zap } from 'lucide-react'
+import { Badge } from '../../ui/Badge'
 import { searchSlashCommands, type SlashCommand } from '../../../services/agent/intent-router'
 
 interface Props {
@@ -72,7 +73,7 @@ export default function SlashCommandMenu({ query, onSelect, onClose, position }:
         overflowY: 'auto',
         backgroundColor: 'var(--color-sidebar)',
         border: '1px solid var(--color-border)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        boxShadow: 'var(--shadow-popover)',
       }}
     >
       <div className="text-[0.68rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
@@ -102,15 +103,11 @@ export default function SlashCommandMenu({ query, onSelect, onClose, position }:
             </div>
           </div>
           {cmd.source === 'skill' && (
-            <span
-              className="text-[0.6rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
-              style={{
-                backgroundColor: 'rgba(var(--color-success-rgb), 0.12)',
-                color: 'var(--color-success)',
-              }}
-            >
+            /* 走 Badge 的 success 变体：此前手写胶囊用的是 --color-success 而非 -text，
+               在浅色主题下对比度偏低 */
+            <Badge variant="success" className="flex-shrink-0">
               Skill
-            </span>
+            </Badge>
           )}
         </button>
       ))}

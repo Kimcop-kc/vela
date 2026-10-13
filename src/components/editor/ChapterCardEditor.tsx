@@ -43,17 +43,17 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  高潮: 'bg-red-500/20 text-red-400',
-  冲突: 'bg-orange-500/20 text-orange-400',
-  转折: 'bg-purple-500/20 text-purple-400',
-  建置: 'bg-blue-500/20 text-blue-400',
-  收尾: 'bg-green-500/20 text-green-400',
-  climax: 'bg-red-500/20 text-red-400',
-  conflict: 'bg-orange-500/20 text-orange-400',
-  turning: 'bg-purple-500/20 text-purple-400',
-  setup: 'bg-blue-500/20 text-blue-400',
-  setupAlt: 'bg-blue-500/20 text-blue-400',
-  resolution: 'bg-green-500/20 text-green-400',
+  高潮: 'bg-[rgba(var(--color-rose-rgb),0.20)] text-[var(--color-rose)]',
+  冲突: 'bg-[rgba(var(--color-amber-rgb),0.20)] text-[var(--color-amber)]',
+  转折: 'bg-[rgba(var(--color-violet-rgb),0.20)] text-[var(--color-violet)]',
+  建置: 'bg-[rgba(var(--color-cyan-rgb),0.20)] text-[var(--color-cyan)]',
+  收尾: 'bg-[rgba(var(--color-mint-rgb),0.20)] text-[var(--color-mint)]',
+  climax: 'bg-[rgba(var(--color-rose-rgb),0.20)] text-[var(--color-rose)]',
+  conflict: 'bg-[rgba(var(--color-amber-rgb),0.20)] text-[var(--color-amber)]',
+  turning: 'bg-[rgba(var(--color-violet-rgb),0.20)] text-[var(--color-violet)]',
+  setup: 'bg-[rgba(var(--color-cyan-rgb),0.20)] text-[var(--color-cyan)]',
+  setupAlt: 'bg-[rgba(var(--color-cyan-rgb),0.20)] text-[var(--color-cyan)]',
+  resolution: 'bg-[rgba(var(--color-mint-rgb),0.20)] text-[var(--color-mint)]',
 }
 
 function sameStringList(a: string[], b: string[]): boolean {
@@ -497,7 +497,7 @@ function ChapterCardEditorSession() {
                   {bp.notes && (
                     <span
                       className="text-[0.7rem] px-1 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: 'rgb(34,197,94)' }}
+                      style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}
                       title={t('chapterCard.hasNotesTooltip')}
                     >
                       {t('chapterCard.hasNotes')}
@@ -644,7 +644,7 @@ function ChapterCardEditorSession() {
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-border)',
-                    backgroundColor: 'rgba(34,197,94,0.04)',
+                    backgroundColor: 'rgba(var(--color-success-rgb), 0.04)',
                   }}
                 >
                   <Label className="flex items-center gap-1.5">

@@ -38,6 +38,11 @@ export interface WorkflowRun {
   /**
    * 步骤间共享数据的快照（每个步骤结束后同步一次）。
    * 供界面只读展示，例如写稿的「本次上下文」预览（data.contextPreview）。
+   *
+   * 第三阶段追加（都在写稿命令里写入）：
+   *   data.chapterContextPack     —— 本章资料包（十类资料 + 预算 + 缺失/冲突提示）
+   *   data.chapterContextSections —— 逐段明细（来源定位 / 选取理由 / 排除原因）
+   *   data.chapterContextPreview  —— 真正发送给模型的最终请求（逐轮 messages）
    */
   data?: Record<string, unknown>
 }

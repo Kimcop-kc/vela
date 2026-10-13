@@ -1,6 +1,6 @@
 {
   "name": "vela",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Vela - AI 深度驱动的小说创作 IDE",
   "author": "Kimcop-kc",
   "private": true,
@@ -19,7 +19,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "theme:preview": "vite build --config tools/theme-preview/vite.config.ts && node tools/theme-preview/shoot.mjs",
+    "theme:contrast": "vite build --config tools/theme-preview/vite.config.ts && node tools/theme-preview/verify-contrast.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",

@@ -1,6 +1,15 @@
 import i18n from '../i18n'
 
 /**
+ * 当前界面语言的 BCP-47 标识。
+ * 之前这里写的是 `i18n.language === 'en' ? 'en-US' : 'zh-CN'`，
+ * 于是俄语界面下超过 7 天的时间会落到中文日期格式（「9月12日」）。
+ */
+function currentLocale(): string {
+  return i18n.language === 'en' ? 'en-US' : i18n.language === 'ru' ? 'ru-RU' : 'zh-CN'
+}
+
+/**
  * 格式化相对时间（如：刚刚 / 5分钟前 / 2小时前 / 3天前）
  */
 export function formatRelativeTime(timestamp: number): string {
@@ -14,15 +23,14 @@ export function formatRelativeTime(timestamp: number): string {
   if (minutes < 60) return i18n.t('minutesAgo', { ns: 'common', count: minutes })
   if (hours < 24) return i18n.t('hoursAgo', { ns: 'common', count: hours })
   if (days < 7) return i18n.t('daysAgo', { ns: 'common', count: days })
-  return new Date(timestamp).toLocaleDateString(i18n.language === 'en' ? 'en-US' : 'zh-CN', { month: 'short', day: 'numeric' })
+  return new Date(timestamp).toLocaleDateString(currentLocale(), { month: 'short', day: 'numeric' })
 }
 
 /**
  * 格式化日期为本地化字符串
  */
 export function formatDate(timestamp: number, options?: Intl.DateTimeFormatOptions): string {
-  const locale = i18n.language === 'en' ? 'en-US' : 'zh-CN'
-  return new Date(timestamp).toLocaleString(locale, options ?? {
+  return new Date(timestamp).toLocaleString(currentLocale(), options ?? {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

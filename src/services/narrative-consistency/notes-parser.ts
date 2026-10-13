@@ -51,6 +51,33 @@ function cleanLine(line: string): { tag: string; text: string } {
   return { tag: '', text: withoutBullet }
 }
 
+/**
+ * [P0-1 补全] 从「角色动态」单元格文本里提取该角色在本章获知的信息。
+ *
+ * 背景：要点路径产出的 CharacterStateDelta 只有 recentEvents，
+ * knowledge 恒为空 → 一致性检查器的知识越权校验拿不到数据。
+ * 这里把单元格里带「得知/发现/意识到」等线索的短句抽出来补上。
+ */
+const KNOWLEDGE_CUES = [
+  '得知', '知道了', '知道', '了解到', '获悉', '听说', '听到',
+  '发现', '意识到', '明白', '认清', '看透', '察觉', '想起', '记起',
+]
+
+function knowledgeIn(cellText: string): string[] | undefined {
+  if (!cellText) return undefined
+  const found: string[] = []
+  for (const segment of cellText.split(/[；;。\n]/)) {
+    const text = segment.trim()
+    if (text.length < 4) continue
+    if (!KNOWLEDGE_CUES.some(cue => text.includes(cue))) continue
+    if (/(饿了|渴了|累了|困了|疼痛|寒冷|炎热)/.test(text)) continue
+    const item = text.slice(0, 60)
+    if (!found.includes(item)) found.push(item)
+    if (found.length >= 10) break
+  }
+  return found.length > 0 ? found : undefined
+}
+
 /** 文本里出现的已知角色名（按名字长度优先，避免短名误判） */
 function namesIn(text: string, knownNames: string[]): string[] {
   return knownNames
@@ -126,7 +153,7 @@ export function parseChapterNotes(
     characterDeltas.push({
       character: name,
       chapterNumber: ctx.chapterNumber,
-      after: { recentEvents: state.slice(0, 300) },
+      after: { recentEvents: state.slice(0, 300), knowledge: knowledgeIn(state) },
     })
   }
 

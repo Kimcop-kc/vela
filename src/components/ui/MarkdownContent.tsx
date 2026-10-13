@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { memo, useRef, useState } from 'react'
 import { Brain, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -7,11 +7,15 @@ interface MarkdownContentProps {
   streaming?: boolean
 }
 
-/** 
+/**
  * Markdown 渲染组件（含 <think> 思考过程折叠支持）
  * 用于 Agent 对话、AI 输出面板的正文格式化显示
+ *
+ * 用 memo 包住：本组件是纯函数式渲染，props 只有两个原始值，比较成本可以忽略；
+ * 但一次渲染要把整段文本重新解析成 React 元素（实测约 0.76ms/KB），
+ * 父组件因为无关状态重渲染时不该白白付这笔钱。
  */
-export default function MarkdownContent({ content, streaming }: MarkdownContentProps) {
+function MarkdownContent({ content, streaming }: MarkdownContentProps) {
   const { t } = useTranslation('editors')
   // 解析 <think> 标签：将内容拆分为 [thinking?, ...markdownSegments]
   const segments = parseThinkSegments(content)
@@ -31,6 +35,8 @@ export default function MarkdownContent({ content, streaming }: MarkdownContentP
     </div>
   )
 }
+
+export default memo(MarkdownContent)
 
 /** 渲染行列表为 React 元素 */
 function renderLines(lines: string[], t: (key: string) => string): React.ReactNode {
@@ -183,7 +189,7 @@ function renderInline(text: string): React.ReactNode {
           className="px-1 py-0.5 rounded text-xs font-mono"
           style={{
             backgroundColor: 'var(--color-hover)',
-            color: 'var(--color-accent)',
+            color: 'var(--color-info-text)',
             border: '1px solid var(--color-border)',
           }}
         >
@@ -225,7 +231,7 @@ function CodeBlock({ lang, code, t }: { lang: string; code: string; t: (key: str
           borderBottom: '1px solid var(--color-border)',
         }}
       >
-        <span className="text-[0.7rem] font-mono" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="text-[0.7rem] font-mono" style={{ color: 'var(--color-text-secondary)' }}>
           {lang || 'text'}
         </span>
         <button

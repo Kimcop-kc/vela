@@ -104,6 +104,22 @@ type PersistedAgentState = Pick<AgentState, 'conversations' | 'activeConversatio
 const AGENT_PERSIST_DELAY_MS = 600
 let flushAgentPersistenceNow: (() => Promise<void>) | null = null
 
+/**
+ * 流式正文的合并窗口。
+ *
+ * 每合并一次就要把「当前累计全文」整段重新渲染成 React 元素（实测约 0.76ms/KB，
+ * 见 src/components/__tests__/markdown-render-cost.perf.ts）。固定 40ms 窗口在短回复上
+ * 很流畅，但正文长到几十 KB 时单帧渲染本身就会超过 40ms，主线程反而被压满、输入变卡。
+ * 所以按待渲染文本量放宽窗口：长文本来也读不过来，降低刷新频率体感没有损失。
+ *
+ * 导出仅为便于单测（渲染成本基准在 src/components/__tests__/markdown-render-cost.perf.ts）。
+ */
+export function assistantFlushDelayMs(contentLength: number): number {
+  if (contentLength > 32_000) return 160
+  if (contentLength > 8_000) return 80
+  return 40
+}
+
 function createAgentPersistStorage(): PersistStorage<PersistedAgentState> {
   let timer: ReturnType<typeof setTimeout> | null = null
   let pending: { state: PersistedAgentState; version?: number } | null = null
@@ -479,6 +495,8 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
     let assistantTextTimer: ReturnType<typeof setTimeout> | null = null
     let streamFinished = false
     let requestController: AbortController | null = null
+    /** 已经渲染进消息里的正文长度，用来决定刷新窗口（见 assistantFlushDelayMs） */
+    let renderedLength = assistantMsg.content.length
 
     const stopAssistantTextTimer = () => {
       if (assistantTextTimer) {
@@ -496,13 +514,14 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
       if (!pendingAssistantText) return
       const text = pendingAssistantText
       pendingAssistantText = ''
+      renderedLength += text.length
       updateAssistantMsg(m => ({ ...m, content: m.content + text }))
     }
 
     const queueAssistantText = (text: string) => {
       pendingAssistantText += text
       if (!assistantTextTimer) {
-        assistantTextTimer = setTimeout(flushAssistantText, 40)
+        assistantTextTimer = setTimeout(flushAssistantText, assistantFlushDelayMs(renderedLength + pendingAssistantText.length))
       }
     }
 

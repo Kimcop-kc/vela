@@ -64,6 +64,8 @@
   "sidebarRenderError": "Ошибка рендеринга боковой панели",
   "editorRenderError": "Ошибка рендеринга редактора",
   "aiPanelRenderError": "Ошибка рендеринга панели AI",
+  "bottomPanelRenderError": "Ошибка рендеринга нижней панели",
+  "dialogRenderError": "Ошибка рендеринга диалога",
   "justNow": "только что",
   "minutesAgo": "{{count}} мин. назад",
   "hoursAgo": "{{count}} ч. назад",

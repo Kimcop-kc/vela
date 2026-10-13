@@ -278,7 +278,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               size="sm"
               disabled={extracting}
               onClick={handleExtractCharacters}
-              className="gap-1.5 bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm hover:from-red-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+              className="gap-1.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning-text)] text-[var(--color-on-error)] shadow-sm hover:brightness-110 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
               title={t('archFile.rolesEmptyTooltip')}
             >
               {extracting

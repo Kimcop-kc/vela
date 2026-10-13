@@ -5,6 +5,18 @@ import i18n from '../i18n'
 
 export type Theme = 'light' | 'galaxy' | 'paper' | 'dark' | 'ocean'
 
+/**
+ * 编辑画布外观。
+ * - `follow`：跟随工作台主题（沿用当前主题的 --color-editor-* / --color-text 等）
+ * - `paper`：浅色纸稿，无论工作台是深是浅，编辑画布都是一张暖白纸
+ * - `dark`：深色编辑器，编辑画布固定为深色
+ *
+ * 只作用于「编辑画布」容器（EditorArea 主体），不改变工作台其余部分 ——
+ * `--color-editor-bg` 同时被欢迎页、知识库等 16 处非编辑器页面引用，
+ * 因此绝不能在 html / body 上整体覆盖它。
+ */
+export type EditorAppearance = 'follow' | 'paper' | 'dark'
+
 // ─── 共享字体库 ─────────────────────────────────────────────────────────────
 
 /** 内置字体 ID（界面字体和写作字体共享同一张清单） */
@@ -89,6 +101,40 @@ const ZOOM_MAX = 1.5
 /** 基准 font-size（未缩放时 html 的字号，px） */
 const BASE_FONT_SIZE = 14 as const
 
+// ─── 正文字号常量 ─────────────────────────────────────────────────────────
+
+export const EDITOR_FONT_SIZE_MIN = 14
+export const EDITOR_FONT_SIZE_MAX = 24
+/** 与 CodeMirrorEditor 里 `var(--editor-font-size, 16px)` 的兜底值保持一致 */
+export const EDITOR_FONT_SIZE_DEFAULT = 16
+
+// ─── 阅读设置常量 ─────────────────────────────────────────────────────────
+// 每个默认值都刻意等于改造前 CodeMirrorEditor 里的硬编码值，
+// 这样「装上即与旧版渲染一致」，用户不动设置就不会看到任何视觉变化。
+
+export const EDITOR_LINE_HEIGHT_MIN = 1.4
+export const EDITOR_LINE_HEIGHT_MAX = 2.4
+export const EDITOR_LINE_HEIGHT_DEFAULT = 1.8
+
+/** 纸面宽度（正文栏最大宽度，px） */
+export const EDITOR_MAX_WIDTH_MIN = 560
+export const EDITOR_MAX_WIDTH_MAX = 1200
+export const EDITOR_MAX_WIDTH_DEFAULT = 800
+
+/** 段落间距（em，作用于每个段落底部） */
+export const EDITOR_PARAGRAPH_SPACING_MIN = 0
+export const EDITOR_PARAGRAPH_SPACING_MAX = 1.5
+export const EDITOR_PARAGRAPH_SPACING_DEFAULT = 0
+
+/** 把数值钳制到 [min, max] 并保留 `digits` 位小数；非有限值返回 null 表示「忽略本次输入」 */
+function clampNumber(value: number, min: number, max: number, digits: number): number | null {
+  // 这些值会被拼进 CSS 变量并写入持久化存储，非有限值一律忽略，
+  // 否则 NaN 会一路传播成 `--editor-line-height: NaN` 并永久污染 localStorage。
+  if (!Number.isFinite(value)) return null
+  const factor = 10 ** digits
+  return Math.round(Math.max(min, Math.min(max, value)) * factor) / factor
+}
+
 // ─── Store 类型 ──────────────────────────────────────────────────────────
 
 interface ThemeState {
@@ -102,6 +148,16 @@ interface ThemeState {
   writingFont: FontId
   /** 当前界面字体（UI 全局 → --font-sans） */
   uiFont: FontId
+  /** 编辑画布外观（跟随工作台 / 浅色纸稿 / 深色编辑器） */
+  editorAppearance: EditorAppearance
+  /** 正文字号（px），仅作用于 prose 模式的编辑画布 */
+  editorFontSize: number
+  /** 正文行高（倍数） */
+  editorLineHeight: number
+  /** 纸面宽度（正文栏最大宽度，px） */
+  editorMaxWidth: number
+  /** 段落间距（em） */
+  editorParagraphSpacing: number
   /** 设置主题 */
   setTheme: (theme: Theme) => void
   /** 初始化主题监听 */
@@ -118,6 +174,16 @@ interface ThemeState {
   setWritingFont: (font: FontId) => void
   /** 设置界面字体 */
   setUiFont: (font: FontId) => void
+  /** 设置编辑画布外观 */
+  setEditorAppearance: (appearance: EditorAppearance) => void
+  /** 设置正文字号（自动钳制到 [EDITOR_FONT_SIZE_MIN, EDITOR_FONT_SIZE_MAX]） */
+  setEditorFontSize: (size: number) => void
+  /** 设置正文行高（自动钳制到 [EDITOR_LINE_HEIGHT_MIN, EDITOR_LINE_HEIGHT_MAX]） */
+  setEditorLineHeight: (value: number) => void
+  /** 设置纸面宽度（自动钳制到 [EDITOR_MAX_WIDTH_MIN, EDITOR_MAX_WIDTH_MAX]） */
+  setEditorMaxWidth: (value: number) => void
+  /** 设置段落间距（自动钳制到 [EDITOR_PARAGRAPH_SPACING_MIN, EDITOR_PARAGRAPH_SPACING_MAX]） */
+  setEditorParagraphSpacing: (value: number) => void
 }
 
 // ─── Store ───────────────────────────────────────────────────────────────
@@ -130,6 +196,11 @@ export const useThemeStore = create<ThemeState>()(
       zoom: 1.0,
       writingFont: 'lxgw-wenkai',
       uiFont: 'segoe',
+      editorAppearance: 'follow',
+      editorFontSize: EDITOR_FONT_SIZE_DEFAULT,
+      editorLineHeight: EDITOR_LINE_HEIGHT_DEFAULT,
+      editorMaxWidth: EDITOR_MAX_WIDTH_DEFAULT,
+      editorParagraphSpacing: EDITOR_PARAGRAPH_SPACING_DEFAULT,
 
       setTheme: (theme: Theme) => {
         const resolved = resolveTheme(theme)
@@ -202,6 +273,34 @@ export const useThemeStore = create<ThemeState>()(
         set({ uiFont: font })
         applyUiFont(font)
       },
+
+      setEditorAppearance: (appearance: EditorAppearance) => {
+        set({ editorAppearance: appearance })
+      },
+
+      setEditorFontSize: (size: number) => {
+        const next = clampNumber(size, EDITOR_FONT_SIZE_MIN, EDITOR_FONT_SIZE_MAX, 0)
+        if (next === null) return
+        set({ editorFontSize: next })
+      },
+
+      setEditorLineHeight: (value: number) => {
+        const next = clampNumber(value, EDITOR_LINE_HEIGHT_MIN, EDITOR_LINE_HEIGHT_MAX, 1)
+        if (next === null) return
+        set({ editorLineHeight: next })
+      },
+
+      setEditorMaxWidth: (value: number) => {
+        const next = clampNumber(value, EDITOR_MAX_WIDTH_MIN, EDITOR_MAX_WIDTH_MAX, 0)
+        if (next === null) return
+        set({ editorMaxWidth: next })
+      },
+
+      setEditorParagraphSpacing: (value: number) => {
+        const next = clampNumber(value, EDITOR_PARAGRAPH_SPACING_MIN, EDITOR_PARAGRAPH_SPACING_MAX, 1)
+        if (next === null) return
+        set({ editorParagraphSpacing: next })
+      },
     }),
     {
       name: 'vela-theme',
@@ -210,6 +309,11 @@ export const useThemeStore = create<ThemeState>()(
         zoom: state.zoom,
         writingFont: state.writingFont,
         uiFont: state.uiFont,
+        editorAppearance: state.editorAppearance,
+        editorFontSize: state.editorFontSize,
+        editorLineHeight: state.editorLineHeight,
+        editorMaxWidth: state.editorMaxWidth,
+        editorParagraphSpacing: state.editorParagraphSpacing,
       }),
     }
   )

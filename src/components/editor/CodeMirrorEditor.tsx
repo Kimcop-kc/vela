@@ -38,6 +38,8 @@ type AiAction = {
 export type CodeMirrorEditorProps = {
   content: string
   filePath?: string
+  /** 本章章节号：用于在选区改写/续写时注入正史上下文（不传则退化为纯选区操作） */
+  chapterNumber?: number
   editable?: boolean
   onChange?: (content: string) => void
   onSave?: (content: string) => Promise<void> | void
@@ -49,6 +51,7 @@ export type CodeMirrorEditorProps = {
 
 export default function CodeMirrorEditor({
   content,
+  chapterNumber,
   editable = true,
   onChange,
   onSave,
@@ -59,10 +62,10 @@ export default function CodeMirrorEditor({
   const editorRef = useRef<ReactCodeMirrorRef>(null)
 
   const AI_ACTIONS = useMemo<AiAction[]>(() => [
-    { key: 'refine', label: t('codeMirrorEditor.aiRefine'), color: 'text-blue-400', prompt: t('codeMirrorEditor.aiRefinePrompt'), mode: 'replace', purpose: 'refine_selection' },
-    { key: 'expand', label: t('codeMirrorEditor.aiExpand'), color: 'text-amber-400', prompt: t('codeMirrorEditor.aiExpandPrompt'), mode: 'replace', purpose: 'refine_selection' },
-    { key: 'continue', label: t('codeMirrorEditor.aiContinue'), color: 'text-purple-400', prompt: t('codeMirrorEditor.aiContinuePrompt'), mode: 'append', purpose: 'generate_selection_continuation' },
-    { key: 'dialogue', label: t('codeMirrorEditor.aiDialogue'), color: 'text-emerald-400', prompt: t('codeMirrorEditor.aiDialoguePrompt'), mode: 'replace', purpose: 'refine_selection' },
+    { key: 'refine', label: t('codeMirrorEditor.aiRefine'), color: 'text-[var(--color-cyan)]', prompt: t('codeMirrorEditor.aiRefinePrompt'), mode: 'replace', purpose: 'refine_selection' },
+    { key: 'expand', label: t('codeMirrorEditor.aiExpand'), color: 'text-[var(--color-gold)]', prompt: t('codeMirrorEditor.aiExpandPrompt'), mode: 'replace', purpose: 'refine_selection' },
+    { key: 'continue', label: t('codeMirrorEditor.aiContinue'), color: 'text-[var(--color-violet)]', prompt: t('codeMirrorEditor.aiContinuePrompt'), mode: 'append', purpose: 'generate_selection_continuation' },
+    { key: 'dialogue', label: t('codeMirrorEditor.aiDialogue'), color: 'text-[var(--color-mint)]', prompt: t('codeMirrorEditor.aiDialoguePrompt'), mode: 'replace', purpose: 'refine_selection' },
     { key: 'deai', label: t('codeMirrorEditor.aiDeai'), color: 'text-rose-400', prompt: t('codeMirrorEditor.aiDeaiPrompt'), mode: 'replace', purpose: 'deai_revise' },
   ], [t])
 
@@ -270,7 +273,9 @@ export default function CodeMirrorEditor({
       height: "100%",
       // prose/document 都是写作场景，使用写作字体
       // 其他模式（如代码等）继承父元素 UI 字体
-      fontSize: mode === 'prose' ? "16px" : "14px",
+      // 正文字号由 theme-store.editorFontSize 经 EditorArea 注入 --editor-font-size；
+      // 兜底值 16px 与 EDITOR_FONT_SIZE_DEFAULT 保持一致
+      fontSize: mode === 'prose' ? "var(--editor-font-size, 16px)" : "14px",
       backgroundColor: "transparent",
       fontFamily: (mode === 'prose' || mode === 'document') ? "var(--font-writing)" : "inherit"
     },
@@ -281,17 +286,21 @@ export default function CodeMirrorEditor({
     },
     ".cm-content": {
       width: "100%",
-      maxWidth: "800px",
+      // 纸面宽度 / 行高 / 段落间距由 theme-store 的阅读设置经 EditorArea 注入，
+      // 兜底值与各自的 *_DEFAULT 常量保持一致（800px / 1.8 / 0）
+      maxWidth: "var(--editor-max-width, 800px)",
       margin: "0 auto",
       padding: "40px",
-      lineHeight: "1.8",
+      lineHeight: "var(--editor-line-height, 1.8)",
       color: "var(--color-text)",
     },
     "&.cm-focused": { outline: "none" },
     ".cm-cursor": { borderLeftColor: "var(--color-accent)", borderLeftWidth: "2px" },
     ".cm-activeLine": { backgroundColor: "transparent" },
     ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-hover) !important" },
-    ".cm-line": { padding: "0" },
+    // 每个 .cm-line 就是文档里的一个自然段（CodeMirror 的软换行在同一行元素内完成），
+    // 因此给行底加内边距即等于「段落间距」。
+    ".cm-line": { padding: "0 0 var(--editor-paragraph-spacing, 0) 0" },
   }), [mode])
 
   // 构建扩展
@@ -362,6 +371,34 @@ export default function CodeMirrorEditor({
       ? `${t('codeMirrorEditor.aiExtraLabel')}${extraText}\n${action.prompt}`
       : action.prompt
     const userParts = [`${t('codeMirrorEditor.aiRequirementLabel')}${instruction}`]
+    // 选区改写同样受正史约束（第三阶段）：注入与章节生成同一套 Canon 资料包，
+    // 避免「在编辑器里改一段」绕过人物状态、认知边界与伏笔约束。
+    // 取不到章节号或 Canon 时静默退化为纯选区操作，不阻断原有功能。
+    let packRendered = ''
+    if (chapterNumber && chapterNumber > 0) {
+      try {
+        const [{ loadChapterCanon }, { buildChapterContextPack, renderContextPack }] = await Promise.all([
+          import('../../services/reconstruct/canon-adapter'),
+          import('../../services/workflows/chapter-context-pack'),
+        ])
+        const canon = await loadChapterCanon({
+          chapterNumber,
+          chapterGoal: action.label,
+          keywords: [...new Set([selectedText.slice(0, 200)])],
+        })
+        if (canon.canon) {
+          const pack = buildChapterContextPack({
+            chapterNumber,
+            canon: canon.canon,
+            chapterGoal: `${action.label}（编辑器选区操作）`,
+            userGuidance: instruction,
+            focusCharacters: canon.canon.characterStates.map(state => state.character),
+          })
+          packRendered = renderContextPack(pack)
+        }
+      } catch { /* Canon 不可用时退化为纯选区操作 */ }
+    }
+    if (packRendered) userParts.push(`${t('codeMirrorEditor.aiCanonLabel')}\n${packRendered}`)
     if (before) userParts.push(`${t('codeMirrorEditor.aiContextBeforeLabel')}\n${before}`)
     userParts.push(`${t('codeMirrorEditor.aiSelectionLabel')}\n${selectedText}`)
     if (after) userParts.push(`${t('codeMirrorEditor.aiContextAfterLabel')}\n${after}`)

@@ -23,6 +23,7 @@ import {
 } from '../../services/prompt-templates'
 import { useProjectStore } from '../../stores/project-store'
 import { Button } from '../ui/Button'
+import { Badge, type BadgeVariant } from '../ui/Badge'
 import { cn } from '../../lib/utils'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -36,11 +37,12 @@ function getVariableDesc(varName: string, fallback: string): string {
 
 // ==================== 来源标签配置 ====================
 
-const SOURCE_CONFIG = {
-  builtin: { labelKey: 'prompts.builtin', color: 'var(--color-text-muted)', bg: 'var(--color-hover)' },
-  global: { labelKey: 'prompts.global', color: 'var(--color-info-text)', bg: 'var(--color-accent-soft)' },
-  project: { labelKey: 'prompts.project', color: 'var(--color-warning-text)', bg: 'rgba(var(--color-warning-rgb), 0.12)' },
-} as const
+/** 来源标签：builtin 中性、global 告知、project 需留意（项目级会盖过全局） */
+const SOURCE_CONFIG: Record<'builtin' | 'global' | 'project', { labelKey: string; variant: BadgeVariant }> = {
+  builtin: { labelKey: 'prompts.builtin', variant: 'outline' },
+  global: { labelKey: 'prompts.global', variant: 'info' },
+  project: { labelKey: 'prompts.project', variant: 'warning' },
+}
 
 // ==================== 主组件 ====================
 
@@ -290,12 +292,9 @@ function TemplateItem({
             <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
               {getPromptName(builtinTemplate.key)}
             </span>
-            <span
-              className="text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
-              style={{ color: sourceConf.color, backgroundColor: sourceConf.bg }}
-            >
+            <Badge variant={sourceConf.variant} className="flex-shrink-0">
               {t(sourceConf.labelKey)}
-            </span>
+            </Badge>
           </div>
           <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
             {getPromptDescription(builtinTemplate.key)}
@@ -319,7 +318,7 @@ function TemplateItem({
                     key={varName}
                     onClick={() => insertVariable(varName)}
                     title={translatedDesc}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.68rem] transition-colors hover:bg-[var(--color-accent)] hover:text-white outline-none focus:outline-none"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.68rem] transition-colors hover:bg-[var(--color-accent)] hover:text-[var(--color-on-accent)] outline-none focus:outline-none"
                     style={{
                       backgroundColor: 'var(--color-hover)',
                       color: 'var(--color-text-secondary)',
@@ -484,8 +483,8 @@ function TemplateItem({
               className={cn(
                 'text-xs px-3 py-1.5 rounded-lg',
                 saveResult.type === 'success'
-                  ? 'bg-green-500/10 text-green-500 border border-green-500/20'
-                  : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                  ? 'bg-[rgba(var(--color-success-rgb),0.10)] text-[var(--color-success)] border border-[rgba(var(--color-success-rgb),0.20)]'
+                  : 'bg-[rgba(var(--color-error-rgb),0.10)] text-[var(--color-error)] border border-[rgba(var(--color-error-rgb),0.20)]'
               )}
             >
               <span className="inline-flex items-center gap-1.5">

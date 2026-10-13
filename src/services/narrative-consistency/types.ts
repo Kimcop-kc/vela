@@ -111,6 +111,10 @@ export interface Fact {
   confirmedAt?: string | null
   /** 最后一次变更时间（状态、确认、写回都会更新） */
   updatedAt?: string | null
+  /** [v10] 事实在原文章节中的段落索引（-1 = 未定位） */
+  sourceParagraphIndex?: number
+  /** [v10] 所属分卷 id（可空） */
+  arcId?: number
 }
 
 /** 生成前注入的 CanonContext —— 按固定优先级排序 */
@@ -131,6 +135,8 @@ export interface CanonContext {
   chapterGoal: string
   /** 已知事实摘要（短文本） */
   knownFacts: Fact[]
+  /** [v10] 当前章节所属分卷/阶段记忆（本卷矛盾、人物发展、阶段性目标） */
+  currentArc?: Arc
   /** 物品流转台账（获得 / 转交 / 丢失 / 损毁 / 消耗），用于防止道具凭空出现或消失 */
   itemLedger?: string
   /** 境界阶梯（由低到高：能做到什么 / 做不到什么 / 怎么突破），用于约束战斗与突破描写 */
@@ -147,6 +153,21 @@ export interface CanonContext {
   globalGuidance: string
   /** 硬性约束（生成约束清单） */
   hardConstraints: string
+  /**
+   * 第三阶段：逐条追溯用的原始来源快照。
+   *
+   * 渲染好的段落（itemLedger / realmLadder / locationMap 等）只够喂模型，
+   * 而「本章上下文预览」需要知道每条来自哪张表、第几章——这里保留原始行，
+   * 让上游不必再查一遍数据库，也不会因为重查而得到与本次注入不一致的结果。
+   */
+  contextSources?: {
+    summaries: ChapterSummary[]
+    itemEvents: ItemEvent[]
+    realms: Realm[]
+    locations: Location[]
+    /** 构建过程中发现的资料缺失/未来泄漏等问题 */
+    warnings: string[]
+  }
   /** 元数据：构造时间 / 章节号 */
   meta: {
     chapterNumber: number
@@ -314,4 +335,117 @@ export interface ChapterSummary {
   title: string
   summary: string
   createdAt: string
+}
+
+// ============================================================
+// 第二阶段：分层记忆与精准检索
+// ============================================================
+
+/** 分卷/阶段记忆 */
+export interface Arc {
+  id?: number
+  /** 卷名（如「第一卷·风起青云」） */
+  title: string
+  /** 起始章节号 */
+  startChapter: number
+  /** 结束章节号（0 或未设=进行中） */
+  endChapter: number
+  /** 本卷主要矛盾 */
+  mainConflict: string
+  /** 人物发展概要 */
+  characterDevelopment: string
+  /** 关键事件列表 */
+  keyEvents: string
+  /** 阶段性目标 */
+  stageGoal: string
+  /** 排序序号 */
+  sortOrder: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** 角色状态历史快照（每次写回留痕） */
+export interface CharacterStateHistoryEntry {
+  id?: number
+  character: string
+  chapterNumber: number
+  /** 完整状态快照（JSON） */
+  snapshot: CharacterStateSnapshot
+  createdAt?: string
+}
+
+/** 统一检索的命中来源类型 */
+export type MemoryHitType =
+  | 'fact'
+  | 'timeline'
+  | 'character_state'
+  | 'character_history'
+  | 'plot_line'
+  | 'item_event'
+  | 'chapter_summary'
+  | 'arc'
+
+/** 统一检索的单条命中 */
+export interface MemorySearchHit {
+  /** 命中类型 */
+  type: MemoryHitType
+  /** 数据库 id（如有） */
+  id?: number
+  /** 显示标题 */
+  title: string
+  /** 命中内容摘要 */
+  snippet: string
+  /** 来源章节号 */
+  chapterNumber?: number
+  /** 涉及角色 */
+  characters?: string[]
+  /** 关联物品 */
+  item?: string
+  /** 记忆状态（仅 fact 有效） */
+  status?: string
+  /** 是否作者确认（仅 fact 有效） */
+  confirmed?: boolean
+  /** 相关度分数（0-1，越高越相关） */
+  score: number
+  /** 命中原因（人类可读） */
+  matchReasons: string[]
+  /** 是否当前有效（false = 历史/过期/已废弃） */
+  isCurrent: boolean
+  /** 冲突标记（如有） */
+  conflictsWith?: string[]
+  /** 原文定位（章节号 + 段落索引，如有） */
+  sourceLocation?: {
+    chapterNumber: number
+    paragraphIndex: number
+  }
+}
+
+/** 统一检索请求 */
+export interface MemorySearchParams {
+  /** 搜索文本 */
+  query: string
+  /** 限定类型（不设=全部） */
+  types?: MemoryHitType[]
+  /** 限定角色名（含别名匹配） */
+  character?: string
+  /** 限定章节范围 */
+  chapterRange?: { from?: number; to?: number }
+  /** 限定物品 */
+  item?: string
+  /** 是否包含历史/过期记忆（默认 false） */
+  includeHistorical?: boolean
+  /** 最大返回数 */
+  limit?: number
+}
+
+/** 统一检索结果 */
+export interface MemorySearchResult {
+  hits: MemorySearchHit[]
+  total: number
+  /** 搜索是否降级（如向量检索不可用时退化为关键词） */
+  degraded: boolean
+  /** 降级原因 */
+  degradeReason?: string
+  /** 查询耗时（ms） */
+  elapsedMs: number
 }

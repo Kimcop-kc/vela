@@ -9,14 +9,14 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['default', 'success', 'warning', 'error', 'outline', 'solid'],
+      options: ['default', 'info', 'success', 'warning', 'error', 'outline', 'solid'],
       description: 'Badge visual style',
     },
   },
   parameters: {
     docs: {
       description: {
-        component: 'Vela badge component for status indicators and labels. Supports 6 semantic variants.',
+        component: 'Vela badge component for status indicators and labels. Supports 7 semantic variants.',
       },
     },
   },
@@ -36,6 +36,7 @@ export const AllVariants: Story = {
   render: () => (
     <div className="flex flex-wrap gap-3">
       <Badge variant="default">Default</Badge>
+      <Badge variant="info">Info</Badge>
       <Badge variant="success">Success</Badge>
       <Badge variant="warning">Warning</Badge>
       <Badge variant="error">Error</Badge>

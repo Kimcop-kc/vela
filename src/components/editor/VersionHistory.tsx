@@ -109,10 +109,10 @@ export default function VersionHistory() {
   }
 
   const TYPE_COLORS: Record<string, string> = {
-    draft: 'bg-blue-500/20 text-blue-400',
-    refined: 'bg-yellow-500/20 text-yellow-400',
-    reviewed: 'bg-purple-500/20 text-purple-400',
-    final: 'bg-green-500/20 text-green-400',
+    draft: 'bg-[rgba(var(--color-cyan-rgb),0.20)] text-[var(--color-cyan)]',
+    refined: 'bg-[rgba(var(--color-gold-rgb),0.20)] text-[var(--color-gold)]',
+    reviewed: 'bg-[rgba(var(--color-violet-rgb),0.20)] text-[var(--color-violet)]',
+    final: 'bg-[rgba(var(--color-mint-rgb),0.20)] text-[var(--color-mint)]',
   }
 
   if (loading) {

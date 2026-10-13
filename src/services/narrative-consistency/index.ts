@@ -16,11 +16,14 @@ export { CanonStore, canonStore } from './canon-store'
 export {
   buildCanonContext,
   renderCanonContext,
+  buildContextInjectionManifest,
   HARD_CONSTRAINTS,
   ARCHITECTURE_FIELD_LIMITS,
   clampArchitectureField,
   clampSynopsisForChapter,
   type BuildCanonContextParams,
+  type ContextInjectionManifest,
+  type FactInjectionManifest,
 } from './context-builder'
 export {
   validateChapter,
@@ -59,3 +62,17 @@ export {
   filterTemporaryDescriptorNames,
 } from './character-name-filter'
 export { detectFactConflict, type FactLike } from './fact-conflict'
+// 第三阶段：本章上下文资料包（十类资料 / 优先级 / 预算 / 冲突与缺失提示）
+export {
+  buildChapterContextPack,
+  renderContextPack,
+  isContextPackStale,
+  SECTION_PRIORITY,
+  type ChapterContextPack,
+  type BuildContextPackParams,
+  type ContextItem,
+  type ContextSection,
+  type ContextSectionKey,
+  type ContextNotice,
+  type ContextPackBudget,
+} from '../workflows/chapter-context-pack'

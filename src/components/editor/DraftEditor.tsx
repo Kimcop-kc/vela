@@ -714,6 +714,7 @@ export default function DraftEditor({ filePath, content }: Props) {
           mode="prose"
           content={content}
           filePath={filePath}
+          chapterNumber={meta?.chapterNumber}
           editable={!isReadonly && !isChapterBusy}
           hideStatusBar
           onCharCountChange={setCharCount}

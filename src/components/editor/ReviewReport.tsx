@@ -227,22 +227,22 @@ const SEVERITY_META: Record<ReviewIssue['severity'], {
   borderClass: string
 }> = {
   error: {
-    dotClass: 'bg-red-400',
-    colorClass: 'text-red-400',
-    bgClass: 'bg-red-500/10',
-    borderClass: 'border-red-500/30',
+    dotClass: 'bg-[var(--color-error)]',
+    colorClass: 'text-[var(--color-error)]',
+    bgClass: 'bg-[rgba(var(--color-error-rgb),0.10)]',
+    borderClass: 'border-[rgba(var(--color-error-rgb),0.30)]',
   },
   warning: {
-    dotClass: 'bg-yellow-400',
-    colorClass: 'text-yellow-400',
-    bgClass: 'bg-yellow-500/10',
-    borderClass: 'border-yellow-500/30',
+    dotClass: 'bg-[var(--color-warning)]',
+    colorClass: 'text-[var(--color-warning)]',
+    bgClass: 'bg-[rgba(var(--color-warning-rgb),0.10)]',
+    borderClass: 'border-[rgba(var(--color-warning-rgb),0.30)]',
   },
   pass: {
-    dotClass: 'bg-green-400',
-    colorClass: 'text-green-400',
-    bgClass: 'bg-green-500/10',
-    borderClass: 'border-green-500/30',
+    dotClass: 'bg-[var(--color-success)]',
+    colorClass: 'text-[var(--color-success)]',
+    bgClass: 'bg-[rgba(var(--color-success-rgb),0.10)]',
+    borderClass: 'border-[rgba(var(--color-success-rgb),0.30)]',
   },
 }
 
@@ -326,9 +326,9 @@ function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }
   }
 
   const SeverityIcon = ({ severity }: { severity: string }) => {
-    if (severity === 'error') return <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />
-    if (severity === 'warning') return <AlertTriangle size={14} className="text-yellow-400 flex-shrink-0" />
-    return <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
+    if (severity === 'error') return <AlertTriangle size={14} className="text-[var(--color-error)] flex-shrink-0" />
+    if (severity === 'warning') return <AlertTriangle size={14} className="text-[var(--color-warning)] flex-shrink-0" />
+    return <CheckCircle size={14} className="text-[var(--color-success)] flex-shrink-0" />
   }
 
   // 是否可以触发修稿（有草稿路径和章节信息时）
@@ -342,19 +342,19 @@ function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }
           <h3 className="text-base font-bold text-[var(--color-text)]"> {t('reviewReport.title')}</h3>
           <div className="flex items-center gap-3 text-xs ml-auto">
             {errorCount > 0 && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/20 text-red-400">
-                <span className="inline-block rounded-full bg-red-400" style={{ width: 7, height: 7 }} />
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[rgba(var(--color-error-rgb),0.20)] text-[var(--color-error)]">
+                <span className="inline-block rounded-full bg-[var(--color-error)]" style={{ width: 7, height: 7 }} />
                 {errorCount} {t('reviewReport.criticalIssues')}
               </span>
             )}
             {warningCount > 0 && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                <span className="inline-block rounded-full bg-yellow-400" style={{ width: 7, height: 7 }} />
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[rgba(var(--color-warning-rgb),0.20)] text-[var(--color-warning)]">
+                <span className="inline-block rounded-full bg-[var(--color-warning)]" style={{ width: 7, height: 7 }} />
                 {warningCount} {t('reviewReport.suggestions')}
               </span>
             )}
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/20 text-green-400">
-              <span className="inline-block rounded-full bg-green-400" style={{ width: 7, height: 7 }} />
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[rgba(var(--color-success-rgb),0.20)] text-[var(--color-success)]">
+              <span className="inline-block rounded-full bg-[var(--color-success)]" style={{ width: 7, height: 7 }} />
               {passCount} {t('reviewReport.passed')}
             </span>
             {/* 图例帮助按钮 */}
@@ -418,7 +418,7 @@ function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }
         {/* 分类展示 */}
         {issues.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
-            <CheckCircle size={32} className="mx-auto mb-2 text-green-400" />
+            <CheckCircle size={32} className="mx-auto mb-2 text-[var(--color-success)]" />
             {t('reviewReport.noIssues')}
           </div>
         ) : (
@@ -578,14 +578,14 @@ const OBSERVATION_SEVERITY_META: Record<ObservationSeverity, {
     borderClass: 'border-[var(--color-border)]',
   },
   watch: {
-    colorClass: 'text-yellow-400',
-    bgClass: 'bg-yellow-500/10',
-    borderClass: 'border-yellow-500/30',
+    colorClass: 'text-[var(--color-warning)]',
+    bgClass: 'bg-[rgba(var(--color-warning-rgb),0.10)]',
+    borderClass: 'border-[rgba(var(--color-warning-rgb),0.30)]',
   },
   concern: {
-    colorClass: 'text-red-400',
-    bgClass: 'bg-red-500/10',
-    borderClass: 'border-red-500/30',
+    colorClass: 'text-[var(--color-error)]',
+    bgClass: 'bg-[rgba(var(--color-error-rgb),0.10)]',
+    borderClass: 'border-[rgba(var(--color-error-rgb),0.30)]',
   },
 }
 

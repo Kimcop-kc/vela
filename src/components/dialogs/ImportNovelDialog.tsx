@@ -163,7 +163,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
 
           {splitError && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
-              style={{ backgroundColor: 'rgba(220, 38, 38, 0.08)', color: 'var(--color-error)' }}>
+              style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.08)', color: 'var(--color-error)' }}>
               <AlertTriangle size={14} />
               {splitError}
             </div>
@@ -236,8 +236,8 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
           {costEstimate && (
             <div className="rounded-lg px-3 py-2.5 space-y-1.5"
               style={{
-                backgroundColor: 'rgba(107, 164, 220, 0.06)',
-                border: '1px solid rgba(107, 164, 220, 0.15)',
+                backgroundColor: 'rgba(var(--color-accent-rgb), 0.06)',
+                border: '1px solid rgba(var(--color-accent-rgb), 0.15)',
               }}>
               <div className="flex items-center gap-1.5">
                 <Zap size={13} style={{ color: 'var(--color-accent)' }} />

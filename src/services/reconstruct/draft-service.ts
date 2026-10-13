@@ -2,6 +2,7 @@
 import { ipc } from '../ipc-client'
 import { estimateTokens } from '../workflows/segmented-generation'
 import { loadChapterCanon } from './canon-adapter'
+import { buildChapterContextPack, type ChapterContextPack, type BuildContextPackParams } from '../workflows/chapter-context-pack'
 import type { PlotBeat, PlotOutlineRecord } from '../../shared/reconstruct'
 
 /** 单个节点生成的正文段 */
@@ -69,8 +70,7 @@ export function buildBeatDraftPrompt(params: {
   return [{ role: 'system', content: system }, { role: 'user', content: user }]
 }
 
-/** 粗略判断这一段有没有写到节点要求（本地关键词覆盖，不调用模型） */
-export function beatCoverage(text: string, beat: PlotBeat): number {
+/** 粗略判断这一段有没有写到节点要求（本地关键词覆盖，不调用模型） */export function beatCoverage(text: string, beat: PlotBeat): number {
   const target = `${beat.event} ${beat.protagonistAction} ${beat.conflict}`
   const tokens = [...new Set([...target.matchAll(/[\u4e00-\u9fa5]{2,4}/g)].map(match => match[0]))].slice(0, 12)
   if (tokens.length === 0) return 1
@@ -88,6 +88,10 @@ export interface GenerateDraftParams {
   isCancelled?: () => boolean
   onSegment?: (segment: DraftSegment) => void
   onProgress?: (done: number, total: number) => void
+  /** 本章资料包构建完成后回调（用于界面展示「本章上下文预览」） */
+  onContextPack?: (pack: ChapterContextPack, params: BuildContextPackParams) => void
+  /** 本次可用的输入 token 预算（用于资料包按重要性裁剪） */
+  inputTokens?: number
 }
 
 /**
@@ -97,15 +101,42 @@ export interface GenerateDraftParams {
  * 也避免「整章一次性生成」撞上输出上限后被截断。
  */
 export async function generateDraftSegments(params: GenerateDraftParams): Promise<{ segments: DraftSegment[]; cancelled: boolean; error?: string }> {
-  const { outline, beats, chapterNumber, targetWordsPerBeat, guidance, isCancelled, onSegment, onProgress } = params
+  const { outline, beats, chapterNumber, targetWordsPerBeat, guidance, isCancelled, onSegment, onProgress, onContextPack, inputTokens } = params
   const project = (await import('../../stores/project-store')).useProjectStore.getState().currentProject
   const ownNovel = [project?.novelConfig?.genre, project?.novelConfig?.worldSetting, project?.novelConfig?.protagonistProfile]
     .filter(Boolean).join('\n').slice(0, 2000)
-  const canon = await loadChapterCanon({
+  const canonLoaderInput = {
     chapterNumber,
     chapterGoal: outline.premise || outline.title,
     keywords: keywordsOf(outline, beats),
-  })
+  }
+  const canon = await loadChapterCanon(canonLoaderInput)
+
+  // ==========================================
+  // [第三阶段] 生成前先建「本章资料包」：把本章目标、场景、出场人物状态与认知边界、
+  // 前情、物品、伏笔、世界规则、文风与输出约束整理成可检查、可追溯的一段。
+  // 只读，不写库、不改正文；资料缺失与冲突会作为 notice 显式提示。
+  // ==========================================
+  let contextPack: ChapterContextPack | null = null
+  let contextPackParams: BuildContextPackParams | null = null
+  if (canon.canon) {
+    contextPackParams = {
+      chapterNumber,
+      canon: canon.canon,
+      chapterGoal: [outline.title, outline.premise, outline.centralConflict].filter(Boolean).join('\n'),
+      // 大纲里没有独立的时间 / 地点 / 环境字段：场景留空，由资料包从出场人物状态推断
+      // 并明确标注为「推断值」，提示作者补全，而不是替作者编一个场景。
+      userGuidance: guidance ?? '',
+      writingStyle: project?.novelConfig?.writingStyle || '',
+      focusCharacters: canon.canon.characterStates.map(state => state.character),
+      wordTarget: targetWordsPerBeat * Math.max(1, beats.length),
+      mustInclude: beats.map(beat => beat.event).filter(Boolean),
+      forbidden: [],
+      inputTokens: inputTokens ?? 0,
+    }
+    contextPack = buildChapterContextPack(contextPackParams)
+    onContextPack?.(contextPack, contextPackParams)
+  }
 
   const { useLLMStore } = await import('../../stores/llm-store')
   const modelId = useLLMStore.getState().resolveModelId('reconstruct_draft')
