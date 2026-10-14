@@ -49,7 +49,8 @@
     "remove": "Remove",
     "removeConfirm": "Remove \"{{name}}\"? Its record and all indexed chapters will be deleted.",
     "removeDone": "Removed, {{count}} chapters cleaned up",
-    "removeFailed": "Remove failed: {{error}}"
+    "removeFailed": "Remove failed: {{error}}",
+    "removePartial": "Archive removed; {{count}} chapter(s) could not be cleaned from the knowledge base (delete them on the Knowledge page)"
   },
   "aiPanel": {
     "title": "AI Assistant",
@@ -92,7 +93,8 @@
     },
     "contextPreviewNote": {
       "first-chapter": "Chapter 1: no knowledge search, no previous ending or dynamic canon",
-      "truncated": "Some sections hit the length limit and were truncated"
+      "truncated": "Some sections hit the length limit and were truncated",
+      "trimmed": "Prompt exceeded the budget and was trimmed by importance (see the workflow log)"
     },
     "chapterPackTitle": "Chapter context preview",
     "chapterPackTotals": "actual request ≈ {{used}} tokens (budget {{budget}})",

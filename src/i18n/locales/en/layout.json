@@ -1,5 +1,26 @@
 {
   "titleBar": {
+    "knowledgeTask": {
+      "kind": {
+        "deconstruct": "Book import",
+        "backfill": "Vector rebuild"
+      },
+      "phase": {
+        "reading": "Reading file",
+        "chunking": "Splitting chapters",
+        "embedding": "Generating vectors",
+        "indexing": "Writing index",
+        "saving": "Saving"
+      },
+      "status": {
+        "running": "running",
+        "done": "done",
+        "cancelled": "stopped",
+        "error": "failed"
+      },
+      "stop": "Stop",
+      "dismiss": "Dismiss"
+    },
     "unsavedChanges": "Unsaved changes",
     "zoomOut": "Zoom Out (⌘+-)",
     "zoomOutCtrl": "Zoom Out (Ctrl+-)",

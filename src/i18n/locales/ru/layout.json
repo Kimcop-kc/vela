@@ -1,5 +1,26 @@
 {
   "titleBar": {
+    "knowledgeTask": {
+      "kind": {
+        "deconstruct": "Импорт книги",
+        "backfill": "Пересборка векторов"
+      },
+      "phase": {
+        "reading": "Чтение файла",
+        "chunking": "Разбор на главы",
+        "embedding": "Генерация векторов",
+        "indexing": "Запись индекса",
+        "saving": "Сохранение"
+      },
+      "status": {
+        "running": "выполняется",
+        "done": "готово",
+        "cancelled": "остановлено",
+        "error": "ошибка"
+      },
+      "stop": "Стоп",
+      "dismiss": "Закрыть"
+    },
     "unsavedChanges": "Несохранённые изменения",
     "zoomOut": "Уменьшить (⌘+-)",
     "zoomOutCtrl": "Уменьшить (Ctrl+-)",

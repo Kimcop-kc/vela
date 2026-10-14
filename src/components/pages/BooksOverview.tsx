@@ -15,8 +15,8 @@ import { toast } from '../ui/Toast'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
+import { useKnowledgeTaskStore } from '../../stores/knowledge-task-store'
 import { globalEventBus } from '../../shared/event-bus'
-import { ipc } from '../../services/ipc-client'
 import {
   bookFileNamePrefix, deconstructBook, listBooks, removeBook, searchKnowledgeBase,
   getChapterTextPage, selectBookFiles, type BookChapterEntry, type BookRecord,
@@ -50,9 +50,13 @@ export default function BooksOverview() {
   const sendToStyleAnalysis = useLayoutStore(s => s.sendToStyleAnalysis)
 
   const [books, setBooks] = useState<BookRecord[]>([])
-  const [importing, setImporting] = useState(false)
+  // 进度存在全局 store 里：拆书跑着的时候切到别的页面再回来，依然看得到进度
+  const [starting, setStarting] = useState(false)
+  const task = useKnowledgeTaskStore(s => s.task)
+  const runningTask = task?.kind === 'deconstruct' && task.status === 'running' ? task : null
+  const importing = starting || !!runningTask
   const [view, setView] = useState<BookView>('reference')
-  const [importProgress, setImportProgress] = useState<BookImportProgress | null>(null)
+  const importProgress: BookImportProgress | null = runningTask
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<Array<{ text: string; score: number; fileName: string }>>([])
@@ -91,8 +95,6 @@ export default function BooksOverview() {
     return unsubscribe
   }, [reload])
 
-  useEffect(() => ipc.on('kb:deconstruct-progress', setImportProgress), [])
-
   // 在本书范围内检索
   const handleSearch = async () => {
     if (!book || !query.trim()) return
@@ -112,8 +114,7 @@ export default function BooksOverview() {
     if (!projectPath) return
     const files = await selectBookFiles()
     if (!files || files.length === 0) return
-    setImporting(true)
-    setImportProgress(null)
+    setStarting(true)
     try {
       for (const file of files) {
         const result = await deconstructBook(file)
@@ -127,8 +128,7 @@ export default function BooksOverview() {
       await reload()
       globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
     } finally {
-      setImporting(false)
-      setImportProgress(null)
+      setStarting(false)
     }
   }
 
@@ -149,11 +149,12 @@ export default function BooksOverview() {
     const ok = await confirm(t('removeConfirm', { name: book.name }), { danger: true })
     if (!ok) return
     const result = await removeBook(book.id)
-    if (!result.success) {
-      toast.error(t('removeFailed', { error: result.error ?? '' }))
+    if (!result || !result.success) {
+      toast.error(t('removeFailed', { error: result?.error ?? '' }))
       return
     }
-    toast.success(t('removeDone', { count: result.removedChapters }))
+    if (result.failedChapters) toast.warning(t('removePartial', { count: result.failedChapters }))
+    else toast.success(t('removeDone', { count: result.removedChapters }))
     setSelectedBookId(null)
     setResults([])
     setOpenChapterId(null)

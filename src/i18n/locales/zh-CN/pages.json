@@ -179,6 +179,15 @@
     "rebuildSuccess": "向量索引重建完成：已处理 {{processed}} 块{{failed}}",
     "failedCount": "，{{count}} 块失败",
     "rebuildFailed": "向量回填失败",
+    "rebuildCancelled": "已停止向量重建（已生成的向量未写入，知识库保持原样）",
+    "rebuildProgress": "{{phase}}",
+    "rebuildPhase": {
+      "reading": "读取文件",
+      "chunking": "整理文本块",
+      "embedding": "生成向量",
+      "indexing": "重建索引",
+      "saving": "校验保存"
+    },
     "semanticSearch": "语义检索",
     "hybridHint": "BM25 + 向量近邻融合",
     "basicHint": "配置 Embedding 模型后自动升级为混合检索",
@@ -206,6 +215,7 @@
     "removeConfirm": "确定移除拆书《{{name}}》？档案与已入库的章节都会被删除。",
     "removeDone": "已移除，并清理 {{count}} 个章节",
     "removeFailed": "移除失败：{{error}}",
+    "removePartial": "档案已移除；知识库里有 {{count}} 章没能清理（可在知识库页手动删除）",
     "empty": "还没有拆书",
     "emptyHint": "导入一本参考小说，自动分章并写入本地知识库",
     "source": "来源文件：{{path}}",

@@ -85,13 +85,16 @@ export async function deconstructBook(
   protocol: 'openai' | 'gemini',
   model: { baseUrl: string; apiKey: string; provider?: string; purposes?: string[] },
   onProgress?: (progress: BookImportProgress) => void,
-): Promise<{ success: boolean; book?: BookRecord; error?: string }> {
+  /** 中止钩子：拆一本几百章的书可能要几分钟，作者得能停下来 */
+  hooks?: { shouldCancel?: () => boolean },
+): Promise<{ success: boolean; book?: BookRecord; cancelled?: boolean; error?: string }> {
   try {
     onProgress?.({ phase: 'reading', current: 0, total: 0 })
     const chapters = await splitFileIntoChaptersAsync(filePath, lines => {
       onProgress?.({ phase: 'reading', current: lines, total: 0 })
     })
     if (chapters.length === 0) return { success: false, error: '未能从文件中拆出任何章节' }
+    if (hooks?.shouldCancel?.()) return { success: false, cancelled: true, error: '已取消' }
 
     const bookName = path.basename(filePath, path.extname(filePath))
     const bookId = randomUUID()
@@ -101,6 +104,10 @@ export async function deconstructBook(
     let vectorized = false
 
     for (let index = 0; index < chapters.length; index++) {
+      if (hooks?.shouldCancel?.()) {
+        // 取消时保留已经写入知识库的章节，并如实说明拆到哪一章
+        return { success: false, cancelled: true, error: `已取消（已入库 ${entries.length} 章）` }
+      }
       const chapter = chapters[index]
       const fileName = `${bookName} · 第${chapter.number}章 ${chapter.title}`.trim()
       const docId = randomUUID()
@@ -180,32 +187,58 @@ export async function deconstructBook(
 export async function removeBook(
   bookId: string,
   projectPath: string,
-): Promise<{ success: boolean; removedChapters: number; error?: string }> {
+): Promise<{ success: boolean; removedChapters: number; failedChapters?: number; error?: string }> {
   try {
     const dir = booksDir(projectPath)
     const manifestPath = path.join(dir, `${bookId}.json`)
-    if (!fs.existsSync(manifestPath)) {
-      return { success: false, removedChapters: 0, error: '未找到该拆书档案' }
-    }
+    const existed = fs.existsSync(manifestPath)
 
     let book: BookRecord | null = null
-    try {
-      book = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as BookRecord
-    } catch {
-      book = null
-    }
-
-    let removed = 0
-    if (book?.chapters?.length) {
-      for (const chapter of book.chapters) {
-        await removeDocFromStore(projectPath, chapter.docId)
-        removed++
+    if (existed) {
+      try {
+        book = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as BookRecord
+      } catch {
+        book = null
       }
     }
 
-    fs.rmSync(manifestPath, { force: true })
-    return { success: true, removedChapters: removed }
+    // 先删档案：界面列出拆书靠的就是这份 json，删掉它作者马上就能看到结果。
+    // 以前档案放在最后删，一旦知识库清理卡住/报错，作者看到的就是「点了删除没反应」。
+    if (existed) fs.rmSync(manifestPath, { force: true })
+
+    // 再清知识库里的章节：LanceDB 可能损坏或长时间无响应，
+    // 这里的失败不能让「删除」整体失败——最坏情况是知识库里留几章，
+    // 档案已经不在列表里了，作者可以在知识库页手动清理。
+    let removed = 0
+    let failed = 0
+    for (const chapter of book?.chapters ?? []) {
+      try {
+        const ok = await withTimeout(removeDocFromStore(projectPath, chapter.docId), REMOVE_DOC_TIMEOUT_MS)
+        if (ok) removed++
+        else failed++
+      } catch (error) {
+        failed++
+        console.warn('[Vela 拆书] 清理章节失败:', chapter.docId, error)
+      }
+    }
+    return { success: true, removedChapters: removed, failedChapters: failed }
   } catch (error) {
     return { success: false, removedChapters: 0, error: String(error) }
   }
+}
+
+/** 单章清理的超时：LanceDB 偶尔会长时间无响应，不能让删除按钮一直转 */
+const REMOVE_DOC_TIMEOUT_MS = 8000
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      console.warn(`[Vela 拆书] 清理单章超过 ${ms}ms 未返回，跳过`)
+      resolve(null)
+    }, ms)
+    promise.then(
+      value => { clearTimeout(timer); resolve(value) },
+      error => { clearTimeout(timer); console.warn('[Vela 拆书] 清理单章异常:', error); resolve(null) },
+    )
+  })
 }

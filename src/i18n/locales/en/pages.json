@@ -179,6 +179,15 @@
     "rebuildSuccess": "Vector index rebuilt: {{processed}} chunks processed{{failed}}",
     "failedCount": ", {{count}} chunks failed",
     "rebuildFailed": "Vector backfill failed",
+    "rebuildCancelled": "Vector rebuild stopped. Nothing was written; the knowledge base is unchanged.",
+    "rebuildProgress": "{{phase}}",
+    "rebuildPhase": {
+      "reading": "reading files",
+      "chunking": "preparing chunks",
+      "embedding": "generating vectors",
+      "indexing": "rebuilding the index",
+      "saving": "verifying"
+    },
     "semanticSearch": "Semantic Search",
     "hybridHint": "BM25 + Vector neighbor fusion",
     "basicHint": "Configure Embedding model to automatically upgrade to hybrid search",
@@ -206,6 +215,7 @@
     "removeConfirm": "Remove \"{{name}}\"? Its record and all indexed chapters will be deleted.",
     "removeDone": "Removed, {{count}} chapters cleaned up",
     "removeFailed": "Remove failed: {{error}}",
+    "removePartial": "Archive removed; {{count}} chapter(s) could not be cleaned from the knowledge base",
     "empty": "No books yet",
     "emptyHint": "Import a reference novel to split it by chapter into the local knowledge base",
     "source": "Source file: {{path}}",

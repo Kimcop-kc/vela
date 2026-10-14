@@ -746,8 +746,30 @@ export interface BookImportProgress {
   total: number
 }
 
+/** 长时间任务（拆书导入 / 向量重建）的统一进度 */
+export type KnowledgeTaskKind = 'deconstruct' | 'backfill'
+
+/**
+ * 任务的统一状态。
+ *
+ * 主进程每推进一批就推一条，渲染进程存在全局 store 里——
+ * 这样切到别的页面也看得到「还在跑」，而不是只有发起它的那个面板知道。
+ */
+export interface KnowledgeTaskProgress {
+  kind: KnowledgeTaskKind
+  /** 显示名：拆书用文件名，向量重建用「知识库向量」 */
+  label: string
+  phase: BookImportProgress['phase']
+  current: number
+  total: number
+  status: 'running' | 'done' | 'cancelled' | 'error'
+  /** 失败原因或收尾说明 */
+  message?: string
+}
+
 export interface KnowledgeBaseEvents {
   'kb:deconstruct-progress': BookImportProgress
+  'kb:task-progress': KnowledgeTaskProgress
 }
 
 export interface KnowledgeBaseChannels {
@@ -767,7 +789,9 @@ export interface KnowledgeBaseChannels {
   'kb:list-books': { args: []; return: BookRecord[] }
   'kb:get-document-text': { args: [docId: string]; return: { success: boolean; text?: string; fileName?: string; chunkCount?: number; error?: string } }
   'kb:get-document-text-page': { args: [docId: string, chunkStart?: number, maxChunks?: number]; return: { success: boolean; text?: string; fileName?: string; chunkStart?: number; nextChunkIndex?: number; done?: boolean; totalChunks?: number; error?: string } }
-  'kb:remove-book': { args: [bookId: string]; return: { success: boolean; removedChapters: number; error?: string } }
+  'kb:remove-book': { args: [bookId: string]; return: { success: boolean; removedChapters: number; failedChapters?: number; error?: string } }
+  /** 取消当前正在跑的拆书 / 向量重建任务 */
+  'kb:cancel-task': { args: []; return: { success: boolean } }
 }
 
 // ===== 导入小说 =====
@@ -1126,6 +1150,7 @@ export const INVOKE_CHANNEL_ALLOWLIST = [
   'kb:get-document-text',
   'kb:get-document-text-page',
   'kb:remove-book',
+  'kb:cancel-task',
   'dialog:select-novel-files',
   'import:split-chapters',
   'mcp:load-config',
@@ -1180,6 +1205,7 @@ export const INVOKE_CHANNEL_ALLOWLIST = [
 export const EVENT_CHANNEL_ALLOWLIST = [
   'logs:appended',
   'kb:deconstruct-progress',
+  'kb:task-progress',
   'llm:stream-chunk',
   'llm:stream-done',
   'llm:stream-truncated',

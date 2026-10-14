@@ -49,7 +49,8 @@
     "remove": "移除拆书",
     "removeConfirm": "确定移除拆书《{{name}}》？档案与已入库的章节都会被删除。",
     "removeDone": "已移除，并清理 {{count}} 个章节",
-    "removeFailed": "移除失败：{{error}}"
+    "removeFailed": "移除失败：{{error}}",
+    "removePartial": "档案已移除；知识库里有 {{count}} 章没能清理（可在知识库页手动删除）"
   },
   "aiPanel": {
     "title": "AI 助手",
@@ -92,7 +93,8 @@
     },
     "contextPreviewNote": {
       "first-chapter": "第 1 章：不检索知识库，也不注入上一章结尾与 Canon 动态段",
-      "truncated": "有段落达到长度上限被截断"
+      "truncated": "有段落达到长度上限被截断",
+      "trimmed": "提示词超出预算，已按重要性自动裁剪（详见工作流日志）"
     },
     "chapterPackTitle": "本章上下文预览",
     "chapterPackTotals": "实际请求 ≈ {{used}} tokens（预算 {{budget}}）",

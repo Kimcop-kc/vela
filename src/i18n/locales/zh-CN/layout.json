@@ -1,5 +1,26 @@
 {
   "titleBar": {
+    "knowledgeTask": {
+      "kind": {
+        "deconstruct": "拆书导入",
+        "backfill": "向量重建"
+      },
+      "phase": {
+        "reading": "读取文件",
+        "chunking": "分章切块",
+        "embedding": "生成向量",
+        "indexing": "写入索引",
+        "saving": "保存"
+      },
+      "status": {
+        "running": "进行中",
+        "done": "已完成",
+        "cancelled": "已停止",
+        "error": "失败"
+      },
+      "stop": "停止",
+      "dismiss": "关闭提示"
+    },
     "unsavedChanges": "有未保存的修改",
     "zoomOut": "缩小 (⌘+-)",
     "zoomOutCtrl": "缩小 (Ctrl+-)",

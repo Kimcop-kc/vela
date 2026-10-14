@@ -9,6 +9,7 @@ import { Badge } from '../ui/Badge'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { useProjectStore } from '../../stores/project-store'
+import { useKnowledgeTaskStore } from '../../stores/knowledge-task-store'
 import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { globalEventBus } from '../../shared/event-bus'
@@ -30,7 +31,14 @@ export default function KnowledgeOverview() {
   const [searching, setSearching] = useState(false)
   const [topK, setTopK] = useState(10)
   const [vectorlessCount, setVectorlessCount] = useState(0)
-  const [backfilling, setBackfilling] = useState(false)
+  // 进度从全局 store 读（切页面不丢），本地只保留「点了按钮但还没收到第一条进度」的启动态
+  const [startRequested, setStartRequested] = useState(false)
+  const task = useKnowledgeTaskStore(s => s.task)
+  const backfillTask = task?.kind === 'backfill' && task.status === 'running' ? task : null
+  const backfilling = startRequested || !!backfillTask
+  const backfillPercent = backfillTask && backfillTask.total > 0
+    ? Math.max(0, Math.min(100, Math.round((backfillTask.current / backfillTask.total) * 100)))
+    : null
 
   const currentProject = useProjectStore(s => s.currentProject)
 
@@ -98,7 +106,7 @@ export default function KnowledgeOverview() {
 
   /** 向量回填 */
   const handleBackfill = async () => {
-    setBackfilling(true)
+    setStartRequested(true)
     try {
       const result = await backfillVectors()
       if (result.success) {
@@ -107,9 +115,10 @@ export default function KnowledgeOverview() {
         toast.error(result.error || t('rebuildFailed'))
       }
     } catch (e) {
-      toast.error(t('rebuildFailed') + ': ' + String(e))
+      if ((e as { cancelled?: boolean })?.cancelled) toast.info(t('rebuildCancelled'))
+      else toast.error(t('rebuildFailed') + ': ' + String(e))
     } finally {
-      setBackfilling(false)
+      setStartRequested(false)
       globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
     }
   }
@@ -200,8 +209,20 @@ export default function KnowledgeOverview() {
             </div>
             {/* 进度条（回填时显示） */}
             {backfilling && (
-              <div className="h-1 w-full bg-[rgba(var(--color-warning-rgb),0.1)]">
-                <div className="h-full bg-gradient-to-r from-[var(--color-warning)] to-[var(--color-amber)] animate-pulse rounded-full w-full" />
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[0.68rem] mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                  <span>{t('rebuildProgress', { phase: t(`rebuildPhase.${backfillTask?.phase ?? 'embedding'}`) })}</span>
+                  <span>{backfillPercent === null ? '' : `${backfillPercent}%`}</span>
+                </div>
+                <div className="h-1 w-full rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-border)' }}>
+                  <div
+                    className="h-full rounded-full transition-[width] duration-300"
+                    style={{
+                      width: backfillPercent === null ? '100%' : `${backfillPercent}%`,
+                      backgroundColor: 'var(--color-warning)',
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>

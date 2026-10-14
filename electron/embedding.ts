@@ -115,6 +115,13 @@ export async function generateEmbeddings(
   texts: string[],
   protocol: 'openai' | 'gemini',
   model: { baseUrl: string; apiKey: string; modelName?: string },
+  /**
+   * 长任务的观测与中止钩子。
+   *
+   * 向量重建动辄几千条块，以前是一次调用闷头跑完、界面上完全没动静；
+   * 这里每批回一次进度，并允许在批间中止（中止时返回已生成的向量）。
+   */
+  hooks?: { onProgress?: (done: number, total: number) => void; shouldCancel?: () => boolean },
 ): Promise<number[][]> {
   // 空文本处理
   if (texts.length === 0) return []
@@ -124,11 +131,13 @@ export async function generateEmbeddings(
   const results: number[][] = []
 
   for (let i = 0; i < texts.length; i += batchSize) {
+    if (hooks?.shouldCancel?.()) break
     const batch = texts.slice(i, i + batchSize)
     const embeddings = protocol === 'gemini'
       ? await embedGemini(batch, model)
       : await embedOpenAI(batch, model)
     results.push(...embeddings)
+    hooks?.onProgress?.(Math.min(i + batchSize, texts.length), texts.length)
   }
 
   return results

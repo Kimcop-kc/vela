@@ -14,7 +14,7 @@ import { IconBtn } from '../ui/IconBtn'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { globalEventBus } from '../../shared/event-bus'
-import { ipc } from '../../services/ipc-client'
+import { useKnowledgeTaskStore } from '../../stores/knowledge-task-store'
 import {
   deconstructBook, listBooks, removeBook, selectBookFiles, type BookRecord,
   type BookImportProgress,
@@ -26,8 +26,12 @@ export default function BooksPanel() {
   const selectedBookId = useLayoutStore(s => s.selectedBookId)
   const setSelectedBookId = useLayoutStore(s => s.setSelectedBookId)
   const [books, setBooks] = useState<BookRecord[]>([])
-  const [importing, setImporting] = useState(false)
-  const [importProgress, setImportProgress] = useState<BookImportProgress | null>(null)
+  // 点击后到第一条进度事件之间的启动态（进度本身从全局 store 读，切页面也不丢）
+  const [starting, setStarting] = useState(false)
+  const task = useKnowledgeTaskStore(s => s.task)
+  const runningTask = task?.kind === 'deconstruct' && task.status === 'running' ? task : null
+  const importing = starting || !!runningTask
+  const importProgress: BookImportProgress | null = runningTask
   const projectPath = currentProject?.path ?? null
 
   const reload = useCallback(async () => {
@@ -52,8 +56,6 @@ export default function BooksPanel() {
     return unsubscribe
   }, [reload])
 
-  useEffect(() => ipc.on('kb:deconstruct-progress', setImportProgress), [])
-
   /** 导入参考小说并拆书入库 */
   const handleImport = async () => {
     if (!projectPath) {
@@ -63,8 +65,7 @@ export default function BooksPanel() {
     const files = await selectBookFiles()
     if (!files || files.length === 0) return
 
-    setImporting(true)
-    setImportProgress(null)
+    setStarting(true)
     try {
       let okCount = 0
       let lastBookId: string | null = null
@@ -88,8 +89,7 @@ export default function BooksPanel() {
         globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
       }
     } finally {
-      setImporting(false)
-      setImportProgress(null)
+      setStarting(false)
     }
   }
 
@@ -110,11 +110,12 @@ export default function BooksPanel() {
     const ok = await confirm(t('books.removeConfirm', { name: book.name }), { danger: true })
     if (!ok) return
     const result = await removeBook(book.id)
-    if (!result.success) {
-      toast.error(t('books.removeFailed', { error: result.error ?? '' }))
+    if (!result || !result.success) {
+      toast.error(t('books.removeFailed', { error: result?.error ?? '' }))
       return
     }
-    toast.success(t('books.removeDone', { count: result.removedChapters }))
+    if (result.failedChapters) toast.warning(t('books.removePartial', { count: result.failedChapters }))
+    else toast.success(t('books.removeDone', { count: result.removedChapters }))
     if (selectedBookId === book.id) setSelectedBookId(null)
     await reload()
     globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })

@@ -7,6 +7,7 @@ import { useEditorStore } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useOnboardingStore } from '../../stores/onboarding-store'
 import { isEditableTarget } from '../../shared/keyboard'
+import { KnowledgeTaskIndicator } from './KnowledgeTaskIndicator'
 
 /** 检测是否为 macOS */
 const isMac = navigator.userAgent.includes('Mac')
@@ -161,6 +162,9 @@ export default function TitleBar() {
 
       {/* 中间弹性区（可拖动） */}
       <div className="flex-1" />
+
+      {/* 长任务进度（拆书 / 向量重建）：放在标题栏，切到任何页面都看得到 */}
+      <KnowledgeTaskIndicator />
 
       {/* 右侧控件区（no-drag，可点击） */}
       <div

@@ -29,6 +29,7 @@ import {
   isLanceCorruptionError,
   repairLanceStorage,
 } from './vector-store'
+import type { BookImportProgress } from '../src/shared/ipc-channels'
 
 // ===== 迁移状态跟踪 =====
 
@@ -307,10 +308,16 @@ export async function backfillVectors(
   projectPath: string,
   protocol: 'openai' | 'gemini',
   model: EmbeddingModelConfig,
-): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
+  /** 进度与中止钩子：向量重建是长任务，必须让界面看得到、也停得下来 */
+  hooks?: {
+    onProgress?: (phase: BookImportProgress['phase'], current: number, total: number) => void
+    shouldCancel?: () => boolean
+  },
+): Promise<{ success: boolean; processed: number; failed: number; cancelled?: boolean; error?: string }> {
   try {
     const { count: total } = await storeGetChunksWithoutVectors(projectPath)
     if (total === 0) return { success: true, processed: 0, failed: 0 }
+    hooks?.onProgress?.('embedding', 0, total)
 
     // 全量加载所有需要向量的块
     const { getConnection } = await import('./vector-store')
@@ -341,7 +348,14 @@ export async function backfillVectors(
 
     // 批量生成向量
     const texts = allRecords.map(r => r.text)
-    const vectors = await generateEmbeddings(texts, protocol, model)
+    const vectors = await generateEmbeddings(texts, protocol, model, {
+      onProgress: (done, batchTotal) => hooks?.onProgress?.('embedding', Math.min(done, batchTotal), total),
+      shouldCancel: hooks?.shouldCancel,
+    })
+    // 中途取消：不动 chunks 表，避免写进一半向量
+    if (hooks?.shouldCancel?.()) {
+      return { success: false, processed: 0, failed: 0, cancelled: true, error: '已取消' }
+    }
 
     // 构建更新后的完整数据
     const idToVector = new Map<string, number[]>()
@@ -351,6 +365,7 @@ export async function backfillVectors(
       }
     })
 
+    hooks?.onProgress?.('indexing', 0, 1)
     // 全量读出 + 合并更新
     const fullTable = await db.openTable('chunks')
     const allRows = await fullTable.query().toArray()
@@ -386,6 +401,7 @@ export async function backfillVectors(
     } catch { /* 索引可能已存在 */ }
 
     // 验证
+    hooks?.onProgress?.('saving', 1, 1)
     const verifyRows = await newTable.query().select(['id', 'vector']).limit(5).toArray()
     const withVectors = verifyRows.filter((r: { vector?: unknown }) => {
       if (!r.vector) return false

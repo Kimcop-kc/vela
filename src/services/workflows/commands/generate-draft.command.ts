@@ -18,6 +18,7 @@ import {
 import { validateChapterPrewrite } from '../prewrite-validator'
 import { buildContextPreview } from '../context-preview'
 import { resolveGenerationBudgets } from '../segmented-generation'
+import { applyPromptBudget } from '../prompt-budget'
 import { buildChapterContextPack } from '../chapter-context-pack'
 import { buildChapterContextPreview, buildSectionReport } from '../chapter-context-preview'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -111,13 +112,14 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     // Prompt 构建——按「稳定前缀 → 可变后缀」排列
     // 以最大化 LLM 上下文缓存命中率
     // ==========================================
+    // Token 预算：按本次实际使用的模型算（模型配置里的窗口 − 输出上限），
+    // 供下面的提示词裁剪与「本次上下文」预览共用。
+    const budgetModel = useLLMStore.getState().modelForPurpose('generate_draft')
+    const TOKEN_BUDGET = resolveGenerationBudgets(budgetModel?.maxTokens, budgetModel?.maxOutputTokens).inputTokens
+
     const promptBuilder = new ChapterPromptBuilder(template)
-      // ---- 缓存命中区（跨章稳定，前缀对齐）----
-      .withArchitecture(architecture)
-      .withGlobalGuidance(mergedGuidance)
-      .withWritingStyle(project.novelConfig.writingStyle || '')
-      .withNovelConfig(project.novelConfig)
-      .withWordNumber(project.novelConfig.wordsPerChapter)
+    // 说明：架构 / 全局要求 / 文风这几段改到「预算裁剪」之后统一写入（见下方 promptValues），
+    // 因为它们的最终文本取决于这次实际有多少预算可用。
 
     // 这两个值也会进「本次上下文」预览，所以在分支外先占位
     let previousEnding = ''
@@ -176,9 +178,36 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     // 本章蓝图、后续预告、作者微操指导对第 1 章同样关键：
     // 之前它们被划在「非首章」分支里，导致首章提示词里残留 {{chapter_info}} 等占位符，
     // 模型在既没有章纲、也没有后续大纲约束的情况下自由发挥（开篇跑偏的直接原因）。
+    // ---- 整份提示词的预算裁剪 ----
+    // Canon 段内部已由「本章资料包」按优先级裁剪（上一章结尾与知识库都在 Canon 里），
+    // 这里补上剩下的几段：架构、全局要求、文风、后续预告。超出预算时从最不重要的开始削，
+    // 削不动就按句子边界截断，并把结果如实告诉作者（不再只是打一条警告然后照发）。
+    const promptBudget = applyPromptBudget([
+      { key: 'canon', text: canonRendered },
+      { key: 'chapterInfo', text: JSON.stringify(this.chapterInfo, null, 2) },
+      { key: 'writingStyle', text: project.novelConfig.writingStyle || '' },
+      { key: 'globalGuidance', text: mergedGuidance },
+      { key: 'architecture', text: architecture },
+      { key: 'futureBlueprints', text: futureBlueprintsStr },
+    ], TOKEN_BUDGET)
+    if (promptBudget.trims.length > 0) {
+      callbacks.log(i18n.t('generateDraft.contextTrimmed', {
+        ns: 'commands',
+        tokens: promptBudget.tokensBefore,
+        budget: TOKEN_BUDGET,
+        details: promptBudget.trims.map(trim => `${i18n.t(`generateDraft.trimKey.${trim.key}`, { ns: 'commands' })}${trim.mode === 'dropped' ? i18n.t('generateDraft.trimDropped', { ns: 'commands' }) : i18n.t('generateDraft.trimTruncated', { ns: 'commands' })}`).join('、'),
+      }))
+    }
+
     promptBuilder
+      // ---- 缓存命中区（跨章稳定，前缀对齐）----
+      .withArchitecture(promptBudget.values.architecture)
+      .withGlobalGuidance(promptBudget.values.globalGuidance)
+      .withWritingStyle(promptBudget.values.writingStyle)
+      .withNovelConfig(project.novelConfig)
+      .withWordNumber(project.novelConfig.wordsPerChapter)
       .withChapterInfo(this.chapterInfo)
-      .withFutureBlueprints(futureBlueprintsStr)
+      .withFutureBlueprints(promptBudget.values.futureBlueprints)
       .withUserGuidance(this.chapterInfo.userGuidance?.trim() || i18n.t('generateDraft.noUserGuidance', { ns: 'commands' }))
 
     // [Canon] 注入叙事一致性上下文（强制最高优先级）
@@ -188,9 +217,6 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
     // Token 预算管控：先按本次实际使用的模型算出可用输入预算，
     // 资料包按「重要性排序」裁剪而不是按数据库返回顺序截断。
-    const budgetModel = useLLMStore.getState().modelForPurpose('generate_draft')
-    const TOKEN_BUDGET = resolveGenerationBudgets(budgetModel?.maxTokens, budgetModel?.maxOutputTokens).inputTokens
-
     // ==========================================
     // [第三阶段] 生成前建立「本章资料包」
     // 十类资料各自成段，每条带来源/类型/选取理由，超预算记录原因，缺失与冲突显式提示。
@@ -254,9 +280,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       firstChapter: isFirstChapter,
       prompt,
       tokenBudget: TOKEN_BUDGET,
-      architecture,
-      globalGuidance: mergedGuidance,
-      writingStyle: project.novelConfig.writingStyle || '',
+      architecture: promptBudget.values.architecture,
+      globalGuidance: promptBudget.values.globalGuidance,
+      writingStyle: promptBudget.values.writingStyle,
       renderedCanon: canonRendered || null,
       canonCounts: canonForValidation
         ? {
@@ -268,12 +294,17 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           }
         : undefined,
       chapterInfo: JSON.stringify(this.chapterInfo, null, 2),
-      futureBlueprints: futureBlueprintsStr,
+      futureBlueprints: promptBudget.values.futureBlueprints,
       previousEnding: previousEnding || '',
       knowledgeContext: filteredContext,
       knowledgeCount: kbResultCount,
       userGuidance: this.chapterInfo.userGuidance?.trim() || i18n.t('generateDraft.noUserGuidance', { ns: 'commands' }),
     })
+    // 本次真的削过段落时，在预览里标出来（作者能对上「为什么这章少了后续预告」）
+    if (promptBudget.trims.length > 0) {
+      const preview = context.data.contextPreview as { notes?: string[] } | undefined
+      preview?.notes?.push('trimmed')
+    }
 
     callbacks.log(i18n.t('generateDraft.callingAI', { ns: 'commands' }))
 

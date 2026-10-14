@@ -1,5 +1,6 @@
 import { ipcMain, dialog } from 'electron'
 import fs from 'node:fs'
+import path from 'node:path'
 import {
   importDocument, importFolder, importText, searchKnowledge, searchKnowledgeFTS,
   listDocuments, removeDocument, getKnowledgeStats,
@@ -10,8 +11,38 @@ import {
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { deconstructBook, listBooks, removeBook } from '../book-deconstruct'
 import { ReconstructRepository } from '../repositories/reconstruct-repository'
-import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
+import { GlobalConfig, ModelProfile, type BookImportProgress, type KnowledgeTaskKind, type KnowledgeTaskProgress } from '../../src/shared/ipc-channels'
 import { pickModelIdForCategory } from '../../src/shared/purpose-routing'
+
+/**
+ * 当前正在跑的长任务（拆书导入 / 向量重建）。
+ *
+ * 同一时刻只允许一个：这样窗口标题栏上的进度条与「停止」按钮永远指向明确的目标，
+ * 也避免两个任务同时写知识库互相打架。
+ */
+let activeTask: { kind: KnowledgeTaskKind; cancel: () => void } | null = null
+
+function makeTaskReporter(sender: Electron.WebContents, kind: KnowledgeTaskKind, label: string, shouldCancel: () => boolean) {
+  let last: BookImportProgress['phase'] = 'reading'
+  return {
+    shouldCancel,
+    report: (
+      phase: BookImportProgress['phase'],
+      current: number,
+      total: number,
+      status: KnowledgeTaskProgress['status'] = 'running',
+      message?: string,
+    ) => {
+      last = phase
+      if (sender.isDestroyed()) return
+      sender.send('kb:task-progress', { kind, label, phase, current, total, status, message } satisfies KnowledgeTaskProgress)
+    },
+    finish: (status: KnowledgeTaskProgress['status'], message?: string) => {
+      if (sender.isDestroyed()) return
+      sender.send('kb:task-progress', { kind, label, phase: last, current: 0, total: 0, status, message } satisfies KnowledgeTaskProgress)
+    },
+  }
+}
 
 function getEmbeddingConfig(): {
   protocol: 'openai' | 'gemini'
@@ -117,12 +148,36 @@ export function registerKBController() {
     return getVectorlessCount(projectPath)
   })
 
-  ipcMain.handle('kb:backfill-vectors', async () => {
+  ipcMain.handle('kb:backfill-vectors', async (event) => {
     const embConfig = getEmbeddingConfig()
     if (!embConfig) return { success: false, processed: 0, failed: 0, error: '未配置 Embedding 模型' }
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: '未打开项目' }
-    return backfillVectors(projectPath, embConfig.protocol, embConfig.model)
+    // 已经有一个长任务在跑时不叠加：向量重建会重写 chunks 表，和拆书写入撞上会互相覆盖
+    if (activeTask) return { success: false, processed: 0, failed: 0, error: '已有任务在运行，请先等它结束或点停止' }
+    let cancelled = false
+    const task = makeTaskReporter(event.sender, 'backfill', '知识库向量', () => cancelled)
+    activeTask = { kind: 'backfill', cancel: () => { cancelled = true } }
+    task.report('embedding', 0, 0)
+    try {
+      const result = await backfillVectors(projectPath, embConfig.protocol, embConfig.model, {
+        onProgress: (phase, current, total) => task.report(phase, current, total),
+        shouldCancel: task.shouldCancel,
+      })
+      task.finish(result.cancelled ? 'cancelled' : result.success ? 'done' : 'error', result.error)
+      return result
+    } catch (error) {
+      task.finish('error', String(error))
+      throw error
+    } finally {
+      activeTask = null
+    }
+  })
+
+  /** 停止当前长任务（拆书 / 向量重建）；没有任务时也返回成功，界面不必区分 */
+  ipcMain.handle('kb:cancel-task', async () => {
+    activeTask?.cancel()
+    return { success: true }
   })
 
   // ===== 拆书知识库 =====
@@ -131,12 +186,25 @@ export function registerKBController() {
   ipcMain.handle('kb:deconstruct-book', async (event, filePath: string) => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, error: '未打开项目' }
+    if (activeTask) return { success: false, error: '已有任务在运行，请先等它结束或点停止' }
     const embConfig = getEmbeddingConfig()
     const protocol = embConfig?.protocol ?? 'openai'
     const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
-    return deconstructBook(filePath, projectPath, protocol, model, progress => {
-      event.sender.send('kb:deconstruct-progress', progress)
-    })
+    let cancelled = false
+    const task = makeTaskReporter(event.sender, 'deconstruct', path.basename(filePath), () => cancelled)
+    activeTask = { kind: 'deconstruct', cancel: () => { cancelled = true } }
+    task.report('reading', 0, 0)
+    try {
+      const result = await deconstructBook(filePath, projectPath, protocol, model, progress => {
+        // 旧的进度通道保留（老界面还在用），新的统一通道给全局指示器
+        if (!event.sender.isDestroyed()) event.sender.send('kb:deconstruct-progress', progress)
+        task.report(progress.phase, progress.current, progress.total)
+      }, { shouldCancel: task.shouldCancel })
+      task.finish(result.cancelled ? 'cancelled' : result.success ? 'done' : 'error', result.error)
+      return result
+    } finally {
+      activeTask = null
+    }
   })
 
   /** 列出本项目已有的拆书档案 */

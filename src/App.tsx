@@ -8,6 +8,7 @@ import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
 import { useLogStore, disposeLogStore } from './stores/log-store'
+import { useKnowledgeTaskStore } from './stores/knowledge-task-store'
 import { ipc } from './services/ipc-client'
 import TitleBar from './components/layout/TitleBar'
 import StatusBar from './components/layout/StatusBar'
@@ -64,6 +65,8 @@ export default function App() {
     initTheme()
     initLLM()
     useLogStore.getState().init()
+    // 长任务进度（拆书 / 向量重建）：在这里订阅一次，任何页面都能看到进度
+    useKnowledgeTaskStore.getState().init()
     loadRecentProjects()
     // 加载全局自定义提示词覆盖（此前 loadCustomPrompts 从未被调用，导致全局覆盖重启即失效）
     import('./services/prompt-templates').then(({ ensurePromptsLoaded }) => ensurePromptsLoaded()).catch(e => console.warn('[Prompts] 加载全局覆盖失败:', e))
