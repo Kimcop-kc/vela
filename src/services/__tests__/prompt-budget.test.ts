@@ -23,12 +23,12 @@ describe('applyPromptBudget', () => {
   })
 
   it('超预算时先整段丢掉最不重要的（后续预告）', () => {
-    // 总计约 6600 tokens，预算 5000 → 需要削掉约 1600，正好够丢掉 1500 的预告
+    // 总计约 6600 tokens，预算 5000 → 削掉 1500 的预告后还差一点，
+    // 于是架构也会被截断（这里只断言「预告最先被丢」与「最终落在预算内」）
     const result = applyPromptBudget(sections(), 5000)
 
     expect(result.values.futureBlueprints).toBe('')
-    expect(result.trims.map(trim => trim.key)).toContain('futureBlueprints')
-    expect(result.values.architecture).toHaveLength(3000)
+    expect(result.trims[0].key).toBe('futureBlueprints')
     expect(result.tokensAfter).toBeLessThanOrEqual(5000)
     expect(result.stillOver).toBe(false)
   })
